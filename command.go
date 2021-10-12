@@ -135,15 +135,27 @@ func (c *CommandBuilder) Hidden() *CommandBuilder {
 
 func (c *CommandBuilder) flag(flag *FlagInfo) *CommandBuilder {
 	if flag.Positional {
+		// cannot mix positionals with subcommands
 		if len(c.info.Subcommands) > 0 {
 			c.setErr(newArgError(1, "cannot specify both subcommands and positional argument: %v", flag))
 			return c
 		}
+
+		// positionals cannot follow variable length positionals
 		for _, other := range c.info.Flags {
-			if other.Positional {
-				c.setErr(newArgError(1, "cannot specify multiple positional arguments: %v", flag))
-				return c
+			if !other.Positional {
+				continue
 			}
+			if other.MaxCount > 0 && other.MaxCount == other.MinCount {
+				continue
+			}
+			err := newArgError(
+				1,
+				"positional arguments cannot follow variable-length positional arguments: %v",
+				flag,
+			)
+			c.setErr(err)
+			return c
 		}
 	}
 	c.info.Flags = append(c.info.Flags, flag)
@@ -188,6 +200,9 @@ func (c *CommandBuilder) Formatter(formatter Formatter) *CommandBuilder {
 // Build checks for any correctness errors in the specification of the command
 // and produces a CommandInfo.
 func (c *CommandBuilder) Build() (*CommandInfo, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
 	return c.info, nil
 }
 

@@ -77,15 +77,18 @@ func (c *FlagBuilder) Usage(usage string) *FlagBuilder {
 }
 
 // Position indicates that this flag is a positional argument, and therefore has
-// no "-" or "--" delimeter. Only one positional flag may be defined for each
-// command. You cannot specify both a positional argument and subcommands.
+// no "-" or "--" delimeter. You cannot specify both a positional arguments and
+// subcommands.
 func (c *FlagBuilder) Positional() *FlagBuilder {
 	c.info.Positional = true
 	return c
 }
 
 // NArgs indicates how many times this flag may be specified on the command
-// line. To disable min or max count checking, set their value to 0.
+// line. Value.Set will be called once for each instance of the flag specified
+// in the command arguments.
+//
+// To disable min or max count checking, set their value to 0.
 func (c *FlagBuilder) NArgs(min, max int) *FlagBuilder {
 	c.info.MinCount = min
 	c.info.MaxCount = max

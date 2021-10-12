@@ -10,10 +10,10 @@ import (
 type argParser struct {
 	args              []string
 	cmd               *CommandInfo
-	posFlag           *FlagInfo
 	flagsByName       map[string]*FlagInfo
 	subcommandsByName map[string]*CommandInfo
 	flagsSeen         map[string]int
+	positionals       []*FlagInfo
 }
 
 func newArgParser(cmd *CommandInfo, args []string) *argParser {
@@ -30,14 +30,14 @@ func newArgParser(cmd *CommandInfo, args []string) *argParser {
 func (c *argParser) setCommand(cmd *CommandInfo) {
 	// accumulate flags
 	c.cmd = cmd
-	c.posFlag = nil
+	c.positionals = make([]*FlagInfo, 0)
 	for _, flag := range cmd.Flags {
 		c.flagsByName[flag.Name] = flag
 		if flag.ShortName != "" {
 			c.flagsByName[flag.ShortName] = flag
 		}
 		if flag.Positional {
-			c.posFlag = flag
+			c.positionals = append(c.positionals, flag)
 		}
 	}
 
@@ -80,7 +80,7 @@ func (c *argParser) parseEnvVars() error {
 		if !ok {
 			continue
 		}
-		c.markSeen(flagInfo)
+		c.observe(flagInfo)
 		if err := flagInfo.Value.Set(s); err != nil {
 			return err
 		}
@@ -122,25 +122,33 @@ func (c *argParser) next() (arg string, ok bool) {
 	return
 }
 
-func (c *argParser) markSeen(flagInfo *FlagInfo) {
-	if _, ok := c.flagsSeen[flagInfo.Name]; !ok {
+func (c *argParser) observe(flagInfo *FlagInfo) int {
+	n := c.flagsSeen[flagInfo.Name]
+	if n == 0 {
 		flagInfo.Value.Reset()
 	}
-	c.flagsSeen[flagInfo.Name] += 1
+	n += 1
+	c.flagsSeen[flagInfo.Name] = n
+	return n
 }
 
 func (c *argParser) dispatch(arg string) error {
 	if isPositional(arg) {
-		// handle position flag
-		if c.posFlag != nil {
-			c.markSeen(c.posFlag)
-			return c.posFlag.Value.Set(arg)
-		}
-		if len(c.cmd.Subcommands) == 0 {
-			return newArgError(1, "unexpected positional argument: %s", arg)
+		// handle positional flag
+		if len(c.positionals) > 0 {
+			posFlag := c.positionals[0]
+			n := c.observe(posFlag)
+			if posFlag.MaxCount > 0 && n == posFlag.MaxCount {
+				// all done with this positional flag
+				c.positionals = c.positionals[1:]
+			}
+			return posFlag.Value.Set(arg)
 		}
 
 		// handle subcommand
+		if len(c.cmd.Subcommands) == 0 {
+			return newArgError(1, "unexpected positional argument: %s", arg)
+		}
 		cmd, ok := c.subcommandsByName[arg]
 		if !ok {
 			return newArgError(1, "unrecognized command: %s", arg)
@@ -148,11 +156,13 @@ func (c *argParser) dispatch(arg string) error {
 		c.setCommand(cmd)
 		return nil
 	}
+
+	// regular flag
 	flagInfo, ok := c.flagsByName[flagName(arg)]
 	if !ok {
 		return newArgError(1, "unrecognized argument: %s", arg)
 	}
-	c.markSeen(flagInfo)
+	c.observe(flagInfo)
 
 	// special case for booleans can be specified with a value or none at all
 	if flagInfo.Boolean {
