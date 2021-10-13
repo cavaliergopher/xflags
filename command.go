@@ -1,6 +1,8 @@
 package xflags
 
 import (
+	"bytes"
+	"flag"
 	"io"
 	"os"
 )
@@ -73,6 +75,12 @@ func (c *CommandInfo) WriteUsage(w io.Writer) error {
 	return f(w, c)
 }
 
+func (c *CommandInfo) UsageString() string {
+	b := &bytes.Buffer{}
+	c.WriteUsage(b)
+	return b.String()
+}
+
 func (c *CommandInfo) usageHandler(exitCode int) CommandHandler {
 	return func() int {
 		w := os.Stdout
@@ -133,7 +141,7 @@ func (c *CommandBuilder) Hidden() *CommandBuilder {
 	return c
 }
 
-func (c *CommandBuilder) flag(flag *FlagInfo) *CommandBuilder {
+func (c *CommandBuilder) addFlag(flag *FlagInfo) *CommandBuilder {
 	if flag.Positional {
 		// cannot mix positionals with subcommands
 		if len(c.info.Subcommands) > 0 {
@@ -165,7 +173,7 @@ func (c *CommandBuilder) flag(flag *FlagInfo) *CommandBuilder {
 // Flag adds command line flags for this command.
 func (c *CommandBuilder) Flags(flags ...*FlagInfo) *CommandBuilder {
 	for _, flag := range flags {
-		c = c.flag(flag)
+		c = c.addFlag(flag)
 	}
 	return c
 }
@@ -195,6 +203,25 @@ func (c *CommandBuilder) Subcommands(commands ...*CommandInfo) *CommandBuilder {
 func (c *CommandBuilder) Formatter(formatter Formatter) *CommandBuilder {
 	c.info.Formatter = formatter
 	return c
+}
+
+// FlagSet imports flags from a flag.FlagSet defined using Go's flag package.
+func (c *CommandBuilder) FlagSet(flags *flag.FlagSet) *CommandBuilder {
+	flags.VisitAll(func(v *flag.Flag) {
+		newFlag, err := FromFlag(v).Build()
+		if err != nil {
+			c.setErr(err)
+			return
+		}
+		c = c.addFlag(newFlag)
+	})
+	return c
+}
+
+// CommandLineFlagSet imports flags from the global flag.CommandLine FlagSet in
+// Go's flag package.
+func (c *CommandBuilder) CommandLineFlagSet() *CommandBuilder {
+	return c.FlagSet(flag.CommandLine)
 }
 
 // Build checks for any correctness errors in the specification of the command

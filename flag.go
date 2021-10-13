@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"flag"
 	"strings"
 	"time"
 )
@@ -193,4 +194,10 @@ func String(p *string, name string) *FlagBuilder {
 
 func StringSlice(p *[]string, name string) *FlagBuilder {
 	return Var((*stringSliceValue)(p), name).NArgs(0, 0)
+}
+
+// FromFlag returns a FlagBuilder which imports a Flag from Go's flag package.
+func FromFlag(v *flag.Flag) *FlagBuilder {
+	// TODO: give parsing back to stdlib
+	return Var(ValueFunc(v.Value.Set), v.Name).Usage(v.Usage)
 }

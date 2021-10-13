@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"flag"
 	"fmt"
 	"testing"
 )
@@ -149,4 +150,17 @@ func TestPositionalFlags(t *testing.T) {
 	assertString(t, "two", bar)
 	assertStringSlice(t, []string{"three", "four"}, baz)
 	assertStringSlice(t, []string{"five", "six"}, qux)
+}
+
+func TestFlagSet(t *testing.T) {
+	foo := flag.String("foo", "lorem ipsum", "specify foo")
+	bar := flag.Bool("bar", false, "specify bar")
+	cmd := Command("flag").CommandLineFlagSet().MustBuild()
+	if _, err := cmd.Parse([]string{"--foo", "dolor sit", "--bar", "true"}); err != nil {
+		t.Error(err)
+		return
+	}
+	t.Log(cmd.UsageString())
+	assertString(t, "dolor sit", *foo)
+	assertBool(t, true, *bar)
 }
