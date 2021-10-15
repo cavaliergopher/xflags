@@ -9,9 +9,12 @@ import (
 // TODO: help, -h and --help flags
 // TODO: pass through anything after --
 
-// CommandHandler is a function implements the execution of a command specified
+// CommandFunc is a function implements the execution of a command specified
 // in command line arguments.
-type CommandHandler func() int
+//
+// Args will always be empty and is a placeholder for future releases that will
+// pass unhandled arguments to the handler.
+type CommandFunc func(args []string) int
 
 // CommandInfo describes a command that users may invoke from the command line.
 //
@@ -26,7 +29,7 @@ type CommandInfo struct {
 	Flags       []*FlagInfo
 	Subcommands []*CommandInfo
 	Formatter   Formatter
-	Handler     CommandHandler
+	Handler     CommandFunc
 }
 
 func (c *CommandInfo) String() string { return c.Name }
@@ -35,9 +38,9 @@ func (c *CommandInfo) String() string { return c.Name }
 // each argument in each command flag's target. The rules for each flag are
 // checked and any errors are returned.
 //
-// The returned CommandHandler is the handler for the command or subcommand
+// The returned CommandFunc is the handler for the command or subcommand
 // specified by the arguments.
-func (c *CommandInfo) Parse(args []string) (CommandHandler, error) {
+func (c *CommandInfo) Parse(args []string) (CommandFunc, error) {
 	cmd, err := newArgParser(c, args).Parse()
 	if err != nil {
 		return nil, err
@@ -58,7 +61,7 @@ func (c *CommandInfo) Run(args []string) int {
 	if err != nil {
 		return handleErr(err)
 	}
-	return f()
+	return f(nil)
 }
 
 // WriteUsage prints a help message to the given Writer.
@@ -73,8 +76,8 @@ func (c *CommandInfo) WriteUsage(w io.Writer) error {
 	return f(w, c)
 }
 
-func (c *CommandInfo) usageHandler(exitCode int) CommandHandler {
-	return func() int {
+func (c *CommandInfo) usageHandler(exitCode int) CommandFunc {
+	return func(args []string) int {
 		w := os.Stdout
 		if exitCode != 0 {
 			w = os.Stderr
@@ -115,7 +118,7 @@ func (c *CommandBuilder) setErr(err error) {
 
 // Handler specifies the function to call when this command is specified on the
 // the command line.
-func (c *CommandBuilder) Handler(handler CommandHandler) *CommandBuilder {
+func (c *CommandBuilder) Handler(handler CommandFunc) *CommandBuilder {
 	c.info.Handler = handler
 	return c
 }

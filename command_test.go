@@ -26,7 +26,7 @@ func TestSubcommands(t *testing.T) {
 					Boolean().
 					MustBuild(),
 			).
-			Handler(func() int {
+			Handler(func(args []string) int {
 				ranCommands |= 1 << (n - 1)
 				return 0
 			})
@@ -58,7 +58,7 @@ func TestSubcommands(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		handler()
+		handler(nil)
 
 		// make sure it was the right one
 		// TODO: test correct flags were set
