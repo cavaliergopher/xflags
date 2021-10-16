@@ -84,6 +84,14 @@ func TestPosFlagOrdering(t *testing.T) {
 			StringVar(&sink, "one", "", "").Positional().Must(),
 		),
 		getFixture(
+			StringVar(&sink, "one", "", "").Positional().Must(),
+			StringVar(&sink, "two", "", "").Positional().Must(),
+		),
+		getFixture(
+			StringVar(&sink, "one", "", "").Positional().NArgs(0, 1).Must(),
+			StringVar(&sink, "two", "", "").Positional().Must(),
+		),
+		getFixture(
 			StringVar(&sink, "one", "", "").Positional().NArgs(1, 1).Must(),
 			StringVar(&sink, "two", "", "").Positional().Must(),
 		),
@@ -105,19 +113,11 @@ func TestPosFlagOrdering(t *testing.T) {
 	// test for errors
 	errorCases := []*CommandBuilder{
 		getFixture(
-			StringVar(&sink, "one", "", "").Positional().Must(),
-			StringVar(&sink, "two", "", "").Positional().Must(),
-		),
-		getFixture(
 			StringVar(&sink, "one", "", "").Positional().NArgs(0, 0).Must(),
 			StringVar(&sink, "two", "", "").Positional().Must(),
 		),
 		getFixture(
 			StringVar(&sink, "one", "", "").Positional().NArgs(1, 0).Must(),
-			StringVar(&sink, "two", "", "").Positional().Must(),
-		),
-		getFixture(
-			StringVar(&sink, "one", "", "").Positional().NArgs(0, 1).Must(),
 			StringVar(&sink, "two", "", "").Positional().Must(),
 		),
 	}

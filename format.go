@@ -7,6 +7,8 @@ import (
 	"text/tabwriter"
 )
 
+// TODO: wrap final column to term width
+
 // Formatter is a function that prints a help message for a command.
 type Formatter func(w io.Writer, info *CommandInfo) error
 
@@ -20,8 +22,13 @@ func DefaultFormatter(w io.Writer, info *CommandInfo) error {
 	if info.Usage != "" {
 		fmt.Fprintf(aw, "\n%s\n", info.Usage)
 	}
-	if err := formatFlags(aw, info.Flags); err != nil {
+	if err := formatPositionalFlags(aw, info.Flags); err != nil {
 		return err
+	}
+	for _, group := range info.FlagGroups {
+		if err := formatFlagGroup(aw, group); err != nil {
+			return err
+		}
 	}
 	if err := formatSubcommands(aw, info.Subcommands); err != nil {
 		return err
@@ -35,24 +42,37 @@ func DefaultFormatter(w io.Writer, info *CommandInfo) error {
 	return aw.Err()
 }
 
-func getRegularFlags(flags []*FlagInfo) []*FlagInfo {
-	out := make([]*FlagInfo, 0, len(flags))
-	for _, flag := range flags {
-		if flag.Hidden || flag.Positional {
+func filterPositionalFlags(flags []*FlagInfo) []*FlagInfo {
+	a := make([]*FlagInfo, 0, 2)
+	for _, flagInfo := range flags {
+		if flagInfo.Hidden || !flagInfo.Positional {
 			continue
 		}
-		out = append(out, flag)
+		a = append(a, flagInfo)
 	}
-	return out
+	return a
 }
 
-func getPosFlag(flags []*FlagInfo) *FlagInfo {
-	for _, flag := range flags {
-		if flag.Positional && !flag.Hidden {
-			return flag
+func filterRegularFlags(flags []*FlagInfo) []*FlagInfo {
+	a := make([]*FlagInfo, 0, len(flags)/2)
+	for _, flagInfo := range flags {
+		if flagInfo.Hidden || flagInfo.Positional {
+			continue
 		}
+		a = append(a, flagInfo)
 	}
-	return nil
+	return a
+}
+
+func filterEnvironmentFlags(flags []*FlagInfo) []*FlagInfo {
+	a := make([]*FlagInfo, 0, 2)
+	for _, flagInfo := range flags {
+		if flagInfo.Hidden || flagInfo.EnvVar == "" {
+			continue
+		}
+		a = append(a, flagInfo)
+	}
+	return a
 }
 
 func formatUsage(w io.Writer, info *CommandInfo) error {
@@ -61,47 +81,60 @@ func formatUsage(w io.Writer, info *CommandInfo) error {
 		fullName = fmt.Sprintf("%s %s", p.Name, fullName)
 	}
 	fmt.Fprintf(w, "Usage: %s", fullName)
-	printFlags := getRegularFlags(info.Flags)
-	if len(printFlags) > 0 {
+	if len(filterRegularFlags(info.Flags)) > 0 {
 		fmt.Fprintf(w, " [OPTIONS]")
 	}
 	if len(info.Subcommands) > 0 {
 		fmt.Fprintf(w, " COMMAND")
 	}
-	if flag := getPosFlag(info.Flags); flag != nil {
-		name := strings.ToUpper(flag.Name)
-		for i := 0; i < flag.MinCount; i++ {
-			fmt.Fprintf(w, " %s", name)
-		}
-		if flag.MaxCount == 0 || flag.MaxCount > flag.MinCount {
-			fmt.Fprintf(w, " [%s...]", name)
+	for _, flagInfo := range filterPositionalFlags(info.Flags) {
+		name := strings.ToUpper(flagInfo.Name)
+		if flagInfo.MinCount == 0 {
+			if flagInfo.MaxCount == 1 {
+				fmt.Fprintf(w, " [%s]", name)
+			} else {
+				fmt.Fprintf(w, " [%s...]", name)
+			}
+		} else {
+			if flagInfo.MinCount == 1 && flagInfo.MaxCount == 1 {
+				fmt.Fprintf(w, " %s", name)
+			} else {
+				fmt.Fprintf(w, " %s...", name)
+			}
 		}
 	}
 	fmt.Fprintf(w, "\n")
 	return nil
 }
 
-func formatFlags(w io.Writer, flags []*FlagInfo) error {
-	// TODO: wrap final column to term width
-	posFlag := getPosFlag(flags)
-	printFlags := getRegularFlags(flags)
-	if posFlag != nil {
-		fmt.Fprintf(w, "\nPositional arguments:\n")
-		fmt.Fprintf(w, "  %s", strings.ToUpper(posFlag.Name))
-		if posFlag.Usage != "" {
-			fmt.Fprintf(w, "  %s", posFlag.Usage)
-			if posFlag.ShowDefault {
-				fmt.Fprintf(w, " (default: %s)", posFlag.Value)
-			}
-		}
-		fmt.Fprintf(w, "\n")
-	}
-	if len(printFlags) == 0 {
+func formatPositionalFlags(w io.Writer, flags []*FlagInfo) error {
+	flags = filterPositionalFlags(flags)
+	if len(flags) == 0 {
 		return nil
 	}
-	fmt.Fprintf(w, "\nOptions:\n")
+	fmt.Fprintf(w, "\nPositional arguments:\n")
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, flagInfo := range flags {
+		fmt.Fprintf(tw, "  %s", strings.ToUpper(flagInfo.Name))
+		if flagInfo.Usage != "" {
+			fmt.Fprintf(tw, "\t%s", flagInfo.Usage)
+			if flagInfo.ShowDefault {
+				fmt.Fprintf(w, " (default: %s)", flagInfo.Value)
+			}
+		}
+		fmt.Fprintf(tw, "\n")
+	}
+	return tw.Flush()
+}
+
+func formatFlagGroup(w io.Writer, group *FlagGroupInfo) error {
+	flags := filterRegularFlags(group.Flags)
+	if len(flags) == 0 {
+		return nil
+	}
+	fmt.Fprintf(w, "\n%s:\n", group.Usage)
 	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
-	for _, flagInfo := range printFlags {
+	for _, flagInfo := range flags {
 		var name, ShortName string
 		if flagInfo.ShortName == "" {
 			if len(flagInfo.Name) == 1 {
@@ -123,20 +156,15 @@ func formatFlags(w io.Writer, flags []*FlagInfo) error {
 }
 
 func formatEnvVars(w io.Writer, flags []*FlagInfo) error {
-	printFlags := make([]*FlagInfo, 0, len(flags))
-	for _, flag := range flags {
-		if !flag.Hidden && flag.EnvVar != "" {
-			printFlags = append(printFlags, flag)
-		}
-	}
-	if len(printFlags) == 0 {
+	flags = filterEnvironmentFlags(flags)
+	if len(flags) == 0 {
 		return nil
 	}
 	fmt.Fprintf(w, "\nEnvironment variables:\n")
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	for _, flagInfo := range printFlags {
+	for _, flagInfo := range flags {
 		fmt.Fprintf(
-			w,
+			tw,
 			"  %s\t%s\n",
 			strings.ToUpper(flagInfo.EnvVar),
 			flagInfo.Usage,
@@ -151,12 +179,12 @@ func formatSubcommands(w io.Writer, subcommands []*CommandInfo) error {
 		return nil
 	}
 	fmt.Fprintf(w, "\nCommands:\n")
-	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, cmd := range subcommands {
 		if cmd.Hidden {
 			continue
 		}
-		fmt.Fprintf(tw, "  %s\t %s\n", cmd.Name, cmd.Usage)
+		fmt.Fprintf(tw, "  %s\t%s\n", cmd.Name, cmd.Usage)
 	}
 	return tw.Flush()
 }

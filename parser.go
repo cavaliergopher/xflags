@@ -6,6 +6,7 @@ import (
 
 // TODO: position args must go last?
 // TODO: fuzz
+// TODO: support single-char flags with no name
 
 // argument to terminate parsing of all remaining arguments
 const terminator = "--"

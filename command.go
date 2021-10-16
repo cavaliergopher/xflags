@@ -26,11 +26,13 @@ type CommandInfo struct {
 	Hidden         bool
 	WithTerminator bool
 	Flags          []*FlagInfo
+	FlagGroups     []*FlagGroupInfo
 	Subcommands    []*CommandInfo
 	Formatter      Formatter
 	Handler        CommandFunc
 
-	args []string
+	args             []string
+	defaultFlagGroup *FlagGroupInfo
 }
 
 func (c *CommandInfo) String() string { return c.Name }
@@ -95,6 +97,14 @@ func (c *CommandInfo) usage(exitCode int) int {
 	return exitCode
 }
 
+// FlagGroupInfo is a nominal grouping of flags wich affects how the flags are
+// shown in help messages.
+type FlagGroupInfo struct {
+	Name  string
+	Usage string
+	Flags []*FlagInfo
+}
+
 // CommandBuilder builds a CommandInfo which defines a command and all of its
 // flags.
 type CommandBuilder struct {
@@ -109,9 +119,12 @@ func Command(name string) *CommandBuilder {
 		info: &CommandInfo{
 			Name:        name,
 			Flags:       make([]*FlagInfo, 0),
+			FlagGroups:  make([]*FlagGroupInfo, 1),
 			Subcommands: make([]*CommandInfo, 0),
 		},
 	}
+	c.info.FlagGroups[0] = &FlagGroupInfo{Name: "options", Usage: "Options"}
+	c.info.defaultFlagGroup = c.info.FlagGroups[0]
 	return c.Flags(helpFlag)
 }
 
@@ -156,11 +169,11 @@ func (c *CommandBuilder) flag(flag *FlagInfo) *CommandBuilder {
 			if !other.Positional {
 				continue
 			}
-			if other.MaxCount > 0 && other.MaxCount == other.MinCount {
+			if other.MaxCount > 0 {
 				continue
 			}
 			return c.errorf(
-				"positional arguments cannot follow variable-length positional arguments",
+				"positional arguments cannot follow unbounded positional arguments",
 			)
 		}
 	}
@@ -172,6 +185,25 @@ func (c *CommandBuilder) flag(flag *FlagInfo) *CommandBuilder {
 func (c *CommandBuilder) Flags(flags ...*FlagInfo) *CommandBuilder {
 	for _, flag := range flags {
 		c = c.flag(flag)
+		c.info.defaultFlagGroup.Flags = append(
+			c.info.defaultFlagGroup.Flags,
+			flag,
+		)
+	}
+	return c
+}
+
+// FlagGroup adds a group of command line flags to this command and shows them
+// under a common heading in help messages.
+func (c *CommandBuilder) FlagGroup(name, usage string, flags ...*FlagInfo) *CommandBuilder {
+	flagGroupInfo := &FlagGroupInfo{
+		Name:  name,
+		Usage: usage,
+		Flags: flags,
+	}
+	c.info.FlagGroups = append(c.info.FlagGroups, flagGroupInfo)
+	for _, flagInfo := range flags {
+		c = c.flag(flagInfo)
 	}
 	return c
 }
