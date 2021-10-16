@@ -28,15 +28,16 @@ var helpFlag = BoolVar(&flagHelp, "help", false, "Show help info").
 // Programs should not create FlagInfo directly and instead use one of the
 // FlagBuilders to build one with proper error checking.
 type FlagInfo struct {
-	Name       string
-	ShortName  string
-	Usage      string
-	Positional bool
-	MinCount   int
-	MaxCount   int
-	Hidden     bool
-	EnvVar     string
-	Value      Value
+	Name        string
+	ShortName   string
+	Usage       string
+	ShowDefault bool
+	Positional  bool
+	MinCount    int
+	MaxCount    int
+	Hidden      bool
+	EnvVar      string
+	Value       Value
 }
 
 func (c *FlagInfo) String() string {
@@ -58,6 +59,13 @@ func (c *FlagBuilder) setErr(err error) {
 		return
 	}
 	c.err = err
+}
+
+// ShowDefault specifies that the default vlaue of this flag should be show in
+// the help message.
+func (c *FlagBuilder) ShowDefault() *FlagBuilder {
+	c.info.ShowDefault = true
+	return c
 }
 
 // ShortName specifies an alternative short name for a command line flag. For

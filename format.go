@@ -90,6 +90,9 @@ func formatFlags(w io.Writer, flags []*FlagInfo) error {
 		fmt.Fprintf(w, "  %s", strings.ToUpper(posFlag.Name))
 		if posFlag.Usage != "" {
 			fmt.Fprintf(w, "  %s", posFlag.Usage)
+			if posFlag.ShowDefault {
+				fmt.Fprintf(w, " (default: %s)", posFlag.Value)
+			}
 		}
 		fmt.Fprintf(w, "\n")
 	}
@@ -98,19 +101,23 @@ func formatFlags(w io.Writer, flags []*FlagInfo) error {
 	}
 	fmt.Fprintf(w, "\nOptions:\n")
 	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
-	for _, flag := range printFlags {
+	for _, flagInfo := range printFlags {
 		var name, ShortName string
-		if flag.ShortName == "" {
-			if len(flag.Name) == 1 {
-				ShortName = fmt.Sprintf("-%s", flag.Name)
+		if flagInfo.ShortName == "" {
+			if len(flagInfo.Name) == 1 {
+				ShortName = fmt.Sprintf("-%s", flagInfo.Name)
 			} else {
-				name = fmt.Sprintf("--%s", flag.Name)
+				name = fmt.Sprintf("--%s", flagInfo.Name)
 			}
 		} else {
-			name = fmt.Sprintf("--%s", flag.Name)
-			ShortName = fmt.Sprintf("-%s,", flag.ShortName)
+			name = fmt.Sprintf("--%s", flagInfo.Name)
+			ShortName = fmt.Sprintf("-%s,", flagInfo.ShortName)
 		}
-		fmt.Fprintf(tw, "  %s\t%s\t %s\n", ShortName, name, flag.Usage)
+		fmt.Fprintf(tw, "  %s\t%s\t %s", ShortName, name, flagInfo.Usage)
+		if flagInfo.ShowDefault {
+			fmt.Fprintf(w, " (default: %s)", flagInfo.Value)
+		}
+		fmt.Fprintf(tw, "\n")
 	}
 	return tw.Flush()
 }
