@@ -7,7 +7,6 @@ import (
 )
 
 // TODO: support global flags from external packages
-// TODO: help, -h and --help flags
 // TODO: pass through anything after --
 
 // CommandFunc is a function implements the execution of a command specified
@@ -22,47 +21,56 @@ type CommandFunc func(args []string) int
 // Programs should not create CommandInfo directly and instead use the Command
 // function to build one with proper error checking.
 type CommandInfo struct {
-	Parent      *CommandInfo
-	Name        string
-	Usage       string
-	Synopsis    string
-	Hidden      bool
-	Flags       []*FlagInfo
-	Subcommands []*CommandInfo
-	Formatter   Formatter
-	Handler     CommandFunc
+	Parent         *CommandInfo
+	Name           string
+	Usage          string
+	Synopsis       string
+	Hidden         bool
+	WithTerminator bool
+	Flags          []*FlagInfo
+	Subcommands    []*CommandInfo
+	Formatter      Formatter
+	Handler        CommandFunc
+
+	args []string
 }
 
 func (c *CommandInfo) String() string { return c.Name }
+
+// Args returns any command line arguments specified after the "--" terminator
+// if it was enabled.
+func (c *CommandInfo) Args() []string { return c.args }
 
 // Parse parses the given set of command line arguments and stores the value of
 // each argument in each command flag's target. The rules for each flag are
 // checked and any errors are returned.
 //
-// The returned CommandFunc is the handler for the command or subcommand
+// The returned *CommandInfo is the one for the same command or subcommand
 // specified by the arguments.
-func (c *CommandInfo) Parse(args []string) (CommandFunc, error) {
-	cmd, err := newArgParser(c, args).Parse()
+func (c *CommandInfo) Parse(args []string) (*CommandInfo, error) {
+	cmd, args, err := newArgParser(c, args).Parse()
 	if err != nil {
 		return nil, err
 	}
-	if flagHelp {
-		return cmd.usageHandler(0), nil
-	}
-	if cmd.Handler == nil {
-		return cmd.usageHandler(1), nil
-	}
-	return cmd.Handler, nil
+	cmd.args = args
+	return cmd, nil
 }
 
 // Run parses the given set of command line arguments and calls the handler for
 // the command or subcommand specified by the arguments.
 func (c *CommandInfo) Run(args []string) int {
-	f, err := c.Parse(args)
+	var err error
+	c, err = c.Parse(args)
 	if err != nil {
 		return handleErr(err)
 	}
-	return f(nil)
+	if flagHelp {
+		return c.usage(0)
+	}
+	if c.Handler == nil {
+		return c.usage(1)
+	}
+	return c.Handler(c.args)
 }
 
 // WriteUsage prints a help message to the given Writer.
@@ -77,17 +85,15 @@ func (c *CommandInfo) WriteUsage(w io.Writer) error {
 	return f(w, c)
 }
 
-func (c *CommandInfo) usageHandler(exitCode int) CommandFunc {
-	return func(args []string) int {
-		w := os.Stdout
-		if exitCode != 0 {
-			w = os.Stderr
-		}
-		if err := c.WriteUsage(w); err != nil {
-			return handleErr(err)
-		}
-		return exitCode
+func (c *CommandInfo) usage(exitCode int) int {
+	w := os.Stdout
+	if exitCode != 0 {
+		w = os.Stderr
 	}
+	if err := c.WriteUsage(w); err != nil {
+		return handleErr(err)
+	}
+	return exitCode
 }
 
 // CommandBuilder builds a CommandInfo which defines a command and all of its
@@ -217,6 +223,14 @@ func (c *CommandBuilder) Formatter(formatter Formatter) *CommandBuilder {
 	return c
 }
 
+// WithTerminator specifies that any command line argument after "--" will be
+// passed through to the args parameter of the command's handler without any
+// further processing.
+func (c *CommandBuilder) WithTerminator() *CommandBuilder {
+	c.info.WithTerminator = true
+	return c
+}
+
 // Build checks for any correctness errors in the specification of the command
 // and produces a CommandInfo.
 func (c *CommandBuilder) Build() (*CommandInfo, error) {
@@ -226,9 +240,9 @@ func (c *CommandBuilder) Build() (*CommandInfo, error) {
 	return c.info, nil
 }
 
-// MustBuild calls Build and panics if any error is encountered. This should
-// only be used in a global variables or init function.
-func (c *CommandBuilder) MustBuild() *CommandInfo {
+// Must calls Build and panics if any error is encountered. This should only be
+// used in a global variables or init function.
+func (c *CommandBuilder) Must() *CommandInfo {
 	info, err := c.Build()
 	if err != nil {
 		panic(err)

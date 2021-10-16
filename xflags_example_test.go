@@ -20,19 +20,19 @@ var App = Command("example").
 		// Example 1: A single string flag called "species" with default value
 		// "gopher".
 		StringVar(&flagSpecies, "species", "gopher", "the species we are studying").
-			MustBuild(),
+			Must(),
 
 		// Example 2: An alternative short name, so we can have a shorthand.
 		StringVar(&flagGopherType, "gopher_type", "pocket", "the variety of gopher").
 			ShortName("g").
-			MustBuild(),
+			Must(),
 
 		// Example 3: A user-defined flag type, a slice of durations.
 		// Define a flag to accumulate durations.
 		Var(&flagInterval, "deltaT", "comma-separated list of intervals to use between events").
-			MustBuild(),
+			Must(),
 	).
-	MustBuild()
+	Must()
 
 // interval is a custom flag type that implements the xflags.Value interface.
 type interval []time.Duration

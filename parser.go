@@ -7,20 +7,24 @@ import (
 // TODO: position args must go last?
 // TODO: fuzz
 
+// argument to terminate parsing of all remaining arguments
+const terminator = "--"
+
 type argParser struct {
+	tokens            []string
 	args              []string
-	discard           []string
 	cmd               *CommandInfo
+	isTerminated      bool
 	flagsByName       map[string]*FlagInfo
 	subcommandsByName map[string]*CommandInfo
 	flagsSeen         map[string]int
 	positionals       []*FlagInfo
 }
 
-func newArgParser(cmd *CommandInfo, args []string) *argParser {
+func newArgParser(cmd *CommandInfo, tokens []string) *argParser {
+	tokens = normalize(tokens, cmd.WithTerminator)
 	c := &argParser{
-		args:              normalize(args),
-		discard:           make([]string, 0),
+		tokens:            tokens,
 		flagsByName:       make(map[string]*FlagInfo),
 		flagsSeen:         make(map[string]int),
 		subcommandsByName: make(map[string]*CommandInfo),
@@ -51,26 +55,23 @@ func (c *argParser) setCommand(cmd *CommandInfo) {
 	}
 }
 
-func (c *argParser) Parse() (*CommandInfo, error) {
+func (c *argParser) Parse() (cmd *CommandInfo, args []string, err error) {
 	for {
 		arg, ok := c.next()
 		if !ok {
 			break
 		}
-		if err := c.dispatch(arg); err != nil {
-			return nil, err
+		if err = c.dispatch(arg); err != nil {
+			return
 		}
 	}
-	if err := c.handleDiscard(); err != nil {
-		return nil, err
+	if err = c.parseEnvVars(); err != nil {
+		return
 	}
-	if err := c.parseEnvVars(); err != nil {
-		return nil, err
+	if err = c.checkNArgs(); err != nil {
+		return
 	}
-	if err := c.checkNArgs(); err != nil {
-		return nil, err
-	}
-	return c.cmd, nil
+	return c.cmd, c.args, nil
 }
 
 func (c *argParser) parseEnvVars() error {
@@ -111,19 +112,19 @@ func (c *argParser) checkNArgs() error {
 	return nil
 }
 
-func (c *argParser) peek() (arg string, ok bool) {
-	if len(c.args) == 0 {
+func (c *argParser) peek() (token string, ok bool) {
+	if len(c.tokens) == 0 {
 		return
 	}
 	ok = true
-	arg = c.args[0]
+	token = c.tokens[0]
 	return
 }
 
-func (c *argParser) next() (arg string, ok bool) {
-	arg, ok = c.peek()
+func (c *argParser) next() (token string, ok bool) {
+	token, ok = c.peek()
 	if ok {
-		c.args = c.args[1:]
+		c.tokens = c.tokens[1:]
 	}
 	return
 }
@@ -133,48 +134,53 @@ func (c *argParser) observe(flagInfo *FlagInfo) int {
 	return c.flagsSeen[flagInfo.Name]
 }
 
-func (c *argParser) handleDiscard() error {
-	for _, arg := range c.discard {
-		if isPositional(arg) {
-			return newArgError(1, "unexpected positional argument: %s", arg)
-		} else {
-			return newArgError(1, "unrecognized argument: %s", arg)
+func (c *argParser) dispatch(token string) error {
+	if c.isTerminated {
+		if c.args == nil {
+			c.args = make([]string, 0, 1)
 		}
+		c.args = append(c.args, token)
+		return nil
 	}
+	if token == terminator && c.cmd.WithTerminator {
+		c.isTerminated = true
+		return nil
+	}
+	if isPositional(token) {
+		return c.dispatchPositional(token)
+	}
+	return c.dispatchRegular(token)
+}
+
+func (c *argParser) dispatchPositional(token string) error {
+	// handle positional flag
+	if len(c.positionals) > 0 {
+		flagInfo := c.positionals[0]
+		n := c.observe(flagInfo)
+		if flagInfo.MaxCount > 0 && n == flagInfo.MaxCount {
+			// all done with this positional flag
+			c.positionals = c.positionals[1:]
+		}
+		return flagInfo.Value.Set(token)
+	}
+
+	// handle subcommand
+	if len(c.cmd.Subcommands) == 0 {
+		return newArgError(1, "unexpected positional argument: %s", token)
+	}
+	cmd, ok := c.subcommandsByName[token]
+	if !ok {
+		return newArgError(1, "unrecognized command: %s", token)
+	}
+	c.setCommand(cmd)
 	return nil
 }
 
-func (c *argParser) dispatch(arg string) error {
-	if isPositional(arg) {
-		// handle positional flag
-		if len(c.positionals) > 0 {
-			posFlag := c.positionals[0]
-			n := c.observe(posFlag)
-			if posFlag.MaxCount > 0 && n == posFlag.MaxCount {
-				// all done with this positional flag
-				c.positionals = c.positionals[1:]
-			}
-			return posFlag.Value.Set(arg)
-		}
-
-		// handle subcommand
-		if len(c.cmd.Subcommands) == 0 {
-			c.discard = append(c.discard, arg)
-			return nil
-		}
-		cmd, ok := c.subcommandsByName[arg]
-		if !ok {
-			return newArgError(1, "unrecognized command: %s", arg)
-		}
-		c.setCommand(cmd)
-		return nil
-	}
-
+func (c *argParser) dispatchRegular(token string) error {
 	// regular flag
-	flagInfo, ok := c.flagsByName[flagName(arg)]
+	flagInfo, ok := c.flagsByName[flagName(token)]
 	if !ok {
-		c.discard = append(c.discard, arg)
-		return nil
+		return newArgError(1, "unrecognized argument: %s", token)
 	}
 	c.observe(flagInfo)
 
@@ -196,7 +202,7 @@ func (c *argParser) dispatch(arg string) error {
 	// read the next arg as a value
 	value, ok := c.peek()
 	if !ok || !isPositional(value) {
-		return newArgError(1, "no value specified for flag: %s", arg)
+		return newArgError(1, "no value specified for flag: %s", token)
 	}
 	c.next() // consume the value
 	return flagInfo.Value.Set(value)
@@ -232,9 +238,13 @@ func isPositional(arg string) bool {
 
 // normalize splits any arguments that declare both a key and a value (E.g.
 // --key=value, or -kV) into two distinct arguments.
-func normalize(args []string) []string {
+func normalize(args []string, withTerminator bool) []string {
 	out := make([]string, 0, len(args))
-	for _, arg := range args {
+	for i, arg := range args {
+		if withTerminator && arg == terminator {
+			out = append(out, args[i:]...)
+			return out
+		}
 		if isSingleDash(arg) {
 			out = append(out, arg[:2])
 			arg = arg[2:]

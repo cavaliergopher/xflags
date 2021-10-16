@@ -15,7 +15,7 @@ var flagHelp bool
 var helpFlag = BoolVar(&flagHelp, "help", false, "Show help info").
 	ShortName("h").
 	Hidden().
-	MustBuild()
+	Must()
 
 // TODO: Groups?
 // TODO: mutually exclusive flags?
@@ -116,9 +116,9 @@ func (c *FlagBuilder) Build() (*FlagInfo, error) {
 	return c.info, nil
 }
 
-// MustBuild calls Build and panics if any error is encountered. This should
-// only be used in a global variables or init function.
-func (c *FlagBuilder) MustBuild() *FlagInfo {
+// Must calls Build and panics if any error is encountered. This should only be
+// used in a global variables or init function.
+func (c *FlagBuilder) Must() *FlagInfo {
 	info, err := c.Build()
 	if err != nil {
 		panic(err)
