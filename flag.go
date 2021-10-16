@@ -18,7 +18,6 @@ var helpFlag = BoolVar(&flagHelp, "help", false, "Show help info").
 	Hidden().
 	Must()
 
-// TODO: Groups?
 // TODO: mutually exclusive flags?
 // TODO: custom validation errors?
 // TODO: error handling modes
@@ -45,7 +44,20 @@ func (c *FlagInfo) String() string {
 	if c.Positional {
 		return strings.ToUpper(c.Name)
 	}
-	return "--" + c.Name
+	if c.Name != "" {
+		return "--" + c.Name
+	}
+	if c.ShortName != "" {
+		return "-" + c.ShortName
+	}
+	return "unknown"
+}
+
+func (c *FlagInfo) id() string {
+	if c.Name != "" {
+		return c.Name
+	}
+	return c.ShortName
 }
 
 // FlagBuilder builds a FlagInfo which defines a command line flag for a CLI
@@ -56,7 +68,7 @@ type FlagBuilder struct {
 }
 
 func (c *FlagBuilder) errorf(format string, a ...interface{}) *FlagBuilder {
-	format = fmt.Sprintf("flag: %s: %s", c.info.Name, format)
+	format = fmt.Sprintf("flag: %v: %s", c.info, format)
 	c.err = errorf(format, a...)
 	return c
 }
@@ -160,6 +172,10 @@ func Var(value Value, name, usage string) *FlagBuilder {
 	}
 	if value == nil {
 		return c.errorf("value cannot be nil")
+	}
+	if len(name) == 1 {
+		c.info.ShortName = c.info.Name
+		c.info.Name = ""
 	}
 	return c
 }

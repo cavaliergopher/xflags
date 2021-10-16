@@ -135,18 +135,18 @@ func formatFlagGroup(w io.Writer, group *FlagGroupInfo) error {
 	fmt.Fprintf(w, "\n%s:\n", group.Usage)
 	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
 	for _, flagInfo := range flags {
-		var name, ShortName string
-		if flagInfo.ShortName == "" {
-			if len(flagInfo.Name) == 1 {
-				ShortName = fmt.Sprintf("-%s", flagInfo.Name)
-			} else {
-				name = fmt.Sprintf("--%s", flagInfo.Name)
-			}
-		} else {
+		var name, shortName string
+		if flagInfo.Name != "" {
 			name = fmt.Sprintf("--%s", flagInfo.Name)
-			ShortName = fmt.Sprintf("-%s,", flagInfo.ShortName)
 		}
-		fmt.Fprintf(tw, "  %s\t%s\t %s", ShortName, name, flagInfo.Usage)
+		if flagInfo.ShortName != "" {
+			if flagInfo.Name != "" {
+				shortName = fmt.Sprintf("-%s,", flagInfo.ShortName)
+			} else {
+				shortName = fmt.Sprintf("-%s", flagInfo.ShortName)
+			}
+		}
+		fmt.Fprintf(tw, "  %s\t%s\t %s", shortName, name, flagInfo.Usage)
 		if flagInfo.ShowDefault {
 			fmt.Fprintf(w, " (default: %s)", flagInfo.Value)
 		}

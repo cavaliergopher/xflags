@@ -78,7 +78,6 @@ func TestPosFlagOrdering(t *testing.T) {
 	getFixture := func(flags ...*FlagInfo) *CommandBuilder {
 		return Command("test").Flags(flags...)
 	}
-
 	successCases := []*CommandBuilder{
 		getFixture(
 			StringVar(&sink, "one", "", "").Positional().Must(),
@@ -109,8 +108,6 @@ func TestPosFlagOrdering(t *testing.T) {
 			}
 		})
 	}
-
-	// test for errors
 	errorCases := []*CommandBuilder{
 		getFixture(
 			StringVar(&sink, "one", "", "").Positional().NArgs(0, 0).Must(),

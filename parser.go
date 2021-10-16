@@ -5,8 +5,7 @@ import (
 )
 
 // TODO: position args must go last?
-// TODO: fuzz
-// TODO: support single-char flags with no name
+// TODO: fuzz?
 
 // argument to terminate parsing of all remaining arguments
 const terminator = "--"
@@ -17,6 +16,7 @@ type argParser struct {
 	cmd               *CommandInfo
 	isTerminated      bool
 	flagsByName       map[string]*FlagInfo
+	flagsByShortName  map[string]*FlagInfo
 	subcommandsByName map[string]*CommandInfo
 	flagsSeen         map[string]int
 	positionals       []*FlagInfo
@@ -27,6 +27,7 @@ func newArgParser(cmd *CommandInfo, tokens []string) *argParser {
 	c := &argParser{
 		tokens:            tokens,
 		flagsByName:       make(map[string]*FlagInfo),
+		flagsByShortName:  make(map[string]*FlagInfo),
 		flagsSeen:         make(map[string]int),
 		subcommandsByName: make(map[string]*CommandInfo),
 	}
@@ -40,9 +41,11 @@ func (c *argParser) setCommand(cmd *CommandInfo) {
 	c.cmd = cmd
 	c.positionals = make([]*FlagInfo, 0)
 	for _, flag := range cmd.Flags {
-		c.flagsByName[flag.Name] = flag
+		if flag.Name != "" {
+			c.flagsByName[flag.Name] = flag
+		}
 		if flag.ShortName != "" {
-			c.flagsByName[flag.ShortName] = flag
+			c.flagsByShortName[flag.ShortName] = flag
 		}
 		if flag.Positional {
 			c.positionals = append(c.positionals, flag)
@@ -80,7 +83,7 @@ func (c *argParser) parseEnvVars() error {
 		if flagInfo.EnvVar == "" {
 			continue
 		}
-		n := c.flagsSeen[flagInfo.Name]
+		n := c.flagsSeen[flagInfo.id()]
 		if n > 0 {
 			continue
 		}
@@ -102,7 +105,7 @@ func (c *argParser) checkNArgs() error {
 		return nil
 	}
 	for _, flag := range c.cmd.Flags {
-		n := c.flagsSeen[flag.Name]
+		n := c.flagsSeen[flag.id()]
 		if flag.MinCount > 0 && n < flag.MinCount {
 			return errorf("missing argument: %s", flag)
 		}
@@ -131,8 +134,8 @@ func (c *argParser) next() (token string, ok bool) {
 }
 
 func (c *argParser) observe(flagInfo *FlagInfo) int {
-	c.flagsSeen[flagInfo.Name] += 1
-	return c.flagsSeen[flagInfo.Name]
+	c.flagsSeen[flagInfo.id()] += 1
+	return c.flagsSeen[flagInfo.id()]
 }
 
 func (c *argParser) dispatch(token string) error {
@@ -179,8 +182,14 @@ func (c *argParser) dispatchPositional(token string) error {
 
 func (c *argParser) dispatchRegular(token string) error {
 	// regular flag
-	flagInfo, ok := c.flagsByName[flagName(token)]
-	if !ok {
+	var flagInfo *FlagInfo
+	if isDoubleDash(token) {
+		flagInfo = c.flagsByName[token[2:]]
+	}
+	if isSingleDash(token) {
+		flagInfo = c.flagsByShortName[token[1:]]
+	}
+	if flagInfo == nil {
 		return errorf("unrecognized argument: %s", token)
 	}
 	c.observe(flagInfo)
@@ -195,16 +204,6 @@ func (c *argParser) dispatchRegular(token string) error {
 	}
 	c.next() // consume the value
 	return flagInfo.Value.Set(value)
-}
-
-func flagName(arg string) string {
-	if isSingleDash(arg) {
-		return arg[1:]
-	}
-	if isDoubleDash(arg) {
-		return arg[2:]
-	}
-	return arg
 }
 
 func isSingleDash(arg string) bool {
