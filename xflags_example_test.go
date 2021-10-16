@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	flagSpecies    string = "gopher"
+	flagSpecies    string
 	flagGopherType string = "pocket"
 	flagInterval   interval
 )
@@ -19,26 +19,26 @@ var App = Command("example").
 	Flags(
 		// Example 1: A single string flag called "species" with default value
 		// "gopher".
-		String(&flagSpecies, "species").
-			Usage("the species we are studying").
+		StringVar(&flagSpecies, "species", "gopher", "the species we are studying").
 			MustBuild(),
 
 		// Example 2: An alternative short name, so we can have a shorthand.
-		String(&flagGopherType, "gopher_type").
+		StringVar(&flagGopherType, "gopher_type", "pocket", "the variety of gopher").
 			ShortName("g").
-			Usage("the variety of gopher").
 			MustBuild(),
 
 		// Example 3: A user-defined flag type, a slice of durations.
 		// Define a flag to accumulate durations.
-		Var(&flagInterval, "deltaT").
-			Usage("comma-separated list of intervals to use between events").
+		Var(&flagInterval, "deltaT", "comma-separated list of intervals to use between events").
 			MustBuild(),
 	).
 	MustBuild()
 
 // interval is a custom flag type that implements the xflags.Value interface.
 type interval []time.Duration
+
+// G is the method to get the flag value, part of the xflags.Value interface.
+func (i *interval) Get() interface{} { return []time.Duration(*i) }
 
 // Set is the method to set the flag value, part of the xflags.Value interface.
 // Set's argument is a string to be parsed to set the flag.
@@ -60,12 +60,6 @@ func (i *interval) Set(value string) error {
 		*i = append(*i, duration)
 	}
 	return nil
-}
-
-// Reset is the method to reset the flag value from its default value, part of
-// the xflags.Value interface.
-func (i *interval) Reset() {
-	*i = make([]time.Duration, 0)
 }
 
 // String is the method to format the flag's value, part of the xflags.Value interface.

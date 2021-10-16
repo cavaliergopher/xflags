@@ -16,14 +16,7 @@ func TestSubcommands(t *testing.T) {
 	newCommand = func(n, of int) *CommandInfo {
 		c := Command(fmt.Sprintf("command%02d", n)).
 			Flags(
-				Var(
-					ValueFunc(func(s string) error {
-						setFlags |= 1 << (n - 1)
-						return nil
-					}),
-					fmt.Sprintf("x%02d", n),
-				).
-					Boolean().
+				BitFieldVar(&setFlags, n, fmt.Sprintf("x%02d", n), 0, "").
 					MustBuild(),
 			).
 			Handler(func(args []string) int {
@@ -82,17 +75,17 @@ func TestPosFlagOrdering(t *testing.T) {
 
 	successCases := []*CommandBuilder{
 		getFixture(
-			String(&sink, "one").Positional().MustBuild(),
+			StringVar(&sink, "one", "", "").Positional().MustBuild(),
 		),
 		getFixture(
-			String(&sink, "one").Positional().NArgs(1, 1).MustBuild(),
-			String(&sink, "two").Positional().MustBuild(),
+			StringVar(&sink, "one", "", "").Positional().NArgs(1, 1).MustBuild(),
+			StringVar(&sink, "two", "", "").Positional().MustBuild(),
 		),
 		getFixture(
-			String(&sink, "one").Positional().NArgs(1, 1).MustBuild(),
-			String(&sink, "two").Positional().NArgs(2, 2).MustBuild(),
-			String(&sink, "three").Positional().NArgs(3, 3).MustBuild(),
-			String(&sink, "four").Positional().MustBuild(),
+			StringVar(&sink, "one", "", "").Positional().NArgs(1, 1).MustBuild(),
+			StringVar(&sink, "two", "", "").Positional().NArgs(2, 2).MustBuild(),
+			StringVar(&sink, "three", "", "").Positional().NArgs(3, 3).MustBuild(),
+			StringVar(&sink, "four", "", "").Positional().MustBuild(),
 		),
 	}
 	for i, builder := range successCases {
@@ -106,20 +99,20 @@ func TestPosFlagOrdering(t *testing.T) {
 	// test for errors
 	errorCases := []*CommandBuilder{
 		getFixture(
-			String(&sink, "one").Positional().MustBuild(),
-			String(&sink, "two").Positional().MustBuild(),
+			StringVar(&sink, "one", "", "").Positional().MustBuild(),
+			StringVar(&sink, "two", "", "").Positional().MustBuild(),
 		),
 		getFixture(
-			String(&sink, "one").Positional().NArgs(0, 0).MustBuild(),
-			String(&sink, "two").Positional().MustBuild(),
+			StringVar(&sink, "one", "", "").Positional().NArgs(0, 0).MustBuild(),
+			StringVar(&sink, "two", "", "").Positional().MustBuild(),
 		),
 		getFixture(
-			String(&sink, "one").Positional().NArgs(1, 0).MustBuild(),
-			String(&sink, "two").Positional().MustBuild(),
+			StringVar(&sink, "one", "", "").Positional().NArgs(1, 0).MustBuild(),
+			StringVar(&sink, "two", "", "").Positional().MustBuild(),
 		),
 		getFixture(
-			String(&sink, "one").Positional().NArgs(0, 1).MustBuild(),
-			String(&sink, "two").Positional().MustBuild(),
+			StringVar(&sink, "one", "", "").Positional().NArgs(0, 1).MustBuild(),
+			StringVar(&sink, "two", "", "").Positional().MustBuild(),
 		),
 	}
 	for i, builder := range errorCases {
@@ -135,10 +128,10 @@ func TestPositionalFlags(t *testing.T) {
 	var foo, bar string
 	var baz, qux []string
 	cmd := Command("test").Flags(
-		String(&foo, "foo").Positional().Required().MustBuild(),
-		String(&bar, "bar").Positional().Required().MustBuild(),
-		StringSlice(&baz, "baz").Positional().NArgs(2, 2).MustBuild(),
-		StringSlice(&qux, "qux").Positional().NArgs(0, 0).MustBuild(),
+		StringVar(&foo, "foo", "", "").Positional().Required().MustBuild(),
+		StringVar(&bar, "bar", "", "").Positional().Required().MustBuild(),
+		StringSliceVar(&baz, "baz", nil, "").Positional().NArgs(2, 2).MustBuild(),
+		StringSliceVar(&qux, "qux", nil, "").Positional().NArgs(0, 0).MustBuild(),
 	).MustBuild()
 	_, err := cmd.Parse([]string{"one", "two", "three", "four", "five", "six"})
 	if err != nil {

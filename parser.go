@@ -123,13 +123,8 @@ func (c *argParser) next() (arg string, ok bool) {
 }
 
 func (c *argParser) observe(flagInfo *FlagInfo) int {
-	n := c.flagsSeen[flagInfo.Name]
-	if n == 0 {
-		flagInfo.Value.Reset()
-	}
-	n += 1
-	c.flagsSeen[flagInfo.Name] = n
-	return n
+	c.flagsSeen[flagInfo.Name] += 1
+	return c.flagsSeen[flagInfo.Name]
 }
 
 func (c *argParser) dispatch(arg string) error {

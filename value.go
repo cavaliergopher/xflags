@@ -1,34 +1,56 @@
 package xflags
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 )
 
+// Value is the interface to the dynamic value stored in a flag.
+// (The default value is represented as a string.)
+//
+// Set is called once, in command line order, for each flag present.
 type Value interface {
-	// Set parses the given argument and stores the parsed value in the
-	// underlying variable.
+	String() string
+	Get() interface{}
 	Set(s string) error
-
-	// Reset is called only the first time a command line argument is seen to
-	// reset the state of the value from its default value. This is useful for
-	// flags that incrementally build the state of the value, such as a
-	// StringSlice.
-	Reset()
 }
 
-type ValueFunc func(s string) error
+type bitFieldValue struct {
+	p *uint64
+	n int
+}
 
-func (f ValueFunc) Set(s string) error { return f(s) }
+func newBitFieldValue(val uint64, p *uint64, n int) *bitFieldValue {
+	*p = val
+	return &bitFieldValue{p: p, n: n}
+}
 
-func (f ValueFunc) Reset() {}
+func (p *bitFieldValue) String() string { return fmt.Sprintf("0x%0x", *p.p) }
 
-// compile-time interface assertion
-var _ Value = ValueFunc(func(s string) error { return nil })
+func (p *bitFieldValue) Get() interface{} { return *p.p }
+
+func (p *bitFieldValue) Set(s string) error {
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	if v {
+		*p.p |= (1 << p.n)
+	}
+	return nil
+}
 
 type boolValue bool
 
-func (p *boolValue) Reset() {}
+func newBoolValue(val bool, p *bool) *boolValue {
+	*p = val
+	return (*boolValue)(p)
+}
+
+func (p *boolValue) String() string { return strconv.FormatBool((bool)(*p)) }
+
+func (p *boolValue) Get() interface{} { return (bool)(*p) }
 
 func (p *boolValue) Set(s string) error {
 	v, err := strconv.ParseBool(s)
@@ -41,7 +63,14 @@ func (p *boolValue) Set(s string) error {
 
 type durationValue time.Duration
 
-func (p *durationValue) Reset() {}
+func newDurationValue(val time.Duration, p *time.Duration) *durationValue {
+	*p = val
+	return (*durationValue)(p)
+}
+
+func (p *durationValue) String() string { return (time.Duration)(*p).String() }
+
+func (p *durationValue) Get() interface{} { return (time.Duration)(*p) }
 
 func (p *durationValue) Set(s string) error {
 	v, err := time.ParseDuration(s)
@@ -54,7 +83,16 @@ func (p *durationValue) Set(s string) error {
 
 type float64Value float64
 
-func (p *float64Value) Reset() {}
+func newFloat64Value(val float64, p *float64) *float64Value {
+	*p = val
+	return (*float64Value)(p)
+}
+
+func (p *float64Value) String() string {
+	return strconv.FormatFloat((float64)(*p), 'e', -1, 64)
+}
+
+func (p *float64Value) Get() interface{} { return (float64)(*p) }
 
 func (p *float64Value) Set(s string) error {
 	v, err := strconv.ParseFloat(s, 64)
@@ -67,7 +105,16 @@ func (p *float64Value) Set(s string) error {
 
 type int64Value int64
 
-func (p *int64Value) Reset() {}
+func newInt64Value(val int64, p *int64) *int64Value {
+	*p = val
+	return (*int64Value)(p)
+}
+
+func (p *int64Value) String() string {
+	return strconv.FormatInt((int64)(*p), 10)
+}
+
+func (p *int64Value) Get() interface{} { return (int64)(*p) }
 
 func (p *int64Value) Set(s string) error {
 	v, err := strconv.ParseInt(s, 10, 64)
@@ -80,20 +127,41 @@ func (p *int64Value) Set(s string) error {
 
 type stringValue string
 
-func (p *stringValue) Reset() {}
+func newStringValue(val string, p *string) *stringValue {
+	*p = val
+	return (*stringValue)(p)
+}
+
+func (p *stringValue) String() string { return (string)(*p) }
+
+func (p *stringValue) Get() interface{} { return (string)(*p) }
 
 func (p *stringValue) Set(s string) error {
 	*p = stringValue(s)
 	return nil
 }
 
-type stringSliceValue []string
-
-func (p *stringSliceValue) Reset() {
-	*p = make([]string, 0)
+type stringSliceValue struct {
+	p   *[]string
+	hot bool
 }
 
+func newStringSliceValue(val []string, p *[]string) *stringSliceValue {
+	*p = val
+	return &stringSliceValue{p: p}
+}
+
+func (p *stringSliceValue) String() string {
+	return fmt.Sprintf("%v", *p.p)
+}
+
+func (p *stringSliceValue) Get() interface{} { return *p.p }
+
 func (p *stringSliceValue) Set(s string) error {
-	*p = append(*p, s)
+	if !p.hot {
+		*p.p = make([]string, 0, 1)
+		p.hot = true
+	}
+	*p.p = append(*p.p, s)
 	return nil
 }

@@ -68,31 +68,31 @@ func assertStringSlice(t *testing.T, expect, actual []string) bool {
 
 func TestBool(t *testing.T) {
 	v := false
-	parseFlag(t, Bool(&v, "foo").MustBuild(), "--foo")
+	parseFlag(t, BoolVar(&v, "foo", false, "").MustBuild(), "--foo")
 	assertBool(t, true, v)
 }
 
 func TestDuration(t *testing.T) {
 	var v time.Duration
-	parseFlag(t, Duration(&v, "foo").MustBuild(), "--foo=1s")
+	parseFlag(t, DurationVar(&v, "foo", 0, "").MustBuild(), "--foo=1s")
 	assertDuration(t, time.Second, v)
 }
 
 func TestFloat64(t *testing.T) {
 	var v float64
-	parseFlag(t, Float64(&v, "foo").MustBuild(), "--foo=1.0")
+	parseFlag(t, Float64Var(&v, "foo", 0, "").MustBuild(), "--foo=1.0")
 	assertFloat64(t, 1.0, v)
 }
 
 func TestInt64(t *testing.T) {
 	var v int64
-	parseFlag(t, Int64(&v, "foo").MustBuild(), "--foo=1")
+	parseFlag(t, Int64Var(&v, "foo", 0, "").MustBuild(), "--foo=1")
 	assertInt64(t, 1, v)
 }
 
 func TestString(t *testing.T) {
 	var v string
-	parseFlag(t, String(&v, "foo").MustBuild(), "--foo=bar")
+	parseFlag(t, StringVar(&v, "foo", "", "").MustBuild(), "--foo=bar")
 	assertString(t, "bar", v)
 }
 
@@ -100,7 +100,7 @@ func TestStringSlice(t *testing.T) {
 	var v []string
 	parseFlag(
 		t,
-		StringSlice(&v, "foo").MustBuild(),
+		StringSliceVar(&v, "foo", nil, "").MustBuild(),
 		"--foo", "baz", "--foo", "qux",
 	)
 	assertStringSlice(t, []string{"baz", "qux"}, v)

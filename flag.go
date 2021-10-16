@@ -12,7 +12,7 @@ const (
 
 var flagHelp bool
 
-var helpFlag = Bool(&flagHelp, "help").
+var helpFlag = BoolVar(&flagHelp, "help", false, "Show help info").
 	ShortName("h").
 	Hidden().
 	MustBuild()
@@ -69,13 +69,6 @@ func (c *FlagBuilder) ShortName(name string) *FlagBuilder {
 	return c
 }
 
-// Usage sets a short description of the command line flag to show in help
-// messages.
-func (c *FlagBuilder) Usage(usage string) *FlagBuilder {
-	c.info.Usage = usage
-	return c
-}
-
 // Position indicates that this flag is a positional argument, and therefore has
 // no "-" or "--" delimeter. You cannot specify both a positional arguments and
 // subcommands.
@@ -115,9 +108,9 @@ func (c *FlagBuilder) Hidden() *FlagBuilder {
 	return c
 }
 
-// EnvVar allows the value of the flag to be specified with an environment
-// variable if it is not specified on the command line.
-func (c *FlagBuilder) EnvVar(name string) *FlagBuilder {
+// Env allows the value of the flag to be specified with an environment variable
+// if it is not specified on the command line.
+func (c *FlagBuilder) Env(name string) *FlagBuilder {
 	c.info.EnvVar = name
 	return c
 }
@@ -143,10 +136,11 @@ func (c *FlagBuilder) MustBuild() *FlagInfo {
 
 // Var returns a FlagBuilder which can be used to define a command line
 // flag with custom value parsing.
-func Var(value Value, name string) *FlagBuilder {
+func Var(value Value, name, usage string) *FlagBuilder {
 	c := &FlagBuilder{
 		info: &FlagInfo{
 			Name:     name,
+			Usage:    usage,
 			MinCount: defaultMinNArgs,
 			MaxCount: defaultMaxNArgs,
 			Value:    value,
@@ -158,39 +152,50 @@ func Var(value Value, name string) *FlagBuilder {
 	return c
 }
 
-// Bool returns a FlagBuilder which can be used to define a command line
+// BitFieldVar returns a FlagBuilder which can be used to define a command line
+// flag that sets a bit in a uint64 value.
+//
+// A bit field flag does not require a value to be specified on the command line
+// and instead stores "true" if the flag appears in the command line arguments.
+func BitFieldVar(p *uint64, n int, name string, value uint64, usage string) *FlagBuilder {
+	return Var(newBitFieldValue(value, p, n), name, usage).Boolean()
+}
+
+// BoolVar returns a FlagBuilder which can be used to define a command line
 // flag with a bool value.
 //
 // A bool flag does not require a value to be specified on the command line and
 // instead stores "true" if the flag appears in the command line arguments.
-func Bool(p *bool, name string) *FlagBuilder {
-	return Var((*boolValue)(p), name).Boolean()
+func BoolVar(p *bool, name string, value bool, usage string) *FlagBuilder {
+	return Var(newBoolValue(value, p), name, usage).Boolean()
 }
 
 // Duration returns a FlagBuilder which can be used to define a command line
 // flag with a string value.
-func Duration(p *time.Duration, name string) *FlagBuilder {
-	return Var((*durationValue)(p), name)
+func DurationVar(p *time.Duration, name string, value time.Duration, usage string) *FlagBuilder {
+	return Var(newDurationValue(value, p), name, usage)
 }
 
 // Float64 returns a FlagBuilder which can be used to define a command line
 // flag with a Float64 value.
-func Float64(p *float64, name string) *FlagBuilder {
-	return Var((*float64Value)(p), name)
+func Float64Var(p *float64, name string, value float64, usage string) *FlagBuilder {
+	return Var(newFloat64Value(value, p), name, usage)
 }
 
 // Int64 returns a FlagBuilder which can be used to define a command line
 // flag with an int64 value.
-func Int64(p *int64, name string) *FlagBuilder {
-	return Var((*int64Value)(p), name)
+func Int64Var(p *int64, name string, value int64, usage string) *FlagBuilder {
+	return Var(newInt64Value(value, p), name, usage)
 }
 
 // String returns a FlagBuilder which can be used to define a command line
 // flag with a string value.
-func String(p *string, name string) *FlagBuilder {
-	return Var((*stringValue)(p), name)
+func StringVar(p *string, name, value, usage string) *FlagBuilder {
+	return Var(newStringValue(value, p), name, usage)
 }
 
-func StringSlice(p *[]string, name string) *FlagBuilder {
-	return Var((*stringSliceValue)(p), name).NArgs(0, 0)
+// String returns a FlagBuilder which can be used to define a command line
+// flag with a string slice value.
+func StringSliceVar(p *[]string, name string, value []string, usage string) *FlagBuilder {
+	return Var(newStringSliceValue(value, p), name, usage).NArgs(0, 0)
 }
