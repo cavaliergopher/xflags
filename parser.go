@@ -4,8 +4,7 @@ import (
 	"os"
 )
 
-// TODO: position args must go last?
-// TODO: fuzz?
+// TODO: fuzz tests?
 
 // argument to terminate parsing of all remaining arguments
 const terminator = "--"

@@ -211,6 +211,13 @@ func Float64Var(p *float64, name string, value float64, usage string) *FlagBuild
 	return Var(newFloat64Value(value, p), name, usage)
 }
 
+// IntVar returns a FlagBuilder that can be used to define an int flag with
+// specified name, default value, and usage string. The argument p points to an
+// int variable in which to store the value of the flag.
+func IntVar(p *int, name string, value int, usage string) *FlagBuilder {
+	return Var(newIntValue(value, p), name, usage)
+}
+
 // Int64Var returns a FlagBuilder that can be used to define an int64 flag with
 // specified name, default value, and usage string. The argument p points to an
 // int64 variable in which to store the value of the flag.
@@ -231,4 +238,18 @@ func StringVar(p *string, name, value, usage string) *FlagBuilder {
 // in command line order.
 func StringSliceVar(p *[]string, name string, value []string, usage string) *FlagBuilder {
 	return Var(newStringSliceValue(value, p), name, usage).NArgs(0, 0)
+}
+
+// UintVar returns a FlagBuilder that can be used to define an uint flag with
+// specified name, default value, and usage string. The argument p points to an
+// uint variable in which to store the value of the flag.
+func UintVar(p *uint, name string, value uint, usage string) *FlagBuilder {
+	return Var(newUintValue(value, p), name, usage)
+}
+
+// Uint64Var returns a FlagBuilder that can be used to define an uint64 flag
+// with specified name, default value, and usage string. The argument p points
+// to an uint64 variable in which to store the value of the flag.
+func Uint64Var(p *uint64, name string, value uint64, usage string) *FlagBuilder {
+	return Var(newUint64Value(value, p), name, usage)
 }

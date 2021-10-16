@@ -127,6 +127,28 @@ func (p *float64Value) Set(s string) error {
 	return nil
 }
 
+type intValue int
+
+func newIntValue(val int, p *int) *intValue {
+	*p = val
+	return (*intValue)(p)
+}
+
+func (p *intValue) String() string {
+	return strconv.FormatInt((int64)(*p), 10)
+}
+
+func (p *intValue) Get() interface{} { return (int64)(*p) }
+
+func (p *intValue) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*p = intValue(v)
+	return nil
+}
+
 type int64Value int64
 
 func newInt64Value(val int64, p *int64) *int64Value {
@@ -187,5 +209,49 @@ func (p *stringSliceValue) Set(s string) error {
 		p.hot = true
 	}
 	*p.p = append(*p.p, s)
+	return nil
+}
+
+type uintValue uint
+
+func newUintValue(val uint, p *uint) *uintValue {
+	*p = val
+	return (*uintValue)(p)
+}
+
+func (p *uintValue) String() string {
+	return strconv.FormatInt((int64)(*p), 10)
+}
+
+func (p *uintValue) Get() interface{} { return (int64)(*p) }
+
+func (p *uintValue) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*p = uintValue(v)
+	return nil
+}
+
+type uint64Value uint64
+
+func newUint64Value(val uint64, p *uint64) *uint64Value {
+	*p = val
+	return (*uint64Value)(p)
+}
+
+func (p *uint64Value) String() string {
+	return strconv.FormatInt((int64)(*p), 10)
+}
+
+func (p *uint64Value) Get() interface{} { return (int64)(*p) }
+
+func (p *uint64Value) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*p = uint64Value(v)
 	return nil
 }
