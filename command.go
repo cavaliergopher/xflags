@@ -70,7 +70,8 @@ func (c *CommandInfo) Run(args []string) int {
 	return c.Handler(c.args)
 }
 
-// WriteUsage prints a help message to the given Writer.
+// WriteUsage prints a help message to the given Writer using the configured
+// Formatter.
 func (c *CommandInfo) WriteUsage(w io.Writer) error {
 	f := c.Formatter
 	for p := c; f == nil && p != nil; p = p.Parent {
