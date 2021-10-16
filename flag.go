@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -54,11 +55,10 @@ type FlagBuilder struct {
 	err  error
 }
 
-func (c *FlagBuilder) setErr(err error) {
-	if c.err != nil {
-		return
-	}
-	c.err = err
+func (c *FlagBuilder) errorf(format string, a ...interface{}) *FlagBuilder {
+	format = fmt.Sprintf("flag: %s: %s", c.info.Name, format)
+	c.err = errorf(format, a...)
+	return c
 }
 
 // ShowDefault specifies that the default vlaue of this flag should be show in
@@ -73,8 +73,7 @@ func (c *FlagBuilder) ShowDefault() *FlagBuilder {
 // "--foo" but may also use a short name of "f" to be specified by "-f".
 func (c *FlagBuilder) ShortName(name string) *FlagBuilder {
 	if len(name) > 1 {
-		c.setErr(newArgError(1, "shortname must be one character in length: %s", name))
-		return c
+		return c.errorf("short name must be one character in length: %s", name)
 	}
 	c.info.ShortName = name
 	return c
@@ -95,8 +94,7 @@ func (c *FlagBuilder) Positional() *FlagBuilder {
 // To disable min or max count checking, set their value to 0.
 func (c *FlagBuilder) NArgs(min, max int) *FlagBuilder {
 	if min < 0 || max < 0 || (max > 0 && min > max) {
-		c.setErr(newArgError(1, "invalid NArgs: %d, %d", min, max))
-		return c
+		return c.errorf("invalid NArgs: %d, %d", min, max)
 	}
 	c.info.MinCount = min
 	c.info.MaxCount = max
@@ -119,6 +117,9 @@ func (c *FlagBuilder) Hidden() *FlagBuilder {
 // Env allows the value of the flag to be specified with an environment variable
 // if it is not specified on the command line.
 func (c *FlagBuilder) Env(name string) *FlagBuilder {
+	if name == "" {
+		return c.errorf("environment variable name cannot be empty")
+	}
 	c.info.EnvVar = name
 	return c
 }
@@ -154,8 +155,11 @@ func Var(value Value, name, usage string) *FlagBuilder {
 			Value:    value,
 		},
 	}
+	if name == "" || strings.HasPrefix(name, "-") {
+		return c.errorf("invalid flag name")
+	}
 	if value == nil {
-		c.setErr(newArgError(1, "value interface cannot be nil"))
+		return c.errorf("value cannot be nil")
 	}
 	return c
 }

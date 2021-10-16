@@ -2,6 +2,7 @@ package xflags
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"os"
 )
@@ -114,11 +115,13 @@ func Command(name string) *CommandBuilder {
 	return c.Flags(helpFlag)
 }
 
-func (c *CommandBuilder) setErr(err error) {
+func (c *CommandBuilder) errorf(format string, a ...interface{}) *CommandBuilder {
 	if c.err != nil {
-		return
+		return c
 	}
-	c.err = err
+	format = fmt.Sprintf("command: %s: %s", c.info.Name, format)
+	c.err = errorf(format, a...)
+	return c
 }
 
 // Handler specifies the function to call when this command is specified on the
@@ -145,8 +148,7 @@ func (c *CommandBuilder) flag(flag *FlagInfo) *CommandBuilder {
 	if flag.Positional {
 		// cannot mix positionals with subcommands
 		if len(c.info.Subcommands) > 0 {
-			c.setErr(newArgError(1, "cannot specify both subcommands and positional argument: %v", flag))
-			return c
+			return c.errorf("cannot specify both subcommands and positional arguments")
 		}
 
 		// positionals cannot follow variable length positionals
@@ -157,13 +159,9 @@ func (c *CommandBuilder) flag(flag *FlagInfo) *CommandBuilder {
 			if other.MaxCount > 0 && other.MaxCount == other.MinCount {
 				continue
 			}
-			err := newArgError(
-				1,
-				"positional arguments cannot follow variable-length positional arguments: %v",
-				flag,
+			return c.errorf(
+				"positional arguments cannot follow variable-length positional arguments",
 			)
-			c.setErr(err)
-			return c
 		}
 	}
 	c.info.Flags = append(c.info.Flags, flag)
@@ -186,7 +184,7 @@ func (c *CommandBuilder) FlagSet(flagSet *flag.FlagSet) *CommandBuilder {
 	flagSet.VisitAll(func(f *flag.Flag) {
 		flagInfo, err := Var(f.Value, f.Name, f.Usage).Build()
 		if err != nil {
-			c.setErr(err)
+			c.err = err
 			return
 		}
 		c = c.Flags(flagInfo)
@@ -197,8 +195,7 @@ func (c *CommandBuilder) FlagSet(flagSet *flag.FlagSet) *CommandBuilder {
 func (c *CommandBuilder) subcommand(cmd *CommandInfo) *CommandBuilder {
 	for _, flag := range c.info.Flags {
 		if flag.Positional {
-			c.setErr(newArgError(1, "cannot specify both subcommands and positional argument: %v", cmd))
-			return c
+			return c.errorf("cannot specify both subcommands and positional arguments")
 		}
 	}
 	cmd.Parent = c.info

@@ -103,10 +103,10 @@ func (c *argParser) checkNArgs() error {
 	for _, flag := range c.cmd.Flags {
 		n := c.flagsSeen[flag.Name]
 		if flag.MinCount > 0 && n < flag.MinCount {
-			return newArgError(1, "missing argument: %s", flag)
+			return errorf("missing argument: %s", flag)
 		}
 		if flag.MaxCount > 0 && n > flag.MaxCount {
-			return newArgError(1, "argument declared too many times: %s", flag)
+			return errorf("argument declared too many times: %s", flag)
 		}
 	}
 	return nil
@@ -166,11 +166,11 @@ func (c *argParser) dispatchPositional(token string) error {
 
 	// handle subcommand
 	if len(c.cmd.Subcommands) == 0 {
-		return newArgError(1, "unexpected positional argument: %s", token)
+		return errorf("unexpected positional argument: %s", token)
 	}
 	cmd, ok := c.subcommandsByName[token]
 	if !ok {
-		return newArgError(1, "unrecognized command: %s", token)
+		return errorf("unrecognized command: %s", token)
 	}
 	c.setCommand(cmd)
 	return nil
@@ -180,7 +180,7 @@ func (c *argParser) dispatchRegular(token string) error {
 	// regular flag
 	flagInfo, ok := c.flagsByName[flagName(token)]
 	if !ok {
-		return newArgError(1, "unrecognized argument: %s", token)
+		return errorf("unrecognized argument: %s", token)
 	}
 	c.observe(flagInfo)
 	if isBoolValue(flagInfo.Value) {
@@ -190,7 +190,7 @@ func (c *argParser) dispatchRegular(token string) error {
 	// read the next arg as a value
 	value, ok := c.peek()
 	if !ok || !isPositional(value) {
-		return newArgError(1, "no value specified for flag: %s", token)
+		return errorf("no value specified for flag: %s", token)
 	}
 	c.next() // consume the value
 	return flagInfo.Value.Set(value)
