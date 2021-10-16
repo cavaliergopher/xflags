@@ -84,6 +84,5 @@ func Example() {
 	//
 	args := []string{"--gopher_type", "Goldman's pocket gopher"}
 	App.Run(args)
-
 	// output: Goldman's pocket gopher is a variety of species Gopher
 }

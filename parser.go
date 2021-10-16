@@ -15,7 +15,6 @@ type argParser struct {
 	cmd               *CommandInfo
 	isTerminated      bool
 	flagsByName       map[string]*FlagInfo
-	flagsByShortName  map[string]*FlagInfo
 	subcommandsByName map[string]*CommandInfo
 	flagsSeen         map[string]int
 	positionals       []*FlagInfo
@@ -26,7 +25,6 @@ func newArgParser(cmd *CommandInfo, tokens []string) *argParser {
 	c := &argParser{
 		tokens:            tokens,
 		flagsByName:       make(map[string]*FlagInfo),
-		flagsByShortName:  make(map[string]*FlagInfo),
 		flagsSeen:         make(map[string]int),
 		subcommandsByName: make(map[string]*CommandInfo),
 	}
@@ -41,10 +39,10 @@ func (c *argParser) setCommand(cmd *CommandInfo) {
 	c.positionals = make([]*FlagInfo, 0)
 	for _, flag := range cmd.Flags {
 		if flag.Name != "" {
-			c.flagsByName[flag.Name] = flag
+			c.flagsByName["--"+flag.Name] = flag
 		}
 		if flag.ShortName != "" {
-			c.flagsByShortName[flag.ShortName] = flag
+			c.flagsByName["-"+flag.ShortName] = flag
 		}
 		if flag.Positional {
 			c.positionals = append(c.positionals, flag)
@@ -82,7 +80,7 @@ func (c *argParser) parseEnvVars() error {
 		if flagInfo.EnvVar == "" {
 			continue
 		}
-		n := c.flagsSeen[flagInfo.id()]
+		n := c.flagsSeen[flagInfo.name()]
 		if n > 0 {
 			continue
 		}
@@ -104,7 +102,7 @@ func (c *argParser) checkNArgs() error {
 		return nil
 	}
 	for _, flag := range c.cmd.Flags {
-		n := c.flagsSeen[flag.id()]
+		n := c.flagsSeen[flag.name()]
 		if flag.MinCount > 0 && n < flag.MinCount {
 			return errorf("missing argument: %s", flag)
 		}
@@ -133,8 +131,8 @@ func (c *argParser) next() (token string, ok bool) {
 }
 
 func (c *argParser) observe(flagInfo *FlagInfo) int {
-	c.flagsSeen[flagInfo.id()] += 1
-	return c.flagsSeen[flagInfo.id()]
+	c.flagsSeen[flagInfo.name()] += 1
+	return c.flagsSeen[flagInfo.name()]
 }
 
 func (c *argParser) dispatch(token string) error {
@@ -181,13 +179,7 @@ func (c *argParser) dispatchPositional(token string) error {
 
 func (c *argParser) dispatchRegular(token string) error {
 	// regular flag
-	var flagInfo *FlagInfo
-	if isDoubleDash(token) {
-		flagInfo = c.flagsByName[token[2:]]
-	}
-	if isSingleDash(token) {
-		flagInfo = c.flagsByShortName[token[1:]]
-	}
+	flagInfo := c.flagsByName[token]
 	if flagInfo == nil {
 		return errorf("unrecognized argument: %s", token)
 	}

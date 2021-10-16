@@ -108,8 +108,9 @@ type FlagGroupInfo struct {
 // CommandBuilder builds a CommandInfo which defines a command and all of its
 // flags.
 type CommandBuilder struct {
-	info *CommandInfo
-	err  error
+	info        *CommandInfo
+	flagsByName map[string]*FlagInfo
+	err         error
 }
 
 // Command returns a CommandBuilder which can be used to define a command and
@@ -178,6 +179,23 @@ func (c *CommandBuilder) flag(flag *FlagInfo) *CommandBuilder {
 		}
 	}
 	c.info.Flags = append(c.info.Flags, flag)
+	if c.flagsByName == nil {
+		c.flagsByName = make(map[string]*FlagInfo)
+	}
+	if flag.Name != "" {
+		key := "--" + flag.Name
+		if _, ok := c.flagsByName[key]; ok {
+			return c.errorf("flag already declared: %s", key)
+		}
+		c.flagsByName[key] = flag
+	}
+	if flag.ShortName != "" {
+		key := "-" + flag.ShortName
+		if _, ok := c.flagsByName[key]; ok {
+			return c.errorf("flag already declared: %s", key)
+		}
+		c.flagsByName[key] = flag
+	}
 	return c
 }
 

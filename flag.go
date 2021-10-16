@@ -53,7 +53,7 @@ func (c *FlagInfo) String() string {
 	return "unknown"
 }
 
-func (c *FlagInfo) id() string {
+func (c *FlagInfo) name() string {
 	if c.Name != "" {
 		return c.Name
 	}
