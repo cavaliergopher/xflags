@@ -183,20 +183,8 @@ func (c *argParser) dispatchRegular(token string) error {
 		return newArgError(1, "unrecognized argument: %s", token)
 	}
 	c.observe(flagInfo)
-
-	// special case for booleans can be specified with a value or none at all
 	if isBoolValue(flagInfo.Value) {
-		value, ok := c.peek()
-		if !ok {
-			// no next arg
-			return flagInfo.Value.Set("true")
-		}
-		// TODO: this is a bit broken
-		if err := flagInfo.Value.Set(value); err != nil {
-			// next arg doesn't appear to be true|false
-			return flagInfo.Value.Set("true")
-		}
-		return nil
+		return flagInfo.Value.Set("true")
 	}
 
 	// read the next arg as a value

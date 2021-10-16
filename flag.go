@@ -147,8 +147,8 @@ func Var(value Value, name, usage string) *FlagBuilder {
 // BitFieldVar returns a FlagBuilder which can be used to define a command line
 // flag that sets a bit in a uint64 value.
 //
-// A bit field flag does not require a value to be specified on the command line
-// and instead stores "true" if the flag appears in the command line arguments.
+// A bit field flag does not allow a value to be specified on the command line
+// but instead stores "true" if the flag appears in the command line arguments.
 func BitFieldVar(p *uint64, n int, name string, value bool, usage string) *FlagBuilder {
 	fb := Var(newBitFieldValue(value, p, n), name, usage)
 	if n > 64 {
@@ -160,7 +160,7 @@ func BitFieldVar(p *uint64, n int, name string, value bool, usage string) *FlagB
 // BoolVar returns a FlagBuilder which can be used to define a command line
 // flag with a bool value.
 //
-// A bool flag does not require a value to be specified on the command line and
+// A bool flag does not allow a value to be specified on the command line but
 // instead stores "true" if the flag appears in the command line arguments.
 func BoolVar(p *bool, name string, value bool, usage string) *FlagBuilder {
 	return Var(newBoolValue(value, p), name, usage)

@@ -6,9 +6,6 @@ import (
 	"os"
 )
 
-// TODO: support global flags from external packages
-// TODO: pass through anything after --
-
 // CommandFunc is a function implements the execution of a command specified
 // in command line arguments.
 //
