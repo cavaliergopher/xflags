@@ -12,8 +12,21 @@ import (
 // Set is called once, in command line order, for each flag present.
 type Value interface {
 	String() string
-	Get() interface{}
 	Set(s string) error
+}
+
+// BoolValue is an optional interface to indicate boolean flags that can be
+// supplied without a "=value" argument.
+type BoolValue interface {
+	Value
+	IsBoolFlag() bool
+}
+
+func isBoolValue(v Value) bool {
+	if bv, ok := v.(BoolValue); ok {
+		return bv.IsBoolFlag()
+	}
+	return false
 }
 
 type bitFieldValue struct {
@@ -21,10 +34,13 @@ type bitFieldValue struct {
 	n int
 }
 
-func newBitFieldValue(val uint64, p *uint64, n int) *bitFieldValue {
-	*p = val
-	return &bitFieldValue{p: p, n: n}
+func newBitFieldValue(val bool, p *uint64, n int) *bitFieldValue {
+	v := &bitFieldValue{p: p, n: n}
+	v.set(val)
+	return v
 }
+
+func (p *bitFieldValue) IsBoolFlag() bool { return true }
 
 func (p *bitFieldValue) String() string { return fmt.Sprintf("0x%0x", *p.p) }
 
@@ -35,10 +51,16 @@ func (p *bitFieldValue) Set(s string) error {
 	if err != nil {
 		return err
 	}
+	p.set(v)
+	return nil
+}
+
+func (p *bitFieldValue) set(v bool) {
 	if v {
 		*p.p |= (1 << p.n)
+	} else {
+		*p.p &= ^(1 << p.n)
 	}
-	return nil
 }
 
 type boolValue bool
@@ -47,6 +69,8 @@ func newBoolValue(val bool, p *bool) *boolValue {
 	*p = val
 	return (*boolValue)(p)
 }
+
+func (p *boolValue) IsBoolFlag() bool { return true }
 
 func (p *boolValue) String() string { return strconv.FormatBool((bool)(*p)) }
 

@@ -66,6 +66,22 @@ func assertStringSlice(t *testing.T, expect, actual []string) bool {
 	return true
 }
 
+func TestBitField(t *testing.T) {
+	var v uint64
+	_, err := Command("test").
+		Flags(
+			BitFieldVar(&v, 0, "foo", false, "").MustBuild(),
+			BitFieldVar(&v, 1, "bar", false, "").MustBuild(),
+			BitFieldVar(&v, 2, "baz", true, "").MustBuild(),
+		).
+		MustBuild().
+		Parse([]string{"--foo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertInt64(t, 0x05, int64(v))
+}
+
 func TestBool(t *testing.T) {
 	v := false
 	parseFlag(t, BoolVar(&v, "foo", false, "").MustBuild(), "--foo")

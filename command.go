@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"flag"
 	"io"
 	"os"
 )
@@ -170,6 +171,22 @@ func (c *CommandBuilder) Flags(flags ...*FlagInfo) *CommandBuilder {
 	for _, flag := range flags {
 		c = c.flag(flag)
 	}
+	return c
+}
+
+// FlagSet imports flags from a Flagset created using Go's flag package. All
+// parsing and error handling is still managed by this package.
+//
+// To import any globally defined flags, import flag.CommandLine.
+func (c *CommandBuilder) FlagSet(flagSet *flag.FlagSet) *CommandBuilder {
+	flagSet.VisitAll(func(f *flag.Flag) {
+		flagInfo, err := Var(f.Value, f.Name, f.Usage).Build()
+		if err != nil {
+			c.setErr(err)
+			return
+		}
+		c = c.Flags(flagInfo)
+	})
 	return c
 }
 

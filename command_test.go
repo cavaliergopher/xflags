@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"flag"
 	"fmt"
 	"testing"
 )
@@ -16,7 +17,7 @@ func TestSubcommands(t *testing.T) {
 	newCommand = func(n, of int) *CommandInfo {
 		c := Command(fmt.Sprintf("command%02d", n)).
 			Flags(
-				BitFieldVar(&setFlags, n, fmt.Sprintf("x%02d", n), 0, "").
+				BitFieldVar(&setFlags, n, fmt.Sprintf("x%02d", n), false, "").
 					MustBuild(),
 			).
 			Handler(func(args []string) int {
@@ -142,4 +143,27 @@ func TestPositionalFlags(t *testing.T) {
 	assertString(t, "two", bar)
 	assertStringSlice(t, []string{"three", "four"}, baz)
 	assertStringSlice(t, []string{"five", "six"}, qux)
+}
+
+func TestFlagSet(t *testing.T) {
+	var foo, bar string
+	var baz, qux bool
+	flagSet := flag.NewFlagSet("native", flag.ContinueOnError)
+	flagSet.StringVar(&foo, "foo", "", "")
+	flagSet.BoolVar(&baz, "baz", false, "")
+	c := Command("test").
+		Flags(
+			StringVar(&bar, "bar", "", "").MustBuild(),
+			BoolVar(&qux, "qux", false, "").MustBuild(),
+		).
+		FlagSet(flagSet).
+		MustBuild()
+	_, err := c.Parse([]string{"--foo", "foo", "--bar", "bar", "--baz", "--qux"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "foo", foo)
+	assertString(t, "bar", bar)
+	assertBool(t, true, baz)
+	assertBool(t, true, qux)
 }

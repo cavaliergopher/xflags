@@ -9,6 +9,7 @@ import (
 
 type argParser struct {
 	args              []string
+	discard           []string
 	cmd               *CommandInfo
 	flagsByName       map[string]*FlagInfo
 	subcommandsByName map[string]*CommandInfo
@@ -19,6 +20,7 @@ type argParser struct {
 func newArgParser(cmd *CommandInfo, args []string) *argParser {
 	c := &argParser{
 		args:              normalize(args),
+		discard:           make([]string, 0),
 		flagsByName:       make(map[string]*FlagInfo),
 		flagsSeen:         make(map[string]int),
 		subcommandsByName: make(map[string]*CommandInfo),
@@ -27,6 +29,7 @@ func newArgParser(cmd *CommandInfo, args []string) *argParser {
 	return c
 }
 
+// setCommand descends the state machine into a new subcommand.
 func (c *argParser) setCommand(cmd *CommandInfo) {
 	// accumulate flags
 	c.cmd = cmd
@@ -57,6 +60,9 @@ func (c *argParser) Parse() (*CommandInfo, error) {
 		if err := c.dispatch(arg); err != nil {
 			return nil, err
 		}
+	}
+	if err := c.handleDiscard(); err != nil {
+		return nil, err
 	}
 	if err := c.parseEnvVars(); err != nil {
 		return nil, err
@@ -127,6 +133,17 @@ func (c *argParser) observe(flagInfo *FlagInfo) int {
 	return c.flagsSeen[flagInfo.Name]
 }
 
+func (c *argParser) handleDiscard() error {
+	for _, arg := range c.discard {
+		if isPositional(arg) {
+			return newArgError(1, "unexpected positional argument: %s", arg)
+		} else {
+			return newArgError(1, "unrecognized argument: %s", arg)
+		}
+	}
+	return nil
+}
+
 func (c *argParser) dispatch(arg string) error {
 	if isPositional(arg) {
 		// handle positional flag
@@ -142,7 +159,8 @@ func (c *argParser) dispatch(arg string) error {
 
 		// handle subcommand
 		if len(c.cmd.Subcommands) == 0 {
-			return newArgError(1, "unexpected positional argument: %s", arg)
+			c.discard = append(c.discard, arg)
+			return nil
 		}
 		cmd, ok := c.subcommandsByName[arg]
 		if !ok {
@@ -155,12 +173,13 @@ func (c *argParser) dispatch(arg string) error {
 	// regular flag
 	flagInfo, ok := c.flagsByName[flagName(arg)]
 	if !ok {
-		return newArgError(1, "unrecognized argument: %s", arg)
+		c.discard = append(c.discard, arg)
+		return nil
 	}
 	c.observe(flagInfo)
 
 	// special case for booleans can be specified with a value or none at all
-	if flagInfo.Boolean {
+	if isBoolValue(flagInfo.Value) {
 		value, ok := c.peek()
 		if !ok {
 			// no next arg

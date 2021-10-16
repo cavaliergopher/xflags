@@ -32,7 +32,6 @@ type FlagInfo struct {
 	ShortName  string
 	Usage      string
 	Positional bool
-	Boolean    bool
 	MinCount   int
 	MaxCount   int
 	Hidden     bool
@@ -94,13 +93,6 @@ func (c *FlagBuilder) Required() *FlagBuilder {
 	return c.NArgs(1, 1)
 }
 
-// Boolean indicates that the flag is either set or not set; it does not accept
-// any argument value from the command line.
-func (c *FlagBuilder) Boolean() *FlagBuilder {
-	c.info.Boolean = true
-	return c
-}
-
 // Hidden hides the command line flag from all help messages but still allows
 // the flag to be specified on the command line.
 func (c *FlagBuilder) Hidden() *FlagBuilder {
@@ -157,8 +149,12 @@ func Var(value Value, name, usage string) *FlagBuilder {
 //
 // A bit field flag does not require a value to be specified on the command line
 // and instead stores "true" if the flag appears in the command line arguments.
-func BitFieldVar(p *uint64, n int, name string, value uint64, usage string) *FlagBuilder {
-	return Var(newBitFieldValue(value, p, n), name, usage).Boolean()
+func BitFieldVar(p *uint64, n int, name string, value bool, usage string) *FlagBuilder {
+	fb := Var(newBitFieldValue(value, p, n), name, usage)
+	if n > 64 {
+		fb.setErr(newArgError(1, "bit field index must be 64 or less, got: %v", n))
+	}
+	return fb
 }
 
 // BoolVar returns a FlagBuilder which can be used to define a command line
@@ -167,7 +163,7 @@ func BitFieldVar(p *uint64, n int, name string, value uint64, usage string) *Fla
 // A bool flag does not require a value to be specified on the command line and
 // instead stores "true" if the flag appears in the command line arguments.
 func BoolVar(p *bool, name string, value bool, usage string) *FlagBuilder {
-	return Var(newBoolValue(value, p), name, usage).Boolean()
+	return Var(newBoolValue(value, p), name, usage)
 }
 
 // Duration returns a FlagBuilder which can be used to define a command line
