@@ -13,8 +13,8 @@ func TestSubcommands(t *testing.T) {
 	var setFlags uint64
 
 	// newCommand is a function to recursively create subcommands
-	var newCommand func(n, of int) *CommandInfo
-	newCommand = func(n, of int) *CommandInfo {
+	var newCommand func(n, of uint64) *CommandInfo
+	newCommand = func(n, of uint64) *CommandInfo {
 		c := Command(fmt.Sprintf("command%02d", n)).
 			Flags(
 				BitFieldVar(
@@ -36,15 +36,15 @@ func TestSubcommands(t *testing.T) {
 	}
 
 	// call each subcommand
-	cmdDepth := 64
+	cmdDepth := uint64(64)
 	cmd := Command("test").
 		Subcommands(newCommand(1, cmdDepth)).
 		Must()
-	for i := 0; i < cmdDepth; i++ {
+	for i := uint64(0); i < cmdDepth; i++ {
 		// build args to call subcommand i
 		ranCommands = 0
 		args := make([]string, 0)
-		for j := 0; j < i+1; j++ {
+		for j := uint64(0); j < i+1; j++ {
 			args = append(
 				args,
 				fmt.Sprintf("command%02d", j+1), fmt.Sprintf("--x%02d", j+1),
@@ -62,7 +62,7 @@ func TestSubcommands(t *testing.T) {
 		// check which commands run and flags were set
 		assertUint64(t, 1<<i, ranCommands)
 		expectFlags := uint64(0)
-		for j := 0; j < i+1; j++ {
+		for j := uint64(0); j < i+1; j++ {
 			expectFlags |= 1 << j
 		}
 		assertUint64(t, expectFlags, setFlags)
