@@ -37,6 +37,14 @@ func assertInt64(t *testing.T, expect, actual int64) bool {
 	return false
 }
 
+func assertUint64(t *testing.T, expect, actual uint64) bool {
+	if expect == actual {
+		return true
+	}
+	t.Errorf("expected uint64: 0x%0X, got: 0x%0X", expect, actual)
+	return false
+}
+
 func assertString(t *testing.T, expect, actual string) bool {
 	if expect == actual {
 		return true

@@ -145,16 +145,13 @@ func Var(value Value, name, usage string) *FlagBuilder {
 }
 
 // BitFieldVar returns a FlagBuilder which can be used to define a command line
-// flag that sets a bit in a uint64 value.
+// flag that toggles bits in a uint64 value.
 //
 // A bit field flag does not allow a value to be specified on the command line
-// but instead stores "true" if the flag appears in the command line arguments.
-func BitFieldVar(p *uint64, n int, name string, value bool, usage string) *FlagBuilder {
-	fb := Var(newBitFieldValue(value, p, n), name, usage)
-	if n > 64 {
-		fb.setErr(newArgError(1, "bit field index must be 64 or less, got: %v", n))
-	}
-	return fb
+// but instead toggles all bits in the given mask if the flag appears in the
+// command line arguments.
+func BitFieldVar(p *uint64, mask uint64, name string, value bool, usage string) *FlagBuilder {
+	return Var(newBitFieldValue(value, p, mask), name, usage)
 }
 
 // BoolVar returns a FlagBuilder which can be used to define a command line

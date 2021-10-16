@@ -30,12 +30,12 @@ func isBoolValue(v Value) bool {
 }
 
 type bitFieldValue struct {
-	p *uint64
-	n int
+	p    *uint64
+	mask uint64
 }
 
-func newBitFieldValue(val bool, p *uint64, n int) *bitFieldValue {
-	v := &bitFieldValue{p: p, n: n}
+func newBitFieldValue(val bool, p *uint64, mask uint64) *bitFieldValue {
+	v := &bitFieldValue{p: p, mask: mask}
 	v.set(val)
 	return v
 }
@@ -57,9 +57,9 @@ func (p *bitFieldValue) Set(s string) error {
 
 func (p *bitFieldValue) set(v bool) {
 	if v {
-		*p.p |= (1 << p.n)
+		*p.p |= p.mask
 	} else {
-		*p.p &= ^(1 << p.n)
+		*p.p &= ^p.mask
 	}
 }
 

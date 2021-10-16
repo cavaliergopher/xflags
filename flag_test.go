@@ -16,9 +16,9 @@ func TestBitField(t *testing.T) {
 	var v uint64
 	_, err := Command("test").
 		Flags(
-			BitFieldVar(&v, 0, "foo", false, "").Must(),
-			BitFieldVar(&v, 1, "bar", false, "").Must(),
-			BitFieldVar(&v, 2, "baz", true, "").Must(),
+			BitFieldVar(&v, 0x01, "foo", false, "").Must(),
+			BitFieldVar(&v, 0x02, "bar", false, "").Must(),
+			BitFieldVar(&v, 0x04, "baz", true, "").Must(),
 		).
 		Must().
 		Parse([]string{"--foo"})

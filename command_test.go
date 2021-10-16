@@ -17,8 +17,13 @@ func TestSubcommands(t *testing.T) {
 	newCommand = func(n, of int) *CommandInfo {
 		c := Command(fmt.Sprintf("command%02d", n)).
 			Flags(
-				BitFieldVar(&setFlags, n, fmt.Sprintf("x%02d", n), false, "").
-					Must(),
+				BitFieldVar(
+					&setFlags,
+					uint64(1)<<(n-1),
+					fmt.Sprintf("x%02d", n),
+					false,
+					"",
+				).Must(),
 			).
 			Handler(func(args []string) int {
 				ranCommands |= 1 << (n - 1)
@@ -54,13 +59,13 @@ func TestSubcommands(t *testing.T) {
 		}
 		subcommand.Handler(nil)
 
-		// make sure it was the right one
-		// TODO: test correct flags were set
-		var expect uint64 = 1 << i
-		if ranCommands != expect {
-			t.Fail()
+		// check which commands run and flags were set
+		assertUint64(t, 1<<i, ranCommands)
+		expectFlags := uint64(0)
+		for j := 0; j < i+1; j++ {
+			expectFlags |= 1 << j
 		}
-
+		assertUint64(t, expectFlags, setFlags)
 	}
 }
 
