@@ -10,7 +10,7 @@ import (
 
 var (
 	flagSpecies    string
-	flagGopherType string = "pocket"
+	flagGopherType string
 	flagInterval   interval
 )
 
@@ -19,11 +19,11 @@ var App = Command("example").
 	Flags(
 		// Example 1: A single string flag called "species" with default value
 		// "gopher".
-		StringVar(&flagSpecies, "species", "gopher", "the species we are studying").
+		StringVar(&flagSpecies, "species", "Gopher", "the species we are studying").
 			Must(),
 
 		// Example 2: An alternative short name, so we can have a shorthand.
-		StringVar(&flagGopherType, "gopher_type", "pocket", "the variety of gopher").
+		StringVar(&flagGopherType, "gopher_type", "Pocket", "the variety of gopher").
 			ShortName("g").
 			Must(),
 
@@ -32,6 +32,7 @@ var App = Command("example").
 		Var(&flagInterval, "deltaT", "comma-separated list of intervals to use between events").
 			Must(),
 	).
+	Handler(HandleExample).
 	Must()
 
 // interval is a custom flag type that implements the xflags.Value interface.
@@ -68,11 +69,21 @@ func (i *interval) String() string {
 	return fmt.Sprint(*i)
 }
 
+// HandleExample is the CommandFunc for the main App command.
+func HandleExample(args []string) int {
+	fmt.Printf("%s is a variety of species %s\n", flagGopherType, flagSpecies)
+	return 0
+}
+
 func Example() {
-	// All the interesting pieces are with the variables declared above, but
-	// to enable the xflags package to see the cli defined there, one must
-	// execute, typically at the start of main (not init!):
-	//	xflags.Run(App)
-	// We don't run it here because this is not a main function and
-	// the testing suite has already parsed the flags.
+	// Most programs will call the following from main:
+	//
+	//     func main() {
+	//         os.Exit(xflags.Run(App))
+	//     }
+	//
+	args := []string{"--gopher_type", "Goldman's pocket gopher"}
+	App.Run(args)
+
+	// output: Goldman's pocket gopher is a variety of species Gopher
 }

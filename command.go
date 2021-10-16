@@ -238,8 +238,8 @@ func (c *CommandBuilder) Build() (*CommandInfo, error) {
 	return c.info, nil
 }
 
-// Must calls Build and panics if any error is encountered. This should only be
-// used in a global variables or init function.
+// Must is a helper that calls Build and panics if the error is non-nil. It is
+// intended only for use in variable initializations.
 func (c *CommandBuilder) Must() *CommandInfo {
 	info, err := c.Build()
 	if err != nil {
