@@ -119,7 +119,7 @@ func formatPositionalFlags(w io.Writer, flags []*FlagInfo) error {
 		if flagInfo.Usage != "" {
 			fmt.Fprintf(tw, "\t%s", flagInfo.Usage)
 			if flagInfo.ShowDefault {
-				fmt.Fprintf(w, " (default: %s)", flagInfo.Value)
+				fmt.Fprintf(tw, " (default: %s)", flagInfo.Value)
 			}
 		}
 		fmt.Fprintf(tw, "\n")

@@ -29,6 +29,9 @@ func isBoolValue(v Value) bool {
 	return false
 }
 
+// ValidateFunc is a function that validates an argument before it is parsed.
+type ValidateFunc = func(arg string) error
+
 type bitFieldValue struct {
 	p    *uint64
 	mask uint64

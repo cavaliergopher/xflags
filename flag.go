@@ -37,6 +37,7 @@ type FlagInfo struct {
 	MaxCount    int
 	Hidden      bool
 	EnvVar      string
+	Validate    ValidateFunc
 	Value       Value
 }
 
@@ -133,6 +134,14 @@ func (c *FlagBuilder) Env(name string) *FlagBuilder {
 		return c.errorf("environment variable name cannot be empty")
 	}
 	c.info.EnvVar = name
+	return c
+}
+
+// Validate specifies a function to validate an argument for this flag before
+// it is parsed. If the function returns an error, parsing will fail with the
+// same error.
+func (c *FlagBuilder) Validate(f ValidateFunc) *FlagBuilder {
+	c.info.Validate = f
 	return c
 }
 
