@@ -14,8 +14,7 @@ var (
 	flagInterval   interval
 )
 
-var App = Command("example").
-	Usage("An example CLI program").
+var App = Command("example", "An example CLI program").
 	Flags(
 		// Example 1: A single string flag called "species" with default value
 		// "gopher".

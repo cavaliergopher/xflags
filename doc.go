@@ -20,7 +20,7 @@ Every xflags program must define a top-level command using xflags.Command:
 		"github.com/cavaliergopher/xflags"
 	)
 
-	var App = xflags.Command("my_app").Must()
+	var App = xflags.Command(os.Args[0], "My application").Must()
 
 	func main() {
 		os.Exit(xflags.Run(App))
@@ -28,13 +28,13 @@ Every xflags program must define a top-level command using xflags.Command:
 
 You can import all global flags defined using Go's flag library with
 
-	var App = xflags.Command("my_app").FlagSet(flag.CommandLine).Must()
+	var App = xflags.Command(os.Args[0], "").FlagSet(flag.CommandLine).Must()
 
 You can bind a flag to a variable using the Var functions.
 
 	var flagvar int
 
-	var App = xflags.Command("my_app").
+	var App = xflags.Command(os.Args[0], "").
 		Flags(
 			xflags.IntVar(&flagvar, "flagname", 1234, "help message for flagname").
 			Must(),
@@ -50,7 +50,7 @@ For such flags, the default value is just the initial value of the variable.
 
 A handler may be defined for your command by
 
-	var App = xflags.Command("my_app").Handler(MyAppHandler).Must()
+	var App = xflags.Command(os.Args[0], "").Handler(MyAppHandler).Must()
 
 	func MyAppHandler(args []string) int {
 		return 0
@@ -59,9 +59,11 @@ A handler may be defined for your command by
 You can define subcommands by
 
 	var (
-		FooCommand = xflags.Command("foo").Must()
-		BarCommand = xflags.Command("bar").Must()
-		App = xflags.Command("my_app").Subcommands(FooCommand, BarCommand).Must()
+		FooCommand = xflags.Command("foo", "Foo command").Must()
+		BarCommand = xflags.Command("bar", "Bar command").Must()
+		App = xflags.Command(os.Args[0], "Foo bar program").
+			Subcommands(FooCommand, BarCommand).
+			Must()
 	)
 
 After all flags are defined, call

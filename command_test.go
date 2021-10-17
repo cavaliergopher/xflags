@@ -15,7 +15,7 @@ func TestSubcommands(t *testing.T) {
 	// newCommand is a function to recursively create subcommands
 	var newCommand func(n, of uint64) *CommandInfo
 	newCommand = func(n, of uint64) *CommandInfo {
-		c := Command(fmt.Sprintf("command%02d", n)).
+		c := Command(fmt.Sprintf("command%02d", n), "").
 			Flags(
 				BitFieldVar(
 					&setFlags,
@@ -37,7 +37,7 @@ func TestSubcommands(t *testing.T) {
 
 	// call each subcommand
 	cmdDepth := uint64(64)
-	cmd := Command("test").
+	cmd := Command("test", "").
 		Subcommands(newCommand(1, cmdDepth)).
 		Must()
 	for i := uint64(0); i < cmdDepth; i++ {
@@ -76,7 +76,7 @@ func TestSubcommands(t *testing.T) {
 func TestPosFlagOrdering(t *testing.T) {
 	var sink string
 	getFixture := func(flags ...*FlagInfo) *CommandBuilder {
-		return Command("test").Flags(flags...)
+		return Command("test", "").Flags(flags...)
 	}
 	successCases := []*CommandBuilder{
 		getFixture(
@@ -130,7 +130,7 @@ func TestPosFlagOrdering(t *testing.T) {
 func TestPositionalFlags(t *testing.T) {
 	var foo, bar string
 	var baz, qux []string
-	cmd := Command("test").Flags(
+	cmd := Command("test", "").Flags(
 		StringVar(&foo, "foo", "", "").Positional().Required().Must(),
 		StringVar(&bar, "bar", "", "").Positional().Required().Must(),
 		StringSliceVar(&baz, "baz", nil, "").Positional().NArgs(2, 2).Must(),
@@ -153,7 +153,7 @@ func TestFlagSet(t *testing.T) {
 	flagSet := flag.NewFlagSet("native", flag.ContinueOnError)
 	flagSet.StringVar(&foo, "foo", "", "")
 	flagSet.BoolVar(&baz, "baz", false, "")
-	c := Command("test").
+	c := Command("test", "").
 		Flags(
 			StringVar(&bar, "bar", "", "").Must(),
 			BoolVar(&qux, "qux", false, "").Must(),

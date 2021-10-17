@@ -6,7 +6,7 @@ import (
 )
 
 func parseFlag(t *testing.T, flag *FlagInfo, args ...string) {
-	_, err := Command("test").Flags(flag).Must().Parse(args)
+	_, err := Command("test", "").Flags(flag).Must().Parse(args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -14,7 +14,7 @@ func parseFlag(t *testing.T, flag *FlagInfo, args ...string) {
 
 func TestBitField(t *testing.T) {
 	var v uint64
-	_, err := Command("test").
+	_, err := Command("test", "").
 		Flags(
 			BitFieldVar(&v, 0x01, "foo", false, "").Must(),
 			BitFieldVar(&v, 0x02, "bar", false, "").Must(),

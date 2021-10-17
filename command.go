@@ -115,10 +115,11 @@ type CommandBuilder struct {
 
 // Command returns a CommandBuilder which can be used to define a command and
 // all of its flags.
-func Command(name string) *CommandBuilder {
+func Command(name, usage string) *CommandBuilder {
 	c := &CommandBuilder{
 		info: &CommandInfo{
 			Name:        name,
+			Usage:       usage,
 			Flags:       make([]*FlagInfo, 0),
 			FlagGroups:  make([]*FlagGroupInfo, 1),
 			Subcommands: make([]*CommandInfo, 0),
@@ -142,12 +143,6 @@ func (c *CommandBuilder) errorf(format string, a ...interface{}) *CommandBuilder
 // the command line.
 func (c *CommandBuilder) Handler(handler CommandFunc) *CommandBuilder {
 	c.info.Handler = handler
-	return c
-}
-
-// Usage sets a short description of the command to show in help messages.
-func (c *CommandBuilder) Usage(usage string) *CommandBuilder {
-	c.info.Usage = usage
 	return c
 }
 
