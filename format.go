@@ -113,18 +113,18 @@ func formatPositionalFlags(w io.Writer, flags []*FlagInfo) error {
 		return nil
 	}
 	fmt.Fprintf(w, "\nPositional arguments:\n")
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	w = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, flagInfo := range flags {
-		fmt.Fprintf(tw, "  %s", strings.ToUpper(flagInfo.Name))
+		fmt.Fprintf(w, "  %s", strings.ToUpper(flagInfo.Name))
 		if flagInfo.Usage != "" {
-			fmt.Fprintf(tw, "\t%s", flagInfo.Usage)
+			fmt.Fprintf(w, "\t%s", flagInfo.Usage)
 			if flagInfo.ShowDefault {
-				fmt.Fprintf(tw, " (default: %s)", flagInfo.Value)
+				fmt.Fprintf(w, " (default: %s)", flagInfo.Value)
 			}
 		}
-		fmt.Fprintf(tw, "\n")
+		fmt.Fprintf(w, "\n")
 	}
-	return tw.Flush()
+	return w.(*tabwriter.Writer).Flush()
 }
 
 func formatFlagGroup(w io.Writer, group *FlagGroupInfo) error {
@@ -133,7 +133,7 @@ func formatFlagGroup(w io.Writer, group *FlagGroupInfo) error {
 		return nil
 	}
 	fmt.Fprintf(w, "\n%s:\n", group.Usage)
-	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
+	w = tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
 	for _, flagInfo := range flags {
 		var name, shortName string
 		if flagInfo.Name != "" {
@@ -146,13 +146,13 @@ func formatFlagGroup(w io.Writer, group *FlagGroupInfo) error {
 				shortName = fmt.Sprintf("-%s", flagInfo.ShortName)
 			}
 		}
-		fmt.Fprintf(tw, "  %s\t%s\t %s", shortName, name, flagInfo.Usage)
+		fmt.Fprintf(w, "  %s\t%s\t %s", shortName, name, flagInfo.Usage)
 		if flagInfo.ShowDefault {
 			fmt.Fprintf(w, " (default: %s)", flagInfo.Value)
 		}
-		fmt.Fprintf(tw, "\n")
+		fmt.Fprintf(w, "\n")
 	}
-	return tw.Flush()
+	return w.(*tabwriter.Writer).Flush()
 }
 
 func formatEnvVars(w io.Writer, flags []*FlagInfo) error {
@@ -161,16 +161,16 @@ func formatEnvVars(w io.Writer, flags []*FlagInfo) error {
 		return nil
 	}
 	fmt.Fprintf(w, "\nEnvironment variables:\n")
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	w = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, flagInfo := range flags {
 		fmt.Fprintf(
-			tw,
+			w,
 			"  %s\t%s\n",
 			strings.ToUpper(flagInfo.EnvVar),
 			flagInfo.Usage,
 		)
 	}
-	return tw.Flush()
+	return w.(*tabwriter.Writer).Flush()
 }
 
 func formatSubcommands(w io.Writer, subcommands []*CommandInfo) error {
@@ -179,12 +179,12 @@ func formatSubcommands(w io.Writer, subcommands []*CommandInfo) error {
 		return nil
 	}
 	fmt.Fprintf(w, "\nCommands:\n")
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	w = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, cmd := range subcommands {
 		if cmd.Hidden {
 			continue
 		}
-		fmt.Fprintf(tw, "  %s\t%s\n", cmd.Name, cmd.Usage)
+		fmt.Fprintf(w, "  %s\t%s\n", cmd.Name, cmd.Usage)
 	}
-	return tw.Flush()
+	return w.(*tabwriter.Writer).Flush()
 }
