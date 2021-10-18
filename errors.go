@@ -2,29 +2,48 @@ package xflags
 
 import (
 	"fmt"
-	"os"
 )
-
-func handleErr(err error) int {
-	if err == nil {
-		return 0
-	}
-	var msg string
-	if xErr, ok := err.(xflagsErr); ok {
-		msg = xErr.String()
-	} else {
-		msg = err.Error()
-	}
-	fmt.Fprintf(os.Stderr, "Error: %v\n", msg)
-	return 1
-}
 
 type xflagsErr string
 
-func (err xflagsErr) Error() string { return "xflags: " + err.String() }
-
-func (err xflagsErr) String() string { return string(err) }
+func (err xflagsErr) Error() string { return "xflags: " + string(err) }
 
 func errorf(format string, a ...interface{}) xflagsErr {
 	return xflagsErr(fmt.Sprintf(format, a...))
+}
+
+// HelpError is the error returned if the -h  or --help argument is specified
+// but no such flag is defined.
+type HelpError struct {
+	Cmd *CommandInfo
+}
+
+func (err *HelpError) Error() string {
+	return fmt.Sprintf("xflags: help requested: %s", err.Cmd)
+}
+
+// ArgumentError indicates that an argument specified on the command line was
+// incorrect.
+type ArgumentError struct {
+	Msg  string
+	Cmd  *CommandInfo
+	Flag *FlagInfo
+	Arg  string
+}
+
+func (err *ArgumentError) Error() string { return "xflags: " + err.Msg }
+
+func newArgErr(
+	cmd *CommandInfo,
+	flagInfo *FlagInfo,
+	arg string,
+	format string,
+	a ...interface{},
+) *ArgumentError {
+	return &ArgumentError{
+		Msg:  fmt.Sprintf(format, a...),
+		Cmd:  cmd,
+		Flag: flagInfo,
+		Arg:  arg,
+	}
 }

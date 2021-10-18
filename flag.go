@@ -11,13 +11,6 @@ const (
 	defaultMaxNArgs = 1
 )
 
-var flagHelp bool
-
-var helpFlag = BoolVar(&flagHelp, "help", false, "Show help info").
-	ShortName("h").
-	Hidden().
-	Must()
-
 // TODO: mutually exclusive flags?
 // TODO: custom validation errors?
 // TODO: error handling modes

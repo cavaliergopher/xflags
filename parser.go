@@ -97,17 +97,13 @@ func (c *argParser) parseEnvVars() error {
 }
 
 func (c *argParser) checkNArgs() error {
-	if flagHelp {
-		// don't check required flags if -h is specified
-		return nil
-	}
 	for _, flag := range c.cmd.Flags {
 		n := c.flagsSeen[flag.name()]
 		if flag.MinCount > 0 && n < flag.MinCount {
-			return errorf("missing argument: %s", flag)
+			return newArgErr(c.cmd, flag, "", "missing argument: %s", flag)
 		}
 		if flag.MaxCount > 0 && n > flag.MaxCount {
-			return errorf("argument declared too many times: %s", flag)
+			return newArgErr(c.cmd, flag, "", "argument declared too many times: %s", flag)
 		}
 	}
 	return nil
@@ -147,6 +143,9 @@ func (c *argParser) dispatch(token string) error {
 		c.isTerminated = true
 		return nil
 	}
+	if token == "-h" || token == "--help" {
+		return &HelpError{Cmd: c.cmd}
+	}
 	if isPositional(token) {
 		return c.dispatchPositional(token)
 	}
@@ -167,11 +166,11 @@ func (c *argParser) dispatchPositional(token string) error {
 
 	// handle subcommand
 	if len(c.cmd.Subcommands) == 0 {
-		return errorf("unexpected positional argument: %s", token)
+		return newArgErr(c.cmd, nil, token, "unexpected positional argument: %s", token)
 	}
 	cmd, ok := c.subcommandsByName[token]
 	if !ok {
-		return errorf("unrecognized command: %s", token)
+		return newArgErr(c.cmd, nil, token, "unrecognized command: %s", token)
 	}
 	c.setCommand(cmd)
 	return nil
@@ -181,7 +180,7 @@ func (c *argParser) dispatchRegular(token string) error {
 	// regular flag
 	flagInfo := c.flagsByName[token]
 	if flagInfo == nil {
-		return errorf("unrecognized argument: %s", token)
+		return newArgErr(c.cmd, nil, token, "unrecognized argument: %s", token)
 	}
 	c.observe(flagInfo)
 	if isBoolValue(flagInfo.Value) {
@@ -191,7 +190,7 @@ func (c *argParser) dispatchRegular(token string) error {
 	// read the next arg as a value
 	value, ok := c.peek()
 	if !ok || !isPositional(value) {
-		return errorf("no value specified for flag: %s", token)
+		return newArgErr(c.cmd, flagInfo, token, "no value specified for flag: %s", token)
 	}
 	c.next() // consume the value
 	return c.setValue(flagInfo, value)

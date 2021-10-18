@@ -45,8 +45,11 @@ func (c *CommandInfo) Args() []string { return c.args }
 // each argument in each command flag's target. The rules for each flag are
 // checked and any errors are returned.
 //
-// The returned *CommandInfo is the one for the same command or subcommand
-// specified by the arguments.
+// If -h or --help are specified, a HelpError will be returned containing the
+// subcommand that was specified.
+//
+// The returned *CommandInfo will be this command or one of its subcommands if
+// specified by the command line arguments.
 func (c *CommandInfo) Parse(args []string) (*CommandInfo, error) {
 	cmd, args, err := newArgParser(c, args).Parse()
 	if err != nil {
@@ -58,19 +61,43 @@ func (c *CommandInfo) Parse(args []string) (*CommandInfo, error) {
 
 // Run parses the given set of command line arguments and calls the handler for
 // the command or subcommand specified by the arguments.
+//
+// If -h or --help are specified, usage information will be printed to os.Stdout
+// and the return code will be 0.
+//
+// If a command is invoked that has no handler, usage information will be
+// printed to os.Stderr and the return code will be non-zero.
 func (c *CommandInfo) Run(args []string) int {
 	var err error
 	c, err = c.Parse(args)
 	if err != nil {
-		return handleErr(err)
-	}
-	if flagHelp {
-		return c.usage(0)
+		return c.handleErr(err)
 	}
 	if c.Handler == nil {
-		return c.usage(1)
+		if err := c.WriteUsage(os.Stderr); err != nil {
+			return c.handleErr(err)
+		}
+		return 1
 	}
 	return c.Handler(c.args)
+}
+
+func (c *CommandInfo) handleErr(err error) int {
+	if err == nil {
+		return 0
+	}
+	if err, ok := err.(*HelpError); ok {
+		if err := err.Cmd.WriteUsage(os.Stdout); err != nil {
+			return c.handleErr(err)
+		}
+		return 0
+	}
+	if err, ok := err.(*ArgumentError); ok {
+		fmt.Fprintf(os.Stderr, "Argument error: %s\n", err.Msg)
+		return 1
+	}
+	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	return 1
 }
 
 // WriteUsage prints a help message to the given Writer using the configured
@@ -84,17 +111,6 @@ func (c *CommandInfo) WriteUsage(w io.Writer) error {
 		f = DefaultFormatter
 	}
 	return f(w, c)
-}
-
-func (c *CommandInfo) usage(exitCode int) int {
-	w := os.Stdout
-	if exitCode != 0 {
-		w = os.Stderr
-	}
-	if err := c.WriteUsage(w); err != nil {
-		return handleErr(err)
-	}
-	return exitCode
 }
 
 // FlagGroupInfo is a nominal grouping of flags wich affects how the flags are
@@ -125,9 +141,9 @@ func Command(name, usage string) *CommandBuilder {
 			Subcommands: make([]*CommandInfo, 0),
 		},
 	}
-	c.info.FlagGroups[0] = &FlagGroupInfo{Name: "options", Usage: "Options"}
-	c.info.defaultFlagGroup = c.info.FlagGroups[0]
-	return c.Flags(helpFlag)
+	c.info.defaultFlagGroup = &FlagGroupInfo{Name: "options", Usage: "Options"}
+	c.info.FlagGroups[0] = c.info.defaultFlagGroup
+	return c
 }
 
 func (c *CommandBuilder) errorf(format string, a ...interface{}) *CommandBuilder {
@@ -297,6 +313,11 @@ func (c *CommandBuilder) Must() *CommandInfo {
 //         os.Exit(xflags.Run(cmd))
 //     }
 //
+// If -h or --help are specified, usage information will be printed to os.Stdout
+// and the exit code will be 0.
+//
+// If a command is invoked that has no handler, usage information will be
+// printed to os.Stderr and the exit code will be non-zero.
 func Run(cmd *CommandInfo) int {
 	return cmd.Run(os.Args[1:])
 }
