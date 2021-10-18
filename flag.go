@@ -47,11 +47,22 @@ func (c *FlagInfo) String() string {
 	return "unknown"
 }
 
+// name returns the name or shortname of the flag in that order of precedence.
 func (c *FlagInfo) name() string {
 	if c.Name != "" {
 		return c.Name
 	}
 	return c.ShortName
+}
+
+// Set sets the value of the command-line flag.
+func (c *FlagInfo) Set(s string) error {
+	if c.Validate != nil {
+		if err := c.Validate(s); err != nil {
+			return err
+		}
+	}
+	return c.Value.Set(s)
 }
 
 // FlagBuilder builds a FlagInfo which defines a command line flag for a CLI
