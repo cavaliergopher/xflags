@@ -155,6 +155,12 @@ func (c *CommandBuilder) errorf(format string, a ...interface{}) *CommandBuilder
 	return c
 }
 
+// Synopsis specifies the detailed help message for this command.
+func (c *CommandBuilder) Synopsis(s string) *CommandBuilder {
+	c.info.Synopsis = s
+	return c
+}
+
 // Handler specifies the function to call when this command is specified on the
 // the command line.
 func (c *CommandBuilder) Handler(handler CommandFunc) *CommandBuilder {
