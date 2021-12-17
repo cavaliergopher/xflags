@@ -94,6 +94,10 @@ var App = xflags.Command("helloworld", "Print \"Hello, World!\"").
 	Must()
 
 // HelloWorld is a CommandFunc that handles the App command.
+//
+// If WithTerminator is specified for the App command, any arguments given after
+// the "--" terminator will be passed in as the args parameter without any
+// further parsing.
 func HelloWorld(args []string) (exitCode int) {
 	s, ok := translations[flagLanguage]
 	if !ok {
