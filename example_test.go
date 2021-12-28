@@ -88,7 +88,6 @@ func Example() {
 	fmt.Println()
 	fmt.Println("+ helloworld --language=es")
 	RunWithArgs(App, "--language=es")
-
 	// Output:
 	// +helloworld --help
 	// Usage: helloworld [OPTIONS] [MESSAGE...]

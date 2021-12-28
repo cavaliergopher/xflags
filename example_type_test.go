@@ -52,7 +52,6 @@ func Example_customType() {
 	fmt.Println()
 	fmt.Println("+ example --gopher_type 'Goldman's pocket gopher'")
 	RunWithArgs(ExampleCommand, "--gopher_type", "Goldman's pocket gopher")
-
 	// Output:
 	// + example --help
 	// Usage: example [OPTIONS]

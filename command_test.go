@@ -191,7 +191,6 @@ func ExampleCommandBuilder_FlagGroup() {
 
 	// Print the help page
 	RunWithArgs(cmd, "--help")
-
 	// Output:
 	// Usage: helloworld [OPTIONS]
 	//
@@ -224,7 +223,6 @@ func ExampleCommandBuilder_FlagSet() {
 	fmt.Println()
 	fmt.Println("+ helloworld")
 	RunWithArgs(cmd)
-
 	// Output:
 	// + helloworld --help
 	// Usage: helloworld [OPTIONS]
@@ -266,7 +264,6 @@ func ExampleCommandBuilder_Subcommands() {
 	fmt.Println()
 	fmt.Println("+ widgets create -n=3")
 	RunWithArgs(cmd, "create", "-n=3")
-
 	// Output:
 	// + widgets --help
 	// Usage: widgets [OPTIONS] COMMAND
@@ -295,7 +292,6 @@ func ExampleCommandBuilder_Synopsis() {
 
 	// Print the help page
 	RunWithArgs(cmd, "--help")
-
 	// Output:
 	// Usage: helloworld [OPTIONS]
 	//
@@ -335,7 +331,6 @@ func ExampleCommandBuilder_WithTerminator() {
 
 	// run in verbose mode and pass ["Hello", "World!"] to /bin/echo.
 	RunWithArgs(cmd, "-v", "--", "Hello,", "World!")
-
 	// Output:
 	// + /bin/echo Hello, World!
 	// Hello, World!

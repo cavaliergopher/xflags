@@ -39,6 +39,5 @@ func ExampleValue() {
 		})
 
 	RunWithArgs(cmd, "--ip=ff02:0000:0000:0000:0000:0000:0000:0001")
-
 	// Output: ping: ff02::1
 }
