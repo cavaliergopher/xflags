@@ -128,6 +128,10 @@ func (p *float64Value) Set(s string) error {
 	return nil
 }
 
+type funcValue func(string) error
+
+func (f funcValue) Set(s string) error { return f(s) }
+
 type intValue int
 
 func newIntValue(val int, p *int) *intValue {

@@ -31,7 +31,7 @@ func ExampleValue() {
 	cmd := NewCommand("ping", "").
 		Flags(
 			// configure a net.IP flag with our custom Value type
-			IPVar(&ip, "ip", net.IPv6loopback, "IP address to ping"),
+			IPVar(&ip, "ip", net.IPv6zero, "IP address to ping"),
 		).
 		HandleFunc(func(args []string) (exitCode int) {
 			fmt.Printf("ping: %s\n", ip)

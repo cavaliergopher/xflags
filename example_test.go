@@ -76,7 +76,7 @@ func helloWorld(args []string) (exitCode int) {
 }
 
 func Example() {
-	fmt.Println("+helloworld --help")
+	fmt.Println("+ helloworld --help")
 	RunWithArgs(App, "--help")
 
 	// Most programs will call the following from main:
@@ -89,7 +89,7 @@ func Example() {
 	fmt.Println("+ helloworld --language=es")
 	RunWithArgs(App, "--language=es")
 	// Output:
-	// +helloworld --help
+	// + helloworld --help
 	// Usage: helloworld [OPTIONS] [MESSAGE...]
 	//
 	// Print "Hello, World!"

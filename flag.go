@@ -19,7 +19,6 @@ type Flagger interface {
 }
 
 // TODO: mutually exclusive flags?
-// TODO: custom validation errors?
 // TODO: error handling modes
 // TODO: support aliases
 // TODO: support negated bools
@@ -253,6 +252,14 @@ func DurationVar(p *time.Duration, name string, value time.Duration, usage strin
 // to a float64 variable in which to store the value of the flag.
 func Float64Var(p *float64, name string, value float64, usage string) *FlagBuilder {
 	return Var(newFloat64Value(value, p), name, usage)
+}
+
+// FuncVar returns a FlagBuilder that can used to define a flag with the specified name and usage
+// string.
+// Each time the flag is seen, fn is called with the value of the flag.
+// If fn returns a non-nil error, it will be treated as a flag value parsing error.
+func FuncVar(name, usage string, fn func(s string) error) *FlagBuilder {
+	return Var(funcValue(fn), name, usage)
 }
 
 // IntVar returns a FlagBuilder that can be used to define an int flag with

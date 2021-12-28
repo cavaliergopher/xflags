@@ -75,13 +75,29 @@ func TestStringSlice(t *testing.T) {
 func ExampleFlagBuilder_Validate() {
 	var ip string
 
-	StringVar(&ip, "ip", "127.0.0.1", "IP Address to ping").
-		Validate(func(arg string) error {
-			if net.ParseIP(arg) == nil {
-				return fmt.Errorf("invalid IP: %s", arg)
-			}
-			return nil
+	cmd := NewCommand("ping", "").
+		Output(os.Stdout).
+		Flags(
+			StringVar(&ip, "ip", "127.0.0.1", "IP Address to ping").
+				Validate(func(arg string) error {
+					if net.ParseIP(arg) == nil {
+						return fmt.Errorf("invalid IP: %s", arg)
+					}
+					return nil
+				}),
+		).
+		HandleFunc(func(args []string) (exitCode int) {
+			fmt.Printf("ping: %s\n", ip)
+			return
 		})
+
+	RunWithArgs(cmd, "--ip=127.0.0.1")
+
+	// 256 is not a valid IPv4 component
+	RunWithArgs(cmd, "--ip=256.0.0.1")
+	// Output:
+	// ping: 127.0.0.1
+	// Error: invalid IP: 256.0.0.1
 }
 
 func ExampleBitFieldVar() {
@@ -106,8 +122,35 @@ func ExampleBitFieldVar() {
 
 	// Enable user read and write
 	RunWithArgs(cmd, "-r", "-w")
-
 	// Output: File mode: -rw-r--r--
+}
+
+func ExampleFuncVar() {
+	var ip net.IP
+
+	cmd := NewCommand("ping", "").
+		Output(os.Stdout).
+		Flags(
+			FuncVar("ip", "IP address to ping", func(s string) error {
+				ip = net.ParseIP(s)
+				if ip == nil {
+					return fmt.Errorf("invalid IP: %s", s)
+				}
+				return nil
+			}),
+		).
+		HandleFunc(func(args []string) (exitCode int) {
+			fmt.Printf("ping: %s\n", ip)
+			return
+		})
+
+	RunWithArgs(cmd, "--ip", "127.0.0.1")
+
+	// 256 is not a valid IPv4 component
+	RunWithArgs(cmd, "--ip", "256.0.0.1")
+	// Output:
+	// ping: 127.0.0.1
+	// Error: invalid IP: 256.0.0.1
 }
 
 func ExampleStringSliceVar() {
@@ -125,6 +168,5 @@ func ExampleStringSliceVar() {
 		})
 
 	RunWithArgs(cmd, "--name=foo", "--name=bar")
-
 	// Output: Created new widgets: foo, bar
 }

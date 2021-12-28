@@ -7,8 +7,6 @@ import (
 	"os"
 )
 
-// TODO: move error checking into Command/Flag.
-
 // Commander is an interface that describes any type that produces a Command.
 //
 // The interface is implemented by both CommandBuilder and Command so they can
@@ -39,6 +37,7 @@ type Command struct {
 	Subcommands    []*Command
 	Formatter      Formatter
 	HandlerFunc    HandlerFunc
+	Output         io.Writer
 
 	args []string
 }
@@ -76,6 +75,13 @@ func (c *Command) Parse(args []string) (*Command, error) {
 	return cmd, nil
 }
 
+func (c *Command) output() io.Writer {
+	if c.Output != nil {
+		return c.Output
+	}
+	return os.Stdout
+}
+
 // Run parses the given set of command line arguments and calls the handler
 // for the command or subcommand specified by the arguments.
 //
@@ -85,35 +91,35 @@ func (c *Command) Parse(args []string) (*Command, error) {
 // If a command is invoked that has no handler, usage information will be
 // printed to os.Stderr and the return code will be non-zero.
 func (c *Command) Run(args []string) int {
-	var err error
-	c, err = c.Parse(args)
+	target, err := c.Parse(args)
 	if err != nil {
 		return c.handleErr(err)
 	}
-	if c.HandlerFunc == nil {
-		if err := c.WriteUsage(os.Stderr); err != nil {
-			return c.handleErr(err)
+	if target.HandlerFunc == nil {
+		if err := target.WriteUsage(target.output()); err != nil {
+			return target.handleErr(err)
 		}
 		return 1
 	}
-	return c.HandlerFunc(c.args)
+	return target.HandlerFunc(target.args)
 }
 
 func (c *Command) handleErr(err error) int {
 	if err == nil {
 		return 0
 	}
+	w := c.output()
 	if err, ok := err.(*HelpError); ok {
-		if err := err.Cmd.WriteUsage(os.Stdout); err != nil {
+		if err := err.Cmd.WriteUsage(w); err != nil {
 			return c.handleErr(err)
 		}
 		return 0
 	}
 	if err, ok := err.(*ArgumentError); ok {
-		fmt.Fprintf(os.Stderr, "Argument error: %s\n", err.Msg)
+		fmt.Fprintf(w, "Argument error: %s\n", err.Msg)
 		return 1
 	}
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	fmt.Fprintf(w, "Error: %v\n", err)
 	return 1
 }
 
@@ -230,16 +236,20 @@ func (c *CommandBuilder) Hidden() *CommandBuilder {
 	return c
 }
 
-// Flag adds command line flags to the default FlagGroup for this command.
-func (c *CommandBuilder) Flags(flags ...Flagger) *CommandBuilder {
+func (c *CommandBuilder) addFlags(group *FlagGroup, flags ...Flagger) *CommandBuilder {
 	for _, flagger := range flags {
 		flag, err := flagger.Flag()
 		if err != nil {
 			return c.error(err)
 		}
-		c.cmd.FlagGroups[0].append(flag)
+		group.append(flag)
 	}
 	return c
+}
+
+// Flag adds command line flags to the default FlagGroup for this command.
+func (c *CommandBuilder) Flags(flags ...Flagger) *CommandBuilder {
+	return c.addFlags(c.cmd.FlagGroups[0], flags...)
 }
 
 // FlagGroup adds a group of command line flags to this command and shows them
@@ -252,15 +262,8 @@ func (c *CommandBuilder) FlagGroup(
 		Name:  name,
 		Usage: usage,
 	}
-	for _, flagger := range flags {
-		flag, err := flagger.Flag()
-		if err != nil {
-			return c.error(err)
-		}
-		group.append(flag)
-	}
 	c.cmd.FlagGroups = append(c.cmd.FlagGroups, group)
-	return c
+	return c.addFlags(group, flags...)
 }
 
 // FlagSet imports flags from a Flagset created using Go's flag package. All
@@ -307,6 +310,12 @@ func (c *CommandBuilder) Formatter(formatter Formatter) *CommandBuilder {
 // further processing.
 func (c *CommandBuilder) WithTerminator() *CommandBuilder {
 	c.cmd.WithTerminator = true
+	return c
+}
+
+// Output sets the destination for usage and error messages. If output is nil, os.Stderr is used.
+func (c *CommandBuilder) Output(w io.Writer) *CommandBuilder {
+	c.cmd.Output = w
 	return c
 }
 
