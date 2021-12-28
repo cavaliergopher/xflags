@@ -1,7 +1,6 @@
 package xflags
 
 import (
-	"fmt"
 	"strings"
 	"time"
 )
@@ -11,16 +10,26 @@ const (
 	defaultMaxNArgs = 1
 )
 
+// Flagger is an interface that describes any type that produces a Flag.
+//
+// The interface is implemented by both FlagBuilder and Flag so they can often
+// be used interchangeably.
+type Flagger interface {
+	Flag() (*Flag, error)
+}
+
 // TODO: mutually exclusive flags?
 // TODO: custom validation errors?
 // TODO: error handling modes
+// TODO: support aliases
+// TODO: support negated bools
 
-// FlagInfo describes a command line flag that may be specified on the command
+// Flag describes a command line flag that may be specified on the command
 // line.
 //
-// Programs should not create FlagInfo directly and instead use one of the
+// Programs should not create Flag directly and instead use one of the
 // FlagBuilders to build one with proper error checking.
-type FlagInfo struct {
+type Flag struct {
 	Name        string
 	ShortName   string
 	Usage       string
@@ -34,7 +43,15 @@ type FlagInfo struct {
 	Value       Value
 }
 
-func (c *FlagInfo) String() string {
+// Flag implements the Flagger interface.
+func (c *Flag) Flag() (*Flag, error) {
+	if err := c.Err(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (c *Flag) String() string {
 	if c.Positional {
 		return strings.ToUpper(c.Name)
 	}
@@ -48,7 +65,7 @@ func (c *FlagInfo) String() string {
 }
 
 // name returns the name or shortname of the flag in that order of precedence.
-func (c *FlagInfo) name() string {
+func (c *Flag) name() string {
 	if c.Name != "" {
 		return c.Name
 	}
@@ -56,7 +73,7 @@ func (c *FlagInfo) name() string {
 }
 
 // Set sets the value of the command-line flag.
-func (c *FlagInfo) Set(s string) error {
+func (c *Flag) Set(s string) error {
 	if c.Validate != nil {
 		if err := c.Validate(s); err != nil {
 			return err
@@ -65,23 +82,56 @@ func (c *FlagInfo) Set(s string) error {
 	return c.Value.Set(s)
 }
 
-// FlagBuilder builds a FlagInfo which defines a command line flag for a CLI
-// command.
-type FlagBuilder struct {
-	info *FlagInfo
-	err  error
+// Err checks the flag configuration and returns the first error it
+// encounters.
+func (c *Flag) Err() error {
+	if strings.HasPrefix(c.Name, "-") {
+		return errorf("%s: invalid flag name", c.name())
+	}
+	if c.Value == nil {
+		return errorf("%s: value cannot be nil", c.name())
+	}
+	if len(c.ShortName) > 1 {
+		return errorf(
+			"short name must be one character in length: %s",
+			c.ShortName,
+		)
+	}
+	if c.MinCount < 0 ||
+		c.MaxCount < 0 ||
+		(c.MaxCount > 0 && c.MinCount > c.MaxCount) {
+		return errorf(
+			"%s: invalid NArgs: %d, %d",
+			c.name(),
+			c.MinCount,
+			c.MaxCount,
+		)
+	}
+	return nil
 }
 
-func (c *FlagBuilder) errorf(format string, a ...interface{}) *FlagBuilder {
-	format = fmt.Sprintf("flag: %v: %s", c.info, format)
-	c.err = errorf(format, a...)
-	return c
+// FlagGroup is a nominal grouping of flags which affects how the flags are
+// shown in help messages.
+type FlagGroup struct {
+	Name  string
+	Usage string
+	Flags []*Flag
+}
+
+func (c *FlagGroup) append(flags ...*Flag) {
+	c.Flags = append(c.Flags, flags...)
+}
+
+// FlagBuilder builds a Flag which defines a command line flag for a CLI
+// command.
+type FlagBuilder struct {
+	flag *Flag
 }
 
 // ShowDefault specifies that the default vlaue of this flag should be show in
 // the help message.
 func (c *FlagBuilder) ShowDefault() *FlagBuilder {
-	c.info.ShowDefault = true
+	c.flag.ShowDefault = true
 	return c
 }
 
@@ -89,10 +139,7 @@ func (c *FlagBuilder) ShowDefault() *FlagBuilder {
 // example, a command named "foo" can be specified on the command line with
 // "--foo" but may also use a short name of "f" to be specified by "-f".
 func (c *FlagBuilder) ShortName(name string) *FlagBuilder {
-	if len(name) > 1 {
-		return c.errorf("short name must be one character in length: %s", name)
-	}
-	c.info.ShortName = name
+	c.flag.ShortName = name
 	return c
 }
 
@@ -100,7 +147,7 @@ func (c *FlagBuilder) ShortName(name string) *FlagBuilder {
 // no "-" or "--" delimeter. You cannot specify both a positional arguments and
 // subcommands.
 func (c *FlagBuilder) Positional() *FlagBuilder {
-	c.info.Positional = true
+	c.flag.Positional = true
 	return c
 }
 
@@ -110,11 +157,8 @@ func (c *FlagBuilder) Positional() *FlagBuilder {
 //
 // To disable min or max count checking, set their value to 0.
 func (c *FlagBuilder) NArgs(min, max int) *FlagBuilder {
-	if min < 0 || max < 0 || (max > 0 && min > max) {
-		return c.errorf("invalid NArgs: %d, %d", min, max)
-	}
-	c.info.MinCount = min
-	c.info.MaxCount = max
+	c.flag.MinCount = min
+	c.flag.MaxCount = max
 	return c
 }
 
@@ -127,17 +171,14 @@ func (c *FlagBuilder) Required() *FlagBuilder {
 // Hidden hides the command line flag from all help messages but still allows
 // the flag to be specified on the command line.
 func (c *FlagBuilder) Hidden() *FlagBuilder {
-	c.info.Hidden = true
+	c.flag.Hidden = true
 	return c
 }
 
 // Env allows the value of the flag to be specified with an environment variable
 // if it is not specified on the command line.
 func (c *FlagBuilder) Env(name string) *FlagBuilder {
-	if name == "" {
-		return c.errorf("environment variable name cannot be empty")
-	}
-	c.info.EnvVar = name
+	c.flag.EnvVar = name
 	return c
 }
 
@@ -145,34 +186,30 @@ func (c *FlagBuilder) Env(name string) *FlagBuilder {
 // it is parsed. If the function returns an error, parsing will fail with the
 // same error.
 func (c *FlagBuilder) Validate(f ValidateFunc) *FlagBuilder {
-	c.info.Validate = f
+	c.flag.Validate = f
 	return c
 }
 
-// Build checks for any correctness errors in the specification of the command
-// line flag and produces a FlagInfo.
-func (c *FlagBuilder) Build() (*FlagInfo, error) {
-	if c.err != nil {
-		return nil, c.err
-	}
-	return c.info, nil
+// Flag checks for any correctness errors in the specification of the command
+// line flag and produces a Flag.
+func (c *FlagBuilder) Flag() (*Flag, error) {
+	return c.flag.Flag()
 }
 
-// Must is a helper that calls Build and panics if the error is non-nil. It is
-// intended only for use in variable initializations.
-func (c *FlagBuilder) Must() *FlagInfo {
-	info, err := c.Build()
+// Must is a helper that calls Build and panics if the error is non-nil.
+func (c *FlagBuilder) Must() *Flag {
+	flag, err := c.Flag()
 	if err != nil {
 		panic(err)
 	}
-	return info
+	return flag
 }
 
 // Var returns a FlagBuilder that can be used to define a command line
 // flag with custom value parsing.
 func Var(value Value, name, usage string) *FlagBuilder {
 	c := &FlagBuilder{
-		info: &FlagInfo{
+		flag: &Flag{
 			Name:     name,
 			Usage:    usage,
 			MinCount: defaultMinNArgs,
@@ -180,15 +217,9 @@ func Var(value Value, name, usage string) *FlagBuilder {
 			Value:    value,
 		},
 	}
-	if name == "" || strings.HasPrefix(name, "-") {
-		return c.errorf("invalid flag name")
-	}
-	if value == nil {
-		return c.errorf("value cannot be nil")
-	}
 	if len(name) == 1 {
-		c.info.ShortName = c.info.Name
-		c.info.Name = ""
+		c.flag.ShortName = c.flag.Name
+		c.flag.Name = ""
 	}
 	return c
 }

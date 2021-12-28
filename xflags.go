@@ -20,7 +20,7 @@ Every xflags program must define a top-level command using xflags.Command:
 		"github.com/cavaliergopher/xflags"
 	)
 
-	var App = xflags.Command(os.Args[0], "My application").Must()
+	var App = xflags.NewCommand(os.Args[0], "My application")
 
 	func main() {
 		os.Exit(xflags.Run(App))
@@ -28,18 +28,18 @@ Every xflags program must define a top-level command using xflags.Command:
 
 You can import all global flags defined using Go's flag library with
 
-	var App = xflags.Command(os.Args[0], "").FlagSet(flag.CommandLine).Must()
+	var App = xflags.NewCommand(os.Args[0], "").FlagSet(flag.CommandLine)
 
 You can bind a flag to a variable using the Var functions.
 
 	var flagvar int
 
-	var App = xflags.Command(os.Args[0], "").
+	var App = xflags.NewCommand(os.Args[0], "").
 		Flags(
-			xflags.IntVar(&flagvar, "flagname", 1234, "help message for flagname").
-			Must(),
-		).
-		Must()
+			xflags.IntVar(
+				&flagvar, "flagname", 1234, "help message for flagname",
+			),
+		)
 
 Or you can create custom flags that satisfy the Value interface (with pointer
 receivers) and couple them to a flag parsing by
@@ -50,7 +50,7 @@ For such flags, the default value is just the initial value of the variable.
 
 A handler may be defined for your command by
 
-	var App = xflags.Command(os.Args[0], "").Handler(MyAppHandler).Must()
+	var App = xflags.NewCommand(os.Args[0], "").Handler(MyAppHandler)
 
 	func MyAppHandler(args []string) int {
 		return 0
@@ -59,11 +59,11 @@ A handler may be defined for your command by
 You can define subcommands by
 
 	var (
-		FooCommand = xflags.Command("foo", "Foo command").Must()
-		BarCommand = xflags.Command("bar", "Bar command").Must()
-		App = xflags.Command(os.Args[0], "Foo bar program").
-			Subcommands(FooCommand, BarCommand).
-			Must()
+		FooCommand = xflags.NewCommand("foo", "Foo command")
+		BarCommand = xflags.NewCommand("bar", "Bar command")
+
+		App = xflags.NewCommand(os.Args[0], "Foo bar program").
+			Subcommands(FooCommand, BarCommand)
 	)
 
 After all flags are defined, call
@@ -99,6 +99,47 @@ false, etc.
 
 Flag parsing will stop after "--" only if a command sets WithTerminator. All
 arguments following the terminator will be passed to the command handler.
-
 */
 package xflags
+
+import (
+	"fmt"
+	"os"
+)
+
+// Run parses the arguments provided by os.Args and executes the handler for the
+// command or subcommand specified by the arguments.
+//
+//     func main() {
+//         os.Exit(xflags.Run(cmd))
+//     }
+//
+// If -h or --help are specified, usage information will be printed to os.Stdout
+// and the exit code will be 0.
+//
+// If a command is invoked that has no handler, usage information will be
+// printed to os.Stderr and the exit code will be non-zero.
+func Run(cmd Commander) int {
+	return RunWithArgs(cmd, os.Args[1:]...)
+}
+
+// Run parses the given arguments and executes the handler for the command or
+// subcommand specified by the arguments.
+//
+//     func main() {
+//         os.Exit(xflags.RunWithArgs(cmd, "--foo", "--bar"))
+//     }
+//
+// If -h or --help are specified, usage information will be printed to os.Stdout
+// and the exit code will be 0.
+//
+// If a command is invoked that has no handler, usage information will be
+// printed to os.Stderr and the exit code will be non-zero.
+func RunWithArgs(cmd Commander, args ...string) int {
+	c, err := cmd.Command()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return c.Run(args)
+}

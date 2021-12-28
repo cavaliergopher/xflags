@@ -11,7 +11,7 @@ import (
 //
 // Set is called once, in command line order, for each flag present.
 type Value interface {
-	String() string
+	// String() string
 	Set(s string) error
 }
 
@@ -61,8 +61,6 @@ func (p *bitFieldValue) Set(s string) error {
 func (p *bitFieldValue) set(v bool) {
 	if v {
 		*p.p |= p.mask
-	} else {
-		*p.p &= ^p.mask
 	}
 }
 

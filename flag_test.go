@@ -1,12 +1,16 @@
 package xflags
 
 import (
+	"fmt"
+	"net"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
 
-func parseFlag(t *testing.T, flag *FlagInfo, args ...string) {
-	_, err := Command("test", "").Flags(flag).Must().Parse(args)
+func parseFlag(t *testing.T, flag *Flag, args ...string) {
+	_, err := NewCommand("test", "").Flags(flag).Must().Parse(args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -14,7 +18,7 @@ func parseFlag(t *testing.T, flag *FlagInfo, args ...string) {
 
 func TestBitField(t *testing.T) {
 	var v uint64
-	_, err := Command("test", "").
+	_, err := NewCommand("test", "").
 		Flags(
 			BitFieldVar(&v, 0x01, "foo", false, "").Must(),
 			BitFieldVar(&v, 0x02, "bar", false, "").Must(),
@@ -66,4 +70,61 @@ func TestStringSlice(t *testing.T) {
 		"--foo", "baz", "--foo", "qux",
 	)
 	assertStringSlice(t, []string{"baz", "qux"}, v)
+}
+
+func ExampleFlagBuilder_Validate() {
+	var ip string
+
+	StringVar(&ip, "ip", "127.0.0.1", "IP Address to ping").
+		Validate(func(arg string) error {
+			if net.ParseIP(arg) == nil {
+				return fmt.Errorf("invalid IP: %s", arg)
+			}
+			return nil
+		})
+}
+
+func ExampleBitFieldVar() {
+	const (
+		UserRead    uint64 = 0400
+		UserWrite   uint64 = 0200
+		UserExecute uint64 = 0100
+	)
+
+	var mode uint64 = 0444 // -r--r--r--
+
+	cmd := NewCommand("user-allow", "").
+		Flags(
+			BitFieldVar(&mode, UserRead, "r", false, "Enable user read"),
+			BitFieldVar(&mode, UserWrite, "w", false, "Enable user write"),
+			BitFieldVar(&mode, UserExecute, "x", false, "Enable user execute"),
+		).
+		HandleFunc(func(args []string) (exitCode int) {
+			fmt.Printf("File mode: %s\n", os.FileMode(mode))
+			return
+		})
+
+	// Enable user read and write
+	RunWithArgs(cmd, "-r", "-w")
+
+	// Output: File mode: -rw-r--r--
+}
+
+func ExampleStringSliceVar() {
+	var widgets []string
+
+	cmd := NewCommand("create-widgets", "").
+		Flags(
+			// Configure a repeatable string slice flag that must be specified
+			// at least once.
+			StringSliceVar(&widgets, "name", nil, "Widget name").NArgs(1, 0),
+		).
+		HandleFunc(func(args []string) (exitCode int) {
+			fmt.Printf("Created new widgets: %s", strings.Join(widgets, ", "))
+			return
+		})
+
+	RunWithArgs(cmd, "--name=foo", "--name=bar")
+
+	// Output: Created new widgets: foo, bar
 }

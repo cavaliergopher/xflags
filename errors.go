@@ -12,10 +12,10 @@ func errorf(format string, a ...interface{}) xflagsErr {
 	return xflagsErr(fmt.Sprintf(format, a...))
 }
 
-// HelpError is the error returned if the -h  or --help argument is specified
-// but no such flag is defined.
+// HelpError is the error returned if the -h or --help argument is specified
+// but no such flag is explicitly defined.
 type HelpError struct {
-	Cmd *CommandInfo
+	Cmd *Command // The command that was invoked and produced this error.
 }
 
 func (err *HelpError) Error() string {
@@ -26,16 +26,16 @@ func (err *HelpError) Error() string {
 // incorrect.
 type ArgumentError struct {
 	Msg  string
-	Cmd  *CommandInfo
-	Flag *FlagInfo
+	Cmd  *Command
+	Flag *Flag
 	Arg  string
 }
 
 func (err *ArgumentError) Error() string { return "xflags: " + err.Msg }
 
 func newArgErr(
-	cmd *CommandInfo,
-	flagInfo *FlagInfo,
+	cmd *Command,
+	flagInfo *Flag,
 	arg string,
 	format string,
 	a ...interface{},

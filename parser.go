@@ -12,51 +12,53 @@ const terminator = "--"
 type argParser struct {
 	tokens            []string
 	args              []string
-	cmd               *CommandInfo
+	cmd               *Command
 	isTerminated      bool
-	flagsByName       map[string]*FlagInfo
-	subcommandsByName map[string]*CommandInfo
+	flagsByName       map[string]*Flag
+	subcommandsByName map[string]*Command
 	flagsSeen         map[string]int
-	positionals       []*FlagInfo
+	positionals       []*Flag
 }
 
-func newArgParser(cmd *CommandInfo, tokens []string) *argParser {
+func newArgParser(cmd *Command, tokens []string) *argParser {
 	tokens = normalize(tokens, cmd.WithTerminator)
 	c := &argParser{
 		tokens:            tokens,
-		flagsByName:       make(map[string]*FlagInfo),
+		flagsByName:       make(map[string]*Flag),
 		flagsSeen:         make(map[string]int),
-		subcommandsByName: make(map[string]*CommandInfo),
+		subcommandsByName: make(map[string]*Command),
 	}
 	c.setCommand(cmd)
 	return c
 }
 
-// setCommand descends the state machine into a new subcommand.
-func (c *argParser) setCommand(cmd *CommandInfo) {
+// setCommand descends the parser into a new subcommand.
+func (c *argParser) setCommand(cmd *Command) {
 	// accumulate flags
 	c.cmd = cmd
-	c.positionals = make([]*FlagInfo, 0)
-	for _, flag := range cmd.Flags {
-		if flag.Name != "" {
-			c.flagsByName["--"+flag.Name] = flag
-		}
-		if flag.ShortName != "" {
-			c.flagsByName["-"+flag.ShortName] = flag
-		}
-		if flag.Positional {
-			c.positionals = append(c.positionals, flag)
+	c.positionals = make([]*Flag, 0)
+	for _, group := range cmd.FlagGroups {
+		for _, flag := range group.Flags {
+			if flag.Name != "" {
+				c.flagsByName["--"+flag.Name] = flag
+			}
+			if flag.ShortName != "" {
+				c.flagsByName["-"+flag.ShortName] = flag
+			}
+			if flag.Positional {
+				c.positionals = append(c.positionals, flag)
+			}
 		}
 	}
 
 	// reset subcommands
-	c.subcommandsByName = make(map[string]*CommandInfo)
+	c.subcommandsByName = make(map[string]*Command)
 	for _, cmd := range cmd.Subcommands {
 		c.subcommandsByName[cmd.Name] = cmd
 	}
 }
 
-func (c *argParser) Parse() (cmd *CommandInfo, args []string, err error) {
+func (c *argParser) Parse() (cmd *Command, args []string, err error) {
 	for {
 		arg, ok := c.next()
 		if !ok {
@@ -76,20 +78,20 @@ func (c *argParser) Parse() (cmd *CommandInfo, args []string, err error) {
 }
 
 func (c *argParser) parseEnvVars() error {
-	for _, flagInfo := range c.flagsByName {
-		if flagInfo.EnvVar == "" {
+	for _, flag := range c.flagsByName {
+		if flag.EnvVar == "" {
 			continue
 		}
-		n := c.flagsSeen[flagInfo.name()]
+		n := c.flagsSeen[flag.name()]
 		if n > 0 {
 			continue
 		}
-		s, ok := os.LookupEnv(flagInfo.EnvVar)
+		s, ok := os.LookupEnv(flag.EnvVar)
 		if !ok {
 			continue
 		}
-		c.observe(flagInfo)
-		if err := flagInfo.Set(s); err != nil {
+		c.observe(flag)
+		if err := flag.Set(s); err != nil {
 			return err
 		}
 	}
@@ -97,13 +99,15 @@ func (c *argParser) parseEnvVars() error {
 }
 
 func (c *argParser) checkNArgs() error {
-	for _, flag := range c.cmd.Flags {
-		n := c.flagsSeen[flag.name()]
-		if flag.MinCount > 0 && n < flag.MinCount {
-			return newArgErr(c.cmd, flag, "", "missing argument: %s", flag)
-		}
-		if flag.MaxCount > 0 && n > flag.MaxCount {
-			return newArgErr(c.cmd, flag, "", "argument declared too many times: %s", flag)
+	for _, group := range c.cmd.FlagGroups {
+		for _, flag := range group.Flags {
+			n := c.flagsSeen[flag.name()]
+			if flag.MinCount > 0 && n < flag.MinCount {
+				return newArgErr(c.cmd, flag, "", "missing argument: %s", flag)
+			}
+			if flag.MaxCount > 0 && n > flag.MaxCount {
+				return newArgErr(c.cmd, flag, "", "argument declared too many times: %s", flag)
+			}
 		}
 	}
 	return nil
@@ -126,9 +130,9 @@ func (c *argParser) next() (token string, ok bool) {
 	return
 }
 
-func (c *argParser) observe(flagInfo *FlagInfo) int {
-	c.flagsSeen[flagInfo.name()] += 1
-	return c.flagsSeen[flagInfo.name()]
+func (c *argParser) observe(flag *Flag) int {
+	c.flagsSeen[flag.name()] += 1
+	return c.flagsSeen[flag.name()]
 }
 
 func (c *argParser) dispatch(token string) error {
@@ -155,13 +159,13 @@ func (c *argParser) dispatch(token string) error {
 func (c *argParser) dispatchPositional(token string) error {
 	// handle positional flag
 	if len(c.positionals) > 0 {
-		flagInfo := c.positionals[0]
-		n := c.observe(flagInfo)
-		if flagInfo.MaxCount > 0 && n == flagInfo.MaxCount {
+		flag := c.positionals[0]
+		n := c.observe(flag)
+		if flag.MaxCount > 0 && n == flag.MaxCount {
 			// all done with this positional flag
 			c.positionals = c.positionals[1:]
 		}
-		return flagInfo.Set(token)
+		return flag.Set(token)
 	}
 
 	// handle subcommand
@@ -178,22 +182,22 @@ func (c *argParser) dispatchPositional(token string) error {
 
 func (c *argParser) dispatchRegular(token string) error {
 	// regular flag
-	flagInfo := c.flagsByName[token]
-	if flagInfo == nil {
+	flag := c.flagsByName[token]
+	if flag == nil {
 		return newArgErr(c.cmd, nil, token, "unrecognized argument: %s", token)
 	}
-	c.observe(flagInfo)
-	if isBoolValue(flagInfo.Value) {
-		return flagInfo.Set("true")
+	c.observe(flag)
+	if isBoolValue(flag.Value) {
+		return flag.Set("true")
 	}
 
 	// read the next arg as a value
 	value, ok := c.peek()
 	if !ok || !isPositional(value) {
-		return newArgErr(c.cmd, flagInfo, token, "no value specified for flag: %s", token)
+		return newArgErr(c.cmd, flag, token, "no value specified for flag: %s", token)
 	}
 	c.next() // consume the value
-	return flagInfo.Set(value)
+	return flag.Set(value)
 }
 
 func isSingleDash(arg string) bool {

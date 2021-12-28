@@ -45,7 +45,7 @@ func TestNormalize(t *testing.T) {
 func TestTerminator(t *testing.T) {
 	var foo string
 	var bar bool
-	cmd := Command("test", "").
+	cmd := NewCommand("test", "").
 		Flags(
 			StringVar(&foo, "foo", "", "").Must(),
 			BoolVar(&bar, "bar", false, "").Must(),
