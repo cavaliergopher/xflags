@@ -53,7 +53,7 @@ func assertString(t *testing.T, expect, actual string) bool {
 	return false
 }
 
-func assertStringSlice(t *testing.T, expect, actual []string) bool {
+func assertStrings(t *testing.T, expect, actual []string) bool {
 	if len(expect) != len(actual) {
 		t.Errorf("expected string slice: %q, got: %q", expect, actual)
 		return false

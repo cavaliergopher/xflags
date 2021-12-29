@@ -28,7 +28,7 @@ var App = NewCommand("helloworld", "Print \"Hello, World!\"").
 	Flags(
 		// Bool flag to turn off newline printing with -n. The flag value is
 		// stored in cmd.NoNewLines.
-		BoolVar(
+		Bool(
 			&flagNoNewLines,
 			"n",
 			false,
@@ -37,7 +37,7 @@ var App = NewCommand("helloworld", "Print \"Hello, World!\"").
 
 		// String flag to select a desired language. Can be specified with
 		// -l, --language or the HW_LANG environment variable.
-		StringVar(
+		String(
 			&flagLanguage,
 			"language",
 			"en",
@@ -48,7 +48,7 @@ var App = NewCommand("helloworld", "Print \"Hello, World!\"").
 
 		// StringSlice flag to optionally print multiple positional
 		// arguments. Positional arguments are not denoted with "-" or "--".
-		StringSliceVar(
+		Strings(
 			&flagMessage,
 			"MESSAGE",
 			nil,

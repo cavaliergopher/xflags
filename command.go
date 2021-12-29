@@ -44,8 +44,44 @@ type Command struct {
 
 // Command implements the Commander interface.
 func (c *Command) Command() (*Command, error) {
-	if err := c.Err(); err != nil {
-		return nil, err
+	flagsByName := make(map[string]*Flag)
+	hasUnboundedPositional := false
+	for _, group := range c.FlagGroups {
+		for _, flag := range group.Flags {
+			if flag.Positional {
+				if len(c.Subcommands) > 0 {
+					return nil, errorf(
+						"%s: cannot specify both subcommands and"+
+							" positional arguments",
+						c.Name,
+					)
+				}
+				if hasUnboundedPositional {
+					return nil, errorf(
+						"%s: positional arguments cannot follow unbounded"+
+							" positional arguments",
+						c.Name,
+					)
+				}
+				if flag.MaxCount == 0 {
+					hasUnboundedPositional = true
+				}
+			}
+			if flag.Name != "" {
+				key := "--" + flag.Name
+				if _, ok := flagsByName[key]; ok {
+					return nil, errorf("%s: flag already declared: %s", c.Name, key)
+				}
+				flagsByName[key] = flag
+			}
+			if flag.ShortName != "" {
+				key := "-" + flag.ShortName
+				if _, ok := flagsByName[key]; ok {
+					return nil, errorf("%s: flag already declared: %s", c.Name, key)
+				}
+				flagsByName[key] = flag
+			}
+		}
 	}
 	return c, nil
 }
@@ -56,6 +92,16 @@ func (c *Command) String() string { return c.Name }
 // if it was enabled. Args is only populated after the command line is
 // successfully parsed.
 func (c *Command) Args() []string { return c.args }
+
+// Arg returns the i'th argument specified after the "--" terminator if it was enabled. Arg(0) is
+// the first remaining argument after flags the terminator. Arg returns an empty string if the
+// requested element does not exist.
+func (c *Command) Arg(i int) string {
+	if i < 0 || i >= len(c.args) {
+		return ""
+	}
+	return c.args[i]
+}
 
 // Parse parses the given set of command line arguments and stores the value of
 // each argument in each command flag's target. The rules for each flag are
@@ -136,70 +182,28 @@ func (c *Command) WriteUsage(w io.Writer) error {
 	return f(w, c)
 }
 
-// Err checks the command configuration and returns the first error it
-// encounters.
-func (c *Command) Err() error {
-	flagsByName := make(map[string]*Flag)
-	hasUnboundedPositional := false
-	for _, group := range c.FlagGroups {
-		for _, flag := range group.Flags {
-			if flag.Positional {
-				if len(c.Subcommands) > 0 {
-					return errorf(
-						"%s: cannot specify both subcommands and"+
-							" positional arguments",
-						c.Name,
-					)
-				}
-				if hasUnboundedPositional {
-					return errorf(
-						"%s: positional arguments cannot follow unbounded"+
-							" positional arguments",
-						c.Name,
-					)
-				}
-				if flag.MaxCount == 0 {
-					hasUnboundedPositional = true
-				}
-			}
-			if flag.Name != "" {
-				key := "--" + flag.Name
-				if _, ok := flagsByName[key]; ok {
-					return errorf("%s: flag already declared: %s", c.Name, key)
-				}
-				flagsByName[key] = flag
-			}
-			if flag.ShortName != "" {
-				key := "-" + flag.ShortName
-				if _, ok := flagsByName[key]; ok {
-					return errorf("%s: flag already declared: %s", c.Name, key)
-				}
-				flagsByName[key] = flag
-			}
-		}
-	}
-	return nil
-}
-
-// CommandBuilder builds a Command which defines a command and all of its
-// flags. Create a command builder with NewCommand.
+// CommandBuilder builds a Command which defines a command and all of its flags.
+// Create a command builder with NewCommand.
+// All chain methods return a pointer to the same builder.
 type CommandBuilder struct {
-	cmd *Command
-	err error
+	cmd         Command
+	flagGroups  []*flagGroupBuilder
+	subcommands []Commander
+	err         error
 }
 
 // NewCommand returns a CommandBuilder which can be used to define a command and
 // all of its flags.
 func NewCommand(name, usage string) *CommandBuilder {
 	c := &CommandBuilder{
-		cmd: &Command{
-			Name:        name,
-			Usage:       usage,
-			FlagGroups:  make([]*FlagGroup, 1),
-			Subcommands: make([]*Command, 0),
+		cmd: Command{
+			Name:  name,
+			Usage: usage,
 		},
+		flagGroups:  make([]*flagGroupBuilder, 1, 8),
+		subcommands: make([]Commander, 0, 8),
 	}
-	c.cmd.FlagGroups[0] = &FlagGroup{Name: "options", Usage: "Options"}
+	c.flagGroups[0] = newFlagGroupBuilder("options", "Options")
 	return c
 }
 
@@ -236,20 +240,10 @@ func (c *CommandBuilder) Hidden() *CommandBuilder {
 	return c
 }
 
-func (c *CommandBuilder) addFlags(group *FlagGroup, flags ...Flagger) *CommandBuilder {
-	for _, flagger := range flags {
-		flag, err := flagger.Flag()
-		if err != nil {
-			return c.error(err)
-		}
-		group.append(flag)
-	}
-	return c
-}
-
 // Flag adds command line flags to the default FlagGroup for this command.
 func (c *CommandBuilder) Flags(flags ...Flagger) *CommandBuilder {
-	return c.addFlags(c.cmd.FlagGroups[0], flags...)
+	c.flagGroups[0].append(flags...)
+	return c
 }
 
 // FlagGroup adds a group of command line flags to this command and shows them
@@ -258,12 +252,8 @@ func (c *CommandBuilder) FlagGroup(
 	name, usage string,
 	flags ...Flagger,
 ) *CommandBuilder {
-	group := &FlagGroup{
-		Name:  name,
-		Usage: usage,
-	}
-	c.cmd.FlagGroups = append(c.cmd.FlagGroups, group)
-	return c.addFlags(group, flags...)
+	c.flagGroups = append(c.flagGroups, newFlagGroupBuilder(name, usage, flags...))
+	return c
 }
 
 // FlagSet imports flags from a Flagset created using Go's flag package. All
@@ -284,17 +274,7 @@ func (c *CommandBuilder) FlagSet(flagSet *flag.FlagSet) *CommandBuilder {
 
 // Subcommands adds subcommands to this command.
 func (c *CommandBuilder) Subcommands(commands ...Commander) *CommandBuilder {
-	if len(commands) == 0 {
-		return c
-	}
-	for _, commander := range commands {
-		cmd, err := commander.Command()
-		if err != nil {
-			return c.error(err)
-		}
-		cmd.Parent = c.cmd
-		c.cmd.Subcommands = append(c.cmd.Subcommands, cmd)
-	}
+	c.subcommands = append(c.subcommands, commands...)
 	return c
 }
 
@@ -319,13 +299,28 @@ func (c *CommandBuilder) Output(w io.Writer) *CommandBuilder {
 	return c
 }
 
-// Command checks for any correctness errors in the specification of the command
-// and produces a Command.
+// Command implements the Commander interface and produces a new Command.
 func (c *CommandBuilder) Command() (*Command, error) {
 	if c.err != nil {
 		return nil, c.err
 	}
-	return c.cmd.Command()
+	cmd := c.cmd
+	for _, groupBuilder := range c.flagGroups {
+		group, err := groupBuilder.FlagGroup()
+		if err != nil {
+			return nil, err
+		}
+		cmd.FlagGroups = append(cmd.FlagGroups, group)
+	}
+	for _, commandBuilder := range c.subcommands {
+		sub, err := commandBuilder.Command()
+		if err != nil {
+			return nil, err
+		}
+		cmd.Subcommands = append(cmd.Subcommands, sub)
+		sub.Parent = &cmd
+	}
+	return cmd.Command()
 }
 
 // Must is a helper that calls Command and panics if the error is non-nil.

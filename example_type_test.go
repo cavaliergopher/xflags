@@ -17,8 +17,8 @@ type exampleCommand struct {
 func (c *exampleCommand) Command() (*Command, error) {
 	return NewCommand("example", "An example CLI program").
 		Flags(
-			StringVar(&c.Species, "species", "Gopher", "the species we are studying"),
-			StringVar(&c.GopherType, "gopher_type", "Pocket", "the variety of gopher"),
+			String(&c.Species, "species", "Gopher", "the species we are studying"),
+			String(&c.GopherType, "gopher_type", "Pocket", "the variety of gopher"),
 		).
 		HandleFunc(c.Run).
 		Command()
@@ -39,7 +39,7 @@ func (c *exampleCommand) Run(args []string) int {
 // alternative to defining flag variables individually in the global scope.
 var ExampleCommand = &exampleCommand{}
 
-func Example_customType() {
+func Example_customTypes() {
 	fmt.Println("+ example --help")
 	RunWithArgs(ExampleCommand, "--help")
 

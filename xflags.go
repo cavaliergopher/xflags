@@ -1,110 +1,9 @@
-/*
-Package xflags implements command-line flag parsing and is a compatible
-alternative to Go's flag package. This package provides higher-order features
-such as subcommands, positional arguments, required arguments, validation,
-support for environment variables and others.
-
-Package xflags aims to make composing large, full-featured command line tools as
-simple and clean as possible. The Builder pattern is employed with method
-chaining to configure commands and flags declaratively with error checking.
-
-For compatibility, flag.FlagSets may be imported with CommandBuilder.FlagSet.
-
-Usage
-
-Every xflags program must define a top-level command using xflags.Command:
-
-	import (
-		"os"
-
-		"github.com/cavaliergopher/xflags"
-	)
-
-	var App = xflags.NewCommand(os.Args[0], "My application")
-
-	func main() {
-		os.Exit(xflags.Run(App))
-	}
-
-You can import all global flags defined using Go's flag library with
-
-	var App = xflags.NewCommand(os.Args[0], "").FlagSet(flag.CommandLine)
-
-You can bind a flag to a variable using the Var functions.
-
-	var flagvar int
-
-	var App = xflags.NewCommand(os.Args[0], "").
-		Flags(
-			xflags.IntVar(
-				&flagvar, "flagname", 1234, "help message for flagname",
-			),
-		)
-
-Or you can create custom flags that satisfy the Value interface (with pointer
-receivers) and couple them to a flag parsing by
-
-	xflags.Var(&flagVal, "name", "help message for flagname")
-
-For such flags, the default value is just the initial value of the variable.
-
-A handler may be defined for your command by
-
-	var App = xflags.NewCommand(os.Args[0], "").Handler(MyAppHandler)
-
-	func MyAppHandler(args []string) int {
-		return 0
-	}
-
-You can define subcommands by
-
-	var (
-		FooCommand = xflags.NewCommand("foo", "Foo command")
-		BarCommand = xflags.NewCommand("bar", "Bar command")
-
-		App = xflags.NewCommand(os.Args[0], "Foo bar program").
-			Subcommands(FooCommand, BarCommand)
-	)
-
-After all flags are defined, call
-
-	xflags.Run(App)
-
-to parse the command line into the defined flags and call the handler associated
-with the command or any if its subcommands if specified in os.Args.
-
-Flags may then be used directly.
-
-	fmt.Println("ip has value ", ip)
-	fmt.Println("flagvar has value ", flagvar)
-
-Command line flag syntax
-
-In addition to positional arguments, the following forms are permitted:
-
-	-f
-	-f=x
-	-f x // non-boolean flags only
-	--flag
-	--flag=x
-	--flag x // non-boolean flags only
-
-The noted forms are not permitted for boolean flags because of the meaning of
-the command
-
-	cmd -x *
-
-where * is a Unix shell wildcard, will change if there is a file called 0,
-false, etc.
-
-Flag parsing will stop after "--" only if a command sets WithTerminator. All
-arguments following the terminator will be passed to the command handler.
-*/
 package xflags
 
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 // Run parses the arguments provided by os.Args and executes the handler for the
@@ -142,4 +41,104 @@ func RunWithArgs(cmd Commander, args ...string) int {
 		return 1
 	}
 	return c.Run(args)
+}
+
+// Var returns a FlagBuilder that can be used to define a command line flag with custom value
+// parsing.
+func Var(value Value, name, usage string) *FlagBuilder {
+	c := &FlagBuilder{
+		flag: Flag{
+			Name:     name,
+			Usage:    usage,
+			MinCount: defaultMinNArgs,
+			MaxCount: defaultMaxNArgs,
+			Value:    value,
+		},
+	}
+	if len(name) == 1 {
+		c.flag.ShortName = c.flag.Name
+		c.flag.Name = ""
+	}
+	return c
+}
+
+// BitField returns a FlagBuilder that can be used to define a uint64 flag
+// with specified name, default value, and usage string. The argument p points
+// to a uint64 variable in which to toggle each of the bits in the mask
+// argument. You can specify multiple BitFieldVars to toggle bits in the same
+// underlying uint64.
+func BitField(p *uint64, mask uint64, name string, value bool, usage string) *FlagBuilder {
+	return Var(newBitFieldValue(value, p, mask), name, usage)
+}
+
+// Bool returns a FlagBuilder that can be used to define a bool flag with
+// specified name, default value, and usage string. The argument p points to a
+// bool variable in which to store the value of the flag.
+func Bool(p *bool, name string, value bool, usage string) *FlagBuilder {
+	return Var(newBoolValue(value, p), name, usage)
+}
+
+// Duration returns a FlagBuilder that can be used to define a time.Duration
+// flag with specified name, default value, and usage string. The argument p
+// points to a time.Duration variable in which to store the value of the flag.
+// The flag accepts a value acceptable to time.ParseDuration.
+func Duration(p *time.Duration, name string, value time.Duration, usage string) *FlagBuilder {
+	return Var(newDurationValue(value, p), name, usage)
+}
+
+// Float64 returns a FlagBuilder that can be used to define a float64 flag
+// with specified name, default value, and usage string. The argument p points
+// to a float64 variable in which to store the value of the flag.
+func Float64(p *float64, name string, value float64, usage string) *FlagBuilder {
+	return Var(newFloat64Value(value, p), name, usage)
+}
+
+// Func returns a FlagBuilder that can used to define a flag with the specified name and usage
+// string.
+// Each time the flag is seen, fn is called with the value of the flag.
+// If fn returns a non-nil error, it will be treated as a flag value parsing error.
+func Func(name, usage string, fn func(s string) error) *FlagBuilder {
+	return Var(funcValue(fn), name, usage)
+}
+
+// Int returns a FlagBuilder that can be used to define an int flag with
+// specified name, default value, and usage string. The argument p points to an
+// int variable in which to store the value of the flag.
+func Int(p *int, name string, value int, usage string) *FlagBuilder {
+	return Var(newIntValue(value, p), name, usage)
+}
+
+// Int64 returns a FlagBuilder that can be used to define an int64 flag with
+// specified name, default value, and usage string. The argument p points to an
+// int64 variable in which to store the value of the flag.
+func Int64(p *int64, name string, value int64, usage string) *FlagBuilder {
+	return Var(newInt64Value(value, p), name, usage)
+}
+
+// String returns a FlagBuilder that can be used to define a string flag with
+// specified name, default value, and usage string. The argument p points to a
+// string variable in which to store the value of the flag.
+func String(p *string, name, value, usage string) *FlagBuilder {
+	return Var(newStringValue(value, p), name, usage)
+}
+
+// Strings returns a FlagBuilder that can be used to define a string slice flag with specified name,
+// default value, and usage string. The argument p points to a string slice variable in which each
+// flag value will be stored in command line order.
+func Strings(p *[]string, name string, value []string, usage string) *FlagBuilder {
+	return Var(newStringSliceValue(value, p), name, usage).NArgs(0, 0)
+}
+
+// Uint returns a FlagBuilder that can be used to define an uint flag with
+// specified name, default value, and usage string. The argument p points to an
+// uint variable in which to store the value of the flag.
+func Uint(p *uint, name string, value uint, usage string) *FlagBuilder {
+	return Var(newUintValue(value, p), name, usage)
+}
+
+// Uint64 returns a FlagBuilder that can be used to define an uint64 flag
+// with specified name, default value, and usage string. The argument p points
+// to an uint64 variable in which to store the value of the flag.
+func Uint64(p *uint64, name string, value uint64, usage string) *FlagBuilder {
+	return Var(newUint64Value(value, p), name, usage)
 }

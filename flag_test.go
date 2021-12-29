@@ -20,9 +20,9 @@ func TestBitField(t *testing.T) {
 	var v uint64
 	_, err := NewCommand("test", "").
 		Flags(
-			BitFieldVar(&v, 0x01, "foo", false, "").Must(),
-			BitFieldVar(&v, 0x02, "bar", false, "").Must(),
-			BitFieldVar(&v, 0x04, "baz", true, "").Must(),
+			BitField(&v, 0x01, "foo", false, "").Must(),
+			BitField(&v, 0x02, "bar", false, "").Must(),
+			BitField(&v, 0x04, "baz", true, "").Must(),
 		).
 		Must().
 		Parse([]string{"--foo"})
@@ -34,31 +34,31 @@ func TestBitField(t *testing.T) {
 
 func TestBool(t *testing.T) {
 	v := false
-	parseFlag(t, BoolVar(&v, "foo", false, "").Must(), "--foo")
+	parseFlag(t, Bool(&v, "foo", false, "").Must(), "--foo")
 	assertBool(t, true, v)
 }
 
 func TestDuration(t *testing.T) {
 	var v time.Duration
-	parseFlag(t, DurationVar(&v, "foo", 0, "").Must(), "--foo=1s")
+	parseFlag(t, Duration(&v, "foo", 0, "").Must(), "--foo=1s")
 	assertDuration(t, time.Second, v)
 }
 
 func TestFloat64(t *testing.T) {
 	var v float64
-	parseFlag(t, Float64Var(&v, "foo", 0, "").Must(), "--foo=1.0")
+	parseFlag(t, Float64(&v, "foo", 0, "").Must(), "--foo=1.0")
 	assertFloat64(t, 1.0, v)
 }
 
 func TestInt64(t *testing.T) {
 	var v int64
-	parseFlag(t, Int64Var(&v, "foo", 0, "").Must(), "--foo=1")
+	parseFlag(t, Int64(&v, "foo", 0, "").Must(), "--foo=1")
 	assertInt64(t, 1, v)
 }
 
 func TestString(t *testing.T) {
 	var v string
-	parseFlag(t, StringVar(&v, "foo", "", "").Must(), "--foo=bar")
+	parseFlag(t, String(&v, "foo", "", "").Must(), "--foo=bar")
 	assertString(t, "bar", v)
 }
 
@@ -66,10 +66,10 @@ func TestStringSlice(t *testing.T) {
 	var v []string
 	parseFlag(
 		t,
-		StringSliceVar(&v, "foo", nil, "").Must(),
+		Strings(&v, "foo", nil, "").Must(),
 		"--foo", "baz", "--foo", "qux",
 	)
-	assertStringSlice(t, []string{"baz", "qux"}, v)
+	assertStrings(t, []string{"baz", "qux"}, v)
 }
 
 func ExampleFlagBuilder_Validate() {
@@ -78,7 +78,7 @@ func ExampleFlagBuilder_Validate() {
 	cmd := NewCommand("ping", "").
 		Output(os.Stdout).
 		Flags(
-			StringVar(&ip, "ip", "127.0.0.1", "IP Address to ping").
+			String(&ip, "ip", "127.0.0.1", "IP Address to ping").
 				Validate(func(arg string) error {
 					if net.ParseIP(arg) == nil {
 						return fmt.Errorf("invalid IP: %s", arg)
@@ -100,7 +100,7 @@ func ExampleFlagBuilder_Validate() {
 	// Error: invalid IP: 256.0.0.1
 }
 
-func ExampleBitFieldVar() {
+func ExampleBitField() {
 	const (
 		UserRead    uint64 = 0400
 		UserWrite   uint64 = 0200
@@ -111,9 +111,9 @@ func ExampleBitFieldVar() {
 
 	cmd := NewCommand("user-allow", "").
 		Flags(
-			BitFieldVar(&mode, UserRead, "r", false, "Enable user read"),
-			BitFieldVar(&mode, UserWrite, "w", false, "Enable user write"),
-			BitFieldVar(&mode, UserExecute, "x", false, "Enable user execute"),
+			BitField(&mode, UserRead, "r", false, "Enable user read"),
+			BitField(&mode, UserWrite, "w", false, "Enable user write"),
+			BitField(&mode, UserExecute, "x", false, "Enable user execute"),
 		).
 		HandleFunc(func(args []string) (exitCode int) {
 			fmt.Printf("File mode: %s\n", os.FileMode(mode))
@@ -131,7 +131,7 @@ func ExampleFuncVar() {
 	cmd := NewCommand("ping", "").
 		Output(os.Stdout).
 		Flags(
-			FuncVar("ip", "IP address to ping", func(s string) error {
+			Func("ip", "IP address to ping", func(s string) error {
 				ip = net.ParseIP(s)
 				if ip == nil {
 					return fmt.Errorf("invalid IP: %s", s)
@@ -153,14 +153,14 @@ func ExampleFuncVar() {
 	// Error: invalid IP: 256.0.0.1
 }
 
-func ExampleStringSliceVar() {
+func ExampleStrings() {
 	var widgets []string
 
 	cmd := NewCommand("create-widgets", "").
 		Flags(
 			// Configure a repeatable string slice flag that must be specified
 			// at least once.
-			StringSliceVar(&widgets, "name", nil, "Widget name").NArgs(1, 0),
+			Strings(&widgets, "name", nil, "Widget name").NArgs(1, 0),
 		).
 		HandleFunc(func(args []string) (exitCode int) {
 			fmt.Printf("Created new widgets: %s", strings.Join(widgets, ", "))

@@ -19,7 +19,7 @@ func TestSubcommands(t *testing.T) {
 	newCommand = func(n, of uint64) Commander {
 		c := NewCommand(fmt.Sprintf("command%02d", n), "").
 			Flags(
-				BitFieldVar(
+				BitField(
 					&setFlags,
 					uint64(1)<<(n-1),
 					fmt.Sprintf("x%02d", n),
@@ -82,25 +82,25 @@ func TestPosFlagOrdering(t *testing.T) {
 	}
 	successCases := []*CommandBuilder{
 		getFixture(
-			StringVar(&sink, "one", "", "").Positional(),
+			String(&sink, "one", "", "").Positional(),
 		),
 		getFixture(
-			StringVar(&sink, "one", "", "").Positional(),
-			StringVar(&sink, "two", "", "").Positional(),
+			String(&sink, "one", "", "").Positional(),
+			String(&sink, "two", "", "").Positional(),
 		),
 		getFixture(
-			StringVar(&sink, "one", "", "").Positional().NArgs(0, 1),
-			StringVar(&sink, "two", "", "").Positional(),
+			String(&sink, "one", "", "").Positional().NArgs(0, 1),
+			String(&sink, "two", "", "").Positional(),
 		),
 		getFixture(
-			StringVar(&sink, "one", "", "").Positional().NArgs(1, 1),
-			StringVar(&sink, "two", "", "").Positional(),
+			String(&sink, "one", "", "").Positional().NArgs(1, 1),
+			String(&sink, "two", "", "").Positional(),
 		),
 		getFixture(
-			StringVar(&sink, "one", "", "").Positional().NArgs(1, 1),
-			StringVar(&sink, "two", "", "").Positional().NArgs(2, 2),
-			StringVar(&sink, "three", "", "").Positional().NArgs(3, 3),
-			StringVar(&sink, "four", "", "").Positional(),
+			String(&sink, "one", "", "").Positional().NArgs(1, 1),
+			String(&sink, "two", "", "").Positional().NArgs(2, 2),
+			String(&sink, "three", "", "").Positional().NArgs(3, 3),
+			String(&sink, "four", "", "").Positional(),
 		),
 	}
 	for i, builder := range successCases {
@@ -112,12 +112,12 @@ func TestPosFlagOrdering(t *testing.T) {
 	}
 	errorCases := []*CommandBuilder{
 		getFixture(
-			StringVar(&sink, "one", "", "").Positional().NArgs(0, 0),
-			StringVar(&sink, "two", "", "").Positional(),
+			String(&sink, "one", "", "").Positional().NArgs(0, 0),
+			String(&sink, "two", "", "").Positional(),
 		),
 		getFixture(
-			StringVar(&sink, "one", "", "").Positional().NArgs(1, 0),
-			StringVar(&sink, "two", "", "").Positional(),
+			String(&sink, "one", "", "").Positional().NArgs(1, 0),
+			String(&sink, "two", "", "").Positional(),
 		),
 	}
 	for i, builder := range errorCases {
@@ -133,10 +133,10 @@ func TestPositionalFlags(t *testing.T) {
 	var foo, bar string
 	var baz, qux []string
 	cmd := NewCommand("test", "").Flags(
-		StringVar(&foo, "foo", "", "").Positional().Required(),
-		StringVar(&bar, "bar", "", "").Positional().Required(),
-		StringSliceVar(&baz, "baz", nil, "").Positional().NArgs(2, 2),
-		StringSliceVar(&qux, "qux", nil, "").Positional().NArgs(0, 0),
+		String(&foo, "foo", "", "").Positional().Required(),
+		String(&bar, "bar", "", "").Positional().Required(),
+		Strings(&baz, "baz", nil, "").Positional().NArgs(2, 2),
+		Strings(&qux, "qux", nil, "").Positional().NArgs(0, 0),
 	).Must()
 	_, err := cmd.Parse([]string{"one", "two", "three", "four", "five", "six"})
 	if err != nil {
@@ -145,8 +145,8 @@ func TestPositionalFlags(t *testing.T) {
 	}
 	assertString(t, "one", foo)
 	assertString(t, "two", bar)
-	assertStringSlice(t, []string{"three", "four"}, baz)
-	assertStringSlice(t, []string{"five", "six"}, qux)
+	assertStrings(t, []string{"three", "four"}, baz)
+	assertStrings(t, []string{"five", "six"}, qux)
 }
 
 func TestFlagSet(t *testing.T) {
@@ -157,8 +157,8 @@ func TestFlagSet(t *testing.T) {
 	flagSet.BoolVar(&baz, "baz", false, "")
 	c := NewCommand("test", "").
 		Flags(
-			StringVar(&bar, "bar", "", ""),
-			BoolVar(&qux, "qux", false, ""),
+			String(&bar, "bar", "", ""),
+			Bool(&qux, "qux", false, ""),
 		).
 		FlagSet(flagSet).
 		Must()
@@ -172,6 +172,18 @@ func TestFlagSet(t *testing.T) {
 	assertBool(t, true, qux)
 }
 
+func TestCommandLineage(t *testing.T) {
+	a, b, c := NewCommand("a", ""), NewCommand("b", ""), NewCommand("c", "")
+	a.Subcommands(b)
+	b.Subcommands(c)
+	cmd := a.Must()
+	assertString(t, "a", cmd.Name)
+	assertString(t, "b", cmd.Subcommands[0].Name)
+	assertString(t, "a", cmd.Subcommands[0].Parent.Name)
+	assertString(t, "c", cmd.Subcommands[0].Subcommands[0].Name)
+	assertString(t, "b", cmd.Subcommands[0].Subcommands[0].Parent.Name)
+}
+
 func ExampleCommandBuilder_FlagGroup() {
 	var n int
 	var rightToLeft bool
@@ -179,14 +191,14 @@ func ExampleCommandBuilder_FlagGroup() {
 
 	cmd := NewCommand("helloworld", "").
 		// n flag defines how many times to print "Hello, World!".
-		Flags(IntVar(&n, "n", 1, "Print n times")).
+		Flags(Int(&n, "n", 1, "Print n times")).
 
 		// Create a flag group for language-related flags.
 		FlagGroup(
 			"language",
 			"Language options",
-			StringVar(&endcoding, "encoding", "utf-8", "Text encoding"),
-			BoolVar(&rightToLeft, "rtl", false, "Print right-to-left"),
+			String(&endcoding, "encoding", "utf-8", "Text encoding"),
+			Bool(&rightToLeft, "rtl", false, "Print right-to-left"),
 		)
 
 	// Print the help page
@@ -253,7 +265,7 @@ func ExampleCommandBuilder_Subcommands() {
 
 	// configure the main command with two subcommands and a global "n" flag.
 	cmd := NewCommand("widgets", "").
-		Flags(IntVar(&n, "n", 1, "Affect n widgets")).
+		Flags(Int(&n, "n", 1, "Affect n widgets")).
 		Subcommands(create, destroy)
 
 	// Print the help page
@@ -288,7 +300,7 @@ func ExampleCommandBuilder_Synopsis() {
 			"This utility prints \"Hello, World!\" to the standard output.\n" +
 				"Print more than once with -n.",
 		).
-		Flags(IntVar(&n, "n", 1, "Print n times"))
+		Flags(Int(&n, "n", 1, "Print n times"))
 
 	// Print the help page
 	RunWithArgs(cmd, "--help")
@@ -310,7 +322,7 @@ func ExampleCommandBuilder_WithTerminator() {
 	// create a command that passes arguments to /bin/echo
 	cmd := NewCommand("echo_wrapper", "calls /bin/echo").
 		Flags(
-			BoolVar(&verbose, "v", false, "Print verbose output"),
+			Bool(&verbose, "v", false, "Print verbose output"),
 		).
 		HandleFunc(func(args []string) (exitCode int) {
 			// read verbose argument which was parsed by xflags

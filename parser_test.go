@@ -38,7 +38,7 @@ func TestNormalize(t *testing.T) {
 		copy(tExpect, expect)
 		copy(tExpect[len(expect):], args)
 		tActual := normalize(tArgs, true)
-		assertStringSlice(t, tExpect, tActual)
+		assertStrings(t, tExpect, tActual)
 	})
 }
 
@@ -47,8 +47,8 @@ func TestTerminator(t *testing.T) {
 	var bar bool
 	cmd := NewCommand("test", "").
 		Flags(
-			StringVar(&foo, "foo", "", "").Must(),
-			BoolVar(&bar, "bar", false, "").Must(),
+			String(&foo, "foo", "", "").Must(),
+			Bool(&bar, "bar", false, "").Must(),
 		).
 		WithTerminator().
 		Must()
@@ -64,5 +64,5 @@ func TestTerminator(t *testing.T) {
 	}
 	assertString(t, "foo", foo)
 	assertBool(t, true, bar)
-	assertStringSlice(t, tailArgs, cmd.Args())
+	assertStrings(t, tailArgs, cmd.Args())
 }
