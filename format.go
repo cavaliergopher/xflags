@@ -7,12 +7,11 @@ import (
 	"text/tabwriter"
 )
 
-// Formatter is a function that prints a help message for a command.
-type Formatter func(w io.Writer, cmd *Command) error
+// FormatFunc is a function that prints a help message for a command.
+type FormatFunc func(w io.Writer, cmd *Command) error
 
-// DefaultFormatter is a Formatter function that prints a help message for a
-// command.
-func DefaultFormatter(w io.Writer, cmd *Command) error {
+// Format is the default FormatFunc to print help messages for a commands.
+func Format(w io.Writer, cmd *Command) error {
 	aw := newAggregatedWriter(w)
 	if err := printUsage(aw, cmd); err != nil {
 		return err

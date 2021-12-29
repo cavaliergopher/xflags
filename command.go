@@ -35,7 +35,7 @@ type Command struct {
 	WithTerminator bool
 	FlagGroups     []*FlagGroup
 	Subcommands    []*Command
-	Formatter      Formatter
+	FormatFunc     FormatFunc
 	HandlerFunc    HandlerFunc
 	Output         io.Writer
 
@@ -172,12 +172,12 @@ func (c *Command) handleErr(err error) int {
 // WriteUsage prints a help message to the given Writer using the configured
 // Formatter.
 func (c *Command) WriteUsage(w io.Writer) error {
-	f := c.Formatter
+	f := c.FormatFunc
 	for p := c; f == nil && p != nil; p = p.Parent {
-		f = p.Formatter
+		f = p.FormatFunc
 	}
 	if f == nil {
-		f = DefaultFormatter
+		f = Format
 	}
 	return f(w, c)
 }
@@ -280,8 +280,8 @@ func (c *CommandBuilder) Subcommands(commands ...Commander) *CommandBuilder {
 
 // Formatter specifies a custom Formatter for formatting help messages for this
 // command.
-func (c *CommandBuilder) Formatter(formatter Formatter) *CommandBuilder {
-	c.cmd.Formatter = formatter
+func (c *CommandBuilder) FormatFunc(fn FormatFunc) *CommandBuilder {
+	c.cmd.FormatFunc = fn
 	return c
 }
 
