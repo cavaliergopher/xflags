@@ -7,6 +7,8 @@ import (
 	"os"
 )
 
+// TODO: Allow packages to declare global flags that are accessible on init.
+
 // Commander is an interface that describes any type that produces a Command.
 //
 // The interface is implemented by both CommandBuilder and Command so they can

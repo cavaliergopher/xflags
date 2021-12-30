@@ -125,7 +125,7 @@ func ExampleBitField() {
 	// Output: File mode: -rw-r--r--
 }
 
-func ExampleFuncVar() {
+func ExampleFunc() {
 	var ip net.IP
 
 	cmd := NewCommand("ping", "").

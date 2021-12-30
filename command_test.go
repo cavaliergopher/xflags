@@ -324,6 +324,7 @@ func ExampleCommandBuilder_WithTerminator() {
 		Flags(
 			Bool(&verbose, "v", false, "Print verbose output"),
 		).
+		WithTerminator(). // enable the "--" terminator
 		HandleFunc(func(args []string) (exitCode int) {
 			// read verbose argument which was parsed by xflags
 			if verbose {
@@ -338,8 +339,7 @@ func ExampleCommandBuilder_WithTerminator() {
 			}
 			fmt.Println(string(output))
 			return
-		}).
-		WithTerminator() // enable the "--" terminator
+		})
 
 	// run in verbose mode and pass ["Hello", "World!"] to /bin/echo.
 	RunWithArgs(cmd, "-v", "--", "Hello,", "World!")

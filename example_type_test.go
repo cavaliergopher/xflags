@@ -4,16 +4,16 @@ package xflags
 
 import "fmt"
 
-// exampleCommand implements the Commander interface to define a CLI command
-// and its handler using a custom type. It collects the value of each flag as
-// a struct field.
+// exampleCommand implements the Commander interface to define a CLI command and its handler using a
+// custom type.
+// It collects the value of each flag as a struct field.
+// Command types should be very fast to initialize, ideally initialized with their zero-value.
 type exampleCommand struct {
 	Species    string
 	GopherType string
 }
 
-// Command implements Commander and returns the CLI configuration of the example
-// command.
+// Command implements Commander and returns the CLI configuration of the example command.
 func (c *exampleCommand) Command() (*Command, error) {
 	return NewCommand("example", "An example CLI program").
 		Flags(
