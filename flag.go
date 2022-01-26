@@ -207,6 +207,21 @@ func (c *FlagBuilder) Validate(f ValidateFunc) *FlagBuilder {
 	return c
 }
 
+// Choices is a convenience method that calls Validate and sets ValidateFunc
+// that enforces that the flag value must be one of the given choices.
+func (c *FlagBuilder) Choices(elems ...string) *FlagBuilder {
+	return c.Validate(
+		func(arg string) error {
+			for _, elem := range elems {
+				if arg == elem {
+					return nil
+				}
+			}
+			return errorf("please specify one of [ %s ]", strings.Join(elems, " "))
+		},
+	)
+}
+
 // Flag implements the Flagger interface and produces a new Flag.
 func (c *FlagBuilder) Flag() (*Flag, error) {
 	flag := c.flag
