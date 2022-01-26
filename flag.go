@@ -207,7 +207,7 @@ func (c *FlagBuilder) Validate(f ValidateFunc) *FlagBuilder {
 	return c
 }
 
-// Choices is a convenience method that calls Validate and sets ValidateFunc
+// Choices is a convenience method that calls Validate and sets a ValidateFunc
 // that enforces that the flag value must be one of the given choices.
 func (c *FlagBuilder) Choices(elems ...string) *FlagBuilder {
 	return c.Validate(
@@ -217,7 +217,11 @@ func (c *FlagBuilder) Choices(elems ...string) *FlagBuilder {
 					return nil
 				}
 			}
-			return errorf("please specify one of [ %s ]", strings.Join(elems, " "))
+			return errorf(
+				"invalid argument: \"%s\", expected one of: \"%s\"",
+				arg,
+				strings.Join(elems, "\", \""),
+			)
 		},
 	)
 }

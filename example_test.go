@@ -55,8 +55,7 @@ var App = NewCommand("helloworld", "Print \"Hello, World!\"").
 			"Optional message to print",
 		).Positional(),
 	).
-	HandleFunc(helloWorld).
-	Must()
+	HandleFunc(helloWorld)
 
 // helloWorld is the HandlerFunc for the main App command.
 func helloWorld(args []string) (exitCode int) {

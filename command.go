@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -39,7 +40,8 @@ type Command struct {
 	Subcommands    []*Command
 	FormatFunc     FormatFunc
 	HandlerFunc    HandlerFunc
-	Output         io.Writer
+	Stdout         io.Writer
+	Stderr         io.Writer
 
 	args []string
 }
@@ -123,11 +125,17 @@ func (c *Command) Parse(args []string) (*Command, error) {
 	return cmd, nil
 }
 
-func (c *Command) output() io.Writer {
-	if c.Output != nil {
-		return c.Output
+// output returns stdout and stderr, inheriting from parents and defaulting to
+// OS defaults.
+func (c *Command) output() (stdout, stderr io.Writer) {
+	stdout, stderr = c.Stdout, c.Stderr
+	if stdout == nil && stderr == nil {
+		if c.Parent != nil {
+			return c.Parent.output()
+		}
+		return os.Stdout, os.Stderr
 	}
-	return os.Stdout
+	return
 }
 
 // Run parses the given set of command line arguments and calls the handler
@@ -144,8 +152,9 @@ func (c *Command) Run(args []string) int {
 		return c.handleErr(err)
 	}
 	if target.HandlerFunc == nil {
-		if err := target.WriteUsage(target.output()); err != nil {
-			return target.handleErr(err)
+		_, stderr := target.output()
+		if err := target.WriteUsage(stderr); err != nil {
+			panic(err)
 		}
 		return 1
 	}
@@ -156,18 +165,28 @@ func (c *Command) handleErr(err error) int {
 	if err == nil {
 		return 0
 	}
-	w := c.output()
-	if err, ok := err.(*HelpError); ok {
-		if err := err.Cmd.WriteUsage(w); err != nil {
-			return c.handleErr(err)
+	var helpErr *HelpError
+	if errors.As(err, &helpErr) {
+		stdout, _ := helpErr.Cmd.output()
+		if stdout != os.Stdout {
+			if f, ok := stdout.(*os.File); ok {
+				panic(f.Name())
+			}
+			panic(stdout)
+		}
+		if err := helpErr.Cmd.WriteUsage(stdout); err != nil {
+			panic(err)
 		}
 		return 0
 	}
-	if err, ok := err.(*ArgumentError); ok {
-		fmt.Fprintf(w, "Argument error: %s\n", err.Msg)
+	var argErr *ArgumentError
+	if errors.As(err, &argErr) {
+		_, stderr := argErr.Cmd.output()
+		fmt.Fprintf(stderr, "Argument error: %s\n", argErr.String())
 		return 1
 	}
-	fmt.Fprintf(w, "Error: %v\n", err)
+	_, stderr := c.output()
+	fmt.Fprintf(stderr, "Error: %v\n", errStr(err))
 	return 1
 }
 
@@ -295,9 +314,9 @@ func (c *CommandBuilder) WithTerminator() *CommandBuilder {
 	return c
 }
 
-// Output sets the destination for usage and error messages. If output is nil, os.Stderr is used.
-func (c *CommandBuilder) Output(w io.Writer) *CommandBuilder {
-	c.cmd.Output = w
+// Output sets the destination for usage and error messages.
+func (c *CommandBuilder) Output(stdout, stderr io.Writer) *CommandBuilder {
+	c.cmd.Stdout, c.cmd.Stderr = stdout, stderr
 	return c
 }
 

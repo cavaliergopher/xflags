@@ -91,7 +91,7 @@ func (c *argParser) parseEnvVars() error {
 			continue
 		}
 		c.observe(flag)
-		if err := flag.Set(s); err != nil {
+		if err := c.setFlag(flag, s); err != nil {
 			return err
 		}
 	}
@@ -165,7 +165,7 @@ func (c *argParser) dispatchPositional(token string) error {
 			// all done with this positional flag
 			c.positionals = c.positionals[1:]
 		}
-		return flag.Set(token)
+		return c.setFlag(flag, token)
 	}
 
 	// handle subcommand
@@ -188,7 +188,7 @@ func (c *argParser) dispatchRegular(token string) error {
 	}
 	c.observe(flag)
 	if isBoolValue(flag.Value) {
-		return flag.Set("true")
+		return c.setFlag(flag, "true")
 	}
 
 	// read the next arg as a value
@@ -197,7 +197,14 @@ func (c *argParser) dispatchRegular(token string) error {
 		return newArgErr(c.cmd, flag, token, "no value specified for flag: %s", token)
 	}
 	c.next() // consume the value
-	return flag.Set(value)
+	return c.setFlag(flag, value)
+}
+
+func (c *argParser) setFlag(flag *Flag, value string) error {
+	if err := flag.Set(value); err != nil {
+		return wrapArgErr(err, c.cmd, flag, value)
+	}
+	return nil
 }
 
 func isSingleDash(arg string) bool {

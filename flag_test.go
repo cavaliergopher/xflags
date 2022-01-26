@@ -9,13 +9,6 @@ import (
 	"time"
 )
 
-func parseFlag(t *testing.T, flag *Flag, args ...string) {
-	_, err := NewCommand("test", "").Flags(flag).Must().Parse(args)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestBitField(t *testing.T) {
 	var v uint64
 	_, err := NewCommand("test", "").
@@ -34,49 +27,65 @@ func TestBitField(t *testing.T) {
 
 func TestBool(t *testing.T) {
 	v := false
-	parseFlag(t, Bool(&v, "foo", false, "").Must(), "--foo")
-	assertBool(t, true, v)
+	if assertFlagParses(t, Bool(&v, "foo", false, "").Must(), "--foo") {
+		assertBool(t, true, v)
+	}
 }
 
 func TestDuration(t *testing.T) {
 	var v time.Duration
-	parseFlag(t, Duration(&v, "foo", 0, "").Must(), "--foo=1s")
-	assertDuration(t, time.Second, v)
+	if assertFlagParses(t, Duration(&v, "foo", 0, "").Must(), "--foo=1s") {
+		assertDuration(t, time.Second, v)
+	}
 }
 
 func TestFloat64(t *testing.T) {
 	var v float64
-	parseFlag(t, Float64(&v, "foo", 0, "").Must(), "--foo=1.0")
-	assertFloat64(t, 1.0, v)
+	if assertFlagParses(t, Float64(&v, "foo", 0, "").Must(), "--foo=1.0") {
+		assertFloat64(t, 1.0, v)
+	}
 }
 
 func TestInt64(t *testing.T) {
 	var v int64
-	parseFlag(t, Int64(&v, "foo", 0, "").Must(), "--foo=1")
-	assertInt64(t, 1, v)
+	if assertFlagParses(t, Int64(&v, "foo", 0, "").Must(), "--foo=1") {
+		assertInt64(t, 1, v)
+	}
 }
 
 func TestString(t *testing.T) {
 	var v string
-	parseFlag(t, String(&v, "foo", "", "").Must(), "--foo=bar")
-	assertString(t, "bar", v)
+	if assertFlagParses(t, String(&v, "foo", "", "").Must(), "--foo=bar") {
+		assertString(t, "bar", v)
+	}
 }
 
 func TestStringSlice(t *testing.T) {
 	var v []string
-	parseFlag(
+	if assertFlagParses(
 		t,
 		Strings(&v, "foo", nil, "").Must(),
 		"--foo", "baz", "--foo", "qux",
-	)
-	assertStrings(t, []string{"baz", "qux"}, v)
+	) {
+		assertStrings(t, []string{"baz", "qux"}, v)
+	}
+}
+
+func TestFlagChoices(t *testing.T) {
+	var v string
+	flag := String(&v, "foo", "", "").Choices("bar", "baz").Must()
+	assertFlagParses(t, flag, "--foo=bar")
+	assertFlagParses(t, flag, "--foo=baz")
+	assertErrorAs(t, parseFlag(flag, "--foo=qux"), &ArgumentError{})
+	assertErrorAs(t, parseFlag(flag, "--foo=ba"), &ArgumentError{})
+	assertErrorAs(t, parseFlag(flag, "--foo=barr"), &ArgumentError{})
 }
 
 func ExampleFlagBuilder_Validate() {
 	var ip string
 
 	cmd := NewCommand("ping", "").
-		Output(os.Stdout).
+		Output(os.Stdout, os.Stdout). // for tests
 		Flags(
 			String(&ip, "ip", "127.0.0.1", "IP Address to ping").
 				Validate(func(arg string) error {
@@ -97,7 +106,7 @@ func ExampleFlagBuilder_Validate() {
 	RunWithArgs(cmd, "--ip=256.0.0.1")
 	// Output:
 	// ping: 127.0.0.1
-	// Error: invalid IP: 256.0.0.1
+	// Argument error: --ip: invalid IP: 256.0.0.1
 }
 
 func ExampleBitField() {
@@ -129,7 +138,7 @@ func ExampleFunc() {
 	var ip net.IP
 
 	cmd := NewCommand("ping", "").
-		Output(os.Stdout).
+		Output(os.Stdout, os.Stdout). // for tests
 		Flags(
 			Func("ip", "IP address to ping", func(s string) error {
 				ip = net.ParseIP(s)
@@ -150,7 +159,7 @@ func ExampleFunc() {
 	RunWithArgs(cmd, "--ip", "256.0.0.1")
 	// Output:
 	// ping: 127.0.0.1
-	// Error: invalid IP: 256.0.0.1
+	// Argument error: --ip: invalid IP: 256.0.0.1
 }
 
 func ExampleStrings() {

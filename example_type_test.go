@@ -2,7 +2,9 @@
 // the behavior of a single command.
 package xflags
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // exampleCommand implements the Commander interface to define a CLI command and its handler using a
 // custom type.

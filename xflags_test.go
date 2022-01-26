@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -65,4 +66,25 @@ func assertStrings(t *testing.T, expect, actual []string) bool {
 		}
 	}
 	return true
+}
+
+func parseFlag(flag *Flag, args ...string) error {
+	_, err := NewCommand("test", "").Flags(flag).Must().Parse(args)
+	return err
+}
+
+func assertFlagParses(t *testing.T, flag *Flag, args ...string) bool {
+	err := parseFlag(flag, args...)
+	if err != nil {
+		t.Error(err)
+		return false
+	}
+	return true
+}
+func assertErrorAs(t *testing.T, err error, target error) bool {
+	if errors.As(err, &target) {
+		return true
+	}
+	t.Errorf("expected: %T, got: %T: %v", target, err, err)
+	return false
 }
