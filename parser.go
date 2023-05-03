@@ -193,7 +193,7 @@ func (c *argParser) dispatchRegular(token string) error {
 
 	// read the next arg as a value
 	value, ok := c.peek()
-	if !ok || !isPositional(value) {
+	if !ok {
 		return newArgErr(c.cmd, flag, token, "no value specified for flag: %s", token)
 	}
 	c.next() // consume the value

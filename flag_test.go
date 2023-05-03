@@ -44,12 +44,18 @@ func TestFloat64(t *testing.T) {
 	if assertFlagParses(t, Float64(&v, "foo", 0, "").Must(), "--foo=1.0") {
 		assertFloat64(t, 1.0, v)
 	}
+	if assertFlagParses(t, Float64(&v, "foo-negative", 0, "").Must(), "--foo-negative=-1.0") {
+		assertFloat64(t, -1.0, v)
+	}
 }
 
 func TestInt64(t *testing.T) {
 	var v int64
 	if assertFlagParses(t, Int64(&v, "foo", 0, "").Must(), "--foo=1") {
 		assertInt64(t, 1, v)
+	}
+	if assertFlagParses(t, Int64(&v, "foo-negative", 0, "").Must(), "--foo-negative=-1") {
+		assertInt64(t, -1, v)
 	}
 }
 
