@@ -81,7 +81,8 @@ func assertFlagParses(t *testing.T, flag *Flag, args ...string) bool {
 	}
 	return true
 }
-func assertErrorAs(t *testing.T, err error, target error) bool {
+
+func assertErrorAs(t *testing.T, err error, target interface{}) bool {
 	if errors.As(err, &target) {
 		return true
 	}
