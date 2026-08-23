@@ -8,8 +8,8 @@ such as subcommands, positional arguments, required arguments, validation,
 support for environment variables and others.
 
 Package xflags aims to make composing large, full-featured command line tools as
-simple and clean as possible. The Builder pattern is employed with method
-chaining to configure commands and flags declaratively with error checking.
+simple and clean as possible. Chained setters are employed to configure
+commands and flags declaratively.
 
 See [the docs](https://pkg.go.dev/github.com/cavaliergopher/xflags) for
 comprehensive examples.

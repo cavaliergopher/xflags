@@ -5,13 +5,16 @@ import (
 	"io"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/cavaliergopher/xflags/desc"
 )
 
-// FormatFunc is a function that prints a help message for a command.
-type FormatFunc func(w io.Writer, cmd *Command) error
+// FormatFunc is a function that prints a help message for a described
+// command.
+type FormatFunc func(w io.Writer, cmd *desc.Command) error
 
 // Format is the default FormatFunc to print help messages for a commands.
-func Format(w io.Writer, cmd *Command) error {
+func Format(w io.Writer, cmd *desc.Command) error {
 	aw := newAggregatedWriter(w)
 	if err := printUsage(aw, cmd); err != nil {
 		return err
@@ -39,8 +42,8 @@ func Format(w io.Writer, cmd *Command) error {
 	return aw.Err()
 }
 
-func getPositionals(cmd *Command) []*Flag {
-	a := make([]*Flag, 0, 8)
+func getPositionals(cmd *desc.Command) []*desc.Flag {
+	a := make([]*desc.Flag, 0, 8)
 	for _, group := range cmd.FlagGroups {
 		for _, flag := range group.Flags {
 			if flag.Hidden || !flag.Positional {
@@ -52,7 +55,7 @@ func getPositionals(cmd *Command) []*Flag {
 	return a
 }
 
-func hasRegular(cmd *Command) bool {
+func hasRegular(cmd *desc.Command) bool {
 	if cmd == nil {
 		return false
 	}
@@ -67,7 +70,7 @@ func hasRegular(cmd *Command) bool {
 	return hasRegular(cmd.Parent)
 }
 
-func printUsage(w io.Writer, cmd *Command) error {
+func printUsage(w io.Writer, cmd *desc.Command) error {
 	fullName := cmd.Name
 	for p := cmd.Parent; p != nil; p = p.Parent {
 		fullName = fmt.Sprintf("%s %s", p.Name, fullName)
@@ -99,7 +102,7 @@ func printUsage(w io.Writer, cmd *Command) error {
 	return nil
 }
 
-func detailPositionals(w io.Writer, cmd *Command) error {
+func detailPositionals(w io.Writer, cmd *desc.Command) error {
 	flags := getPositionals(cmd)
 	if len(flags) == 0 {
 		return nil
@@ -111,7 +114,7 @@ func detailPositionals(w io.Writer, cmd *Command) error {
 		if flag.Usage != "" {
 			fmt.Fprintf(w, "\t%s", flag.Usage)
 			if flag.ShowDefault {
-				fmt.Fprintf(w, " (default: %s)", flag.Value)
+				fmt.Fprintf(w, " (default: %s)", flag.Default)
 			}
 		}
 		fmt.Fprintf(w, "\n")
@@ -119,8 +122,8 @@ func detailPositionals(w io.Writer, cmd *Command) error {
 	return w.(*tabwriter.Writer).Flush()
 }
 
-func filterRegular(flags []*Flag) []*Flag {
-	a := make([]*Flag, 0, 8)
+func filterRegular(flags []*desc.Flag) []*desc.Flag {
+	a := make([]*desc.Flag, 0, 8)
 	for _, flag := range flags {
 		if flag.Hidden || flag.Positional {
 			continue
@@ -130,7 +133,7 @@ func filterRegular(flags []*Flag) []*Flag {
 	return a
 }
 
-func detailFlagGroup(w io.Writer, group *FlagGroup) error {
+func detailFlagGroup(w io.Writer, group *desc.FlagGroup) error {
 	flags := filterRegular(group.Flags)
 	if len(flags) == 0 {
 		return nil
@@ -151,14 +154,14 @@ func detailFlagGroup(w io.Writer, group *FlagGroup) error {
 		}
 		fmt.Fprintf(w, "  %s\t%s\t %s", shortName, name, flag.Usage)
 		if flag.ShowDefault {
-			fmt.Fprintf(w, " (default: %s)", flag.Value)
+			fmt.Fprintf(w, " (default: %s)", flag.Default)
 		}
 		fmt.Fprintf(w, "\n")
 	}
 	return w.(*tabwriter.Writer).Flush()
 }
 
-func getEnvVars(a []*Flag, cmd *Command) []*Flag {
+func getEnvVars(a []*desc.Flag, cmd *desc.Command) []*desc.Flag {
 	if cmd == nil {
 		return a
 	}
@@ -174,7 +177,7 @@ func getEnvVars(a []*Flag, cmd *Command) []*Flag {
 	return a
 }
 
-func detailEnvVars(w io.Writer, cmd *Command) error {
+func detailEnvVars(w io.Writer, cmd *desc.Command) error {
 	flags := getEnvVars(nil, cmd)
 	if len(flags) == 0 {
 		return nil
@@ -192,7 +195,7 @@ func detailEnvVars(w io.Writer, cmd *Command) error {
 	return w.(*tabwriter.Writer).Flush()
 }
 
-func detailSubcommands(w io.Writer, subcommands []*Command) error {
+func detailSubcommands(w io.Writer, subcommands []*desc.Command) error {
 	// TODO: wrap final column to terminal
 	if len(subcommands) == 0 {
 		return nil

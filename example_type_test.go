@@ -6,8 +6,8 @@ import (
 	"fmt"
 )
 
-// exampleCommand implements the Commander interface to define a CLI command and its handler using a
-// custom type.
+// exampleCommand encapsulates the configuration and handler for a CLI
+// command as a custom type.
 // It collects the value of each flag as a struct field.
 // Command types should be very fast to initialize, ideally initialized with their zero-value.
 type exampleCommand struct {
@@ -15,15 +15,15 @@ type exampleCommand struct {
 	GopherType string
 }
 
-// Command implements Commander and returns the CLI configuration of the example command.
-func (c *exampleCommand) Command() (*Command, error) {
+// Command returns the CLI configuration of the example command as a
+// *Command.
+func (c *exampleCommand) Command() *Command {
 	return NewCommand("example", "An example CLI program").
 		Flags(
 			String(&c.Species, "species", "Gopher", "the species we are studying"),
 			String(&c.GopherType, "gopher_type", "Pocket", "the variety of gopher"),
 		).
-		HandleFunc(c.Run).
-		Command()
+		HandleFunc(c.Run)
 }
 
 // Run handles calls to this command from the command line.
@@ -36,10 +36,11 @@ func (c *exampleCommand) Run(args []string) int {
 	return 0
 }
 
-// ExampleCommand is a global instance of the exampleCommand type so that its
-// parsed flag values can be accessed from other commands. This is an optional
-// alternative to defining flag variables individually in the global scope.
-var ExampleCommand = &exampleCommand{}
+// ExampleCommand is a *Command built from a global instance of the
+// exampleCommand type so that its parsed flag values can be accessed from
+// other commands. This is an optional alternative to defining flag variables
+// individually in the global scope.
+var ExampleCommand = (&exampleCommand{}).Command()
 
 func Example_customTypes() {
 	fmt.Println("+ example --help")

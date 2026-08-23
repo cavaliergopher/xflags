@@ -4,12 +4,11 @@ package. This package provides higher-order features such as subcommands, positi
 required arguments, validation, support for environment variables and others.
 
 Package xflags aims to make composing large, full-featured command line tools as simple and clean as
-possible. The Builder pattern is employed with method chaining to configure commands and flags
-declaratively with error checking.
+possible. Chained setters are employed to configure commands and flags declaratively.
 
-For compatibility, flag.FlagSets may be imported with CommandBuilder.FlagSet.
+For compatibility, flag.FlagSets may be imported with Command.FlagSet.
 
-Usage
+# Usage
 
 Every xflags program must define a top-level command using xflags.NewCommand:
 
@@ -25,7 +24,7 @@ Every xflags program must define a top-level command using xflags.NewCommand:
 		os.Exit(xflags.Run(App))
 	}
 
-You can import all global flags defined using Go's flag library with CommandBuilder.FlagSet.
+You can import all global flags defined using Go's flag library with Command.FlagSet.
 
 	var App = xflags.NewCommand(os.Args[0], "").FlagSet(flag.CommandLine)
 
@@ -80,7 +79,7 @@ Flags may then be used directly.
 	fmt.Println("ip has value ", ip)
 	fmt.Println("flagvar has value ", flagvar)
 
-Command line flag syntax
+# Command line flag syntax
 
 In addition to positional arguments, the following forms are permitted:
 

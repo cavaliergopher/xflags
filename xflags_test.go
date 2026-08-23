@@ -69,7 +69,7 @@ func assertStrings(t *testing.T, expect, actual []string) bool {
 }
 
 func parseFlag(flag *Flag, args ...string) error {
-	_, err := NewCommand("test", "").Flags(flag).Must().Parse(args)
+	_, err := NewCommand("test", "").Flags(flag).Parse(args)
 	return err
 }
 

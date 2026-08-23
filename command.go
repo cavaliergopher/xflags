@@ -6,17 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/cavaliergopher/xflags/desc"
 )
 
 // TODO: Allow packages to declare global flags that are accessible on init.
-
-// Commander is an interface that describes any type that produces a Command.
-//
-// The interface is implemented by both CommandBuilder and Command so they can
-// often be used interchangeably.
-type Commander interface {
-	Command() (*Command, error)
-}
 
 // A HandlerFunc is a function that handles the invokation a command specified
 // by command line arguments.
@@ -27,70 +21,38 @@ type HandlerFunc func(args []string) int
 
 // Command describes a command that users may invoke from the command line.
 //
-// Programs should not create Command directly and instead use the Command
-// function to build one with proper error checking.
+// Programs should not create Command directly and instead use NewCommand to
+// construct one.
 type Command struct {
-	Parent         *Command
-	Name           string
-	Usage          string
-	Synopsis       string
-	Hidden         bool
-	WithTerminator bool
-	FlagGroups     []*FlagGroup
-	Subcommands    []*Command
-	FormatFunc     FormatFunc
-	HandlerFunc    HandlerFunc
-	Stdout         io.Writer
-	Stderr         io.Writer
+	parent         *Command
+	name           string
+	usage          string
+	synopsis       string
+	hidden         bool
+	withTerminator bool
+	flagGroups     []*FlagGroup
+	subcommands    []*Command
+	formatFunc     FormatFunc
+	handlerFunc    HandlerFunc
+	stdout         io.Writer
+	stderr         io.Writer
+
+	// defaultGroup is the implicit "options" flag group appended to by
+	// Flags, created lazily on first use so an unused group never appears.
+	defaultGroup *FlagGroup
 
 	args []string
 }
 
-// Command implements the Commander interface.
-func (c *Command) Command() (*Command, error) {
-	flagsByName := make(map[string]*Flag)
-	hasUnboundedPositional := false
-	for _, group := range c.FlagGroups {
-		for _, flag := range group.Flags {
-			if flag.Positional {
-				if len(c.Subcommands) > 0 {
-					return nil, errorf(
-						"%s: cannot specify both subcommands and"+
-							" positional arguments",
-						c.Name,
-					)
-				}
-				if hasUnboundedPositional {
-					return nil, errorf(
-						"%s: positional arguments cannot follow unbounded"+
-							" positional arguments",
-						c.Name,
-					)
-				}
-				if flag.MaxCount == 0 {
-					hasUnboundedPositional = true
-				}
-			}
-			if flag.Name != "" {
-				key := "--" + flag.Name
-				if _, ok := flagsByName[key]; ok {
-					return nil, errorf("%s: flag already declared: %s", c.Name, key)
-				}
-				flagsByName[key] = flag
-			}
-			if flag.ShortName != "" {
-				key := "-" + flag.ShortName
-				if _, ok := flagsByName[key]; ok {
-					return nil, errorf("%s: flag already declared: %s", c.Name, key)
-				}
-				flagsByName[key] = flag
-			}
-		}
+// NewCommand returns a new Command with the given name and usage string.
+func NewCommand(name, usage string) *Command {
+	return &Command{
+		name:  name,
+		usage: usage,
 	}
-	return c, nil
 }
 
-func (c *Command) String() string { return c.Name }
+func (c *Command) String() string { return c.name }
 
 // Args returns any command line arguments specified after the "--" terminator
 // if it was enabled. Args is only populated after the command line is
@@ -117,6 +79,9 @@ func (c *Command) Arg(i int) string {
 // The returned *Command will be this command or one of its subcommands if
 // specified by the command line arguments.
 func (c *Command) Parse(args []string) (*Command, error) {
+	if err := c.validate(); err != nil {
+		return nil, err
+	}
 	cmd, args, err := newArgParser(c, args).Parse()
 	if err != nil {
 		return nil, err
@@ -125,13 +90,148 @@ func (c *Command) Parse(args []string) (*Command, error) {
 	return cmd, nil
 }
 
+// root returns the root of the command tree c belongs to, which is c itself
+// if it has no parent.
+func (c *Command) root() *Command {
+	root := c
+	for root.parent != nil {
+		root = root.parent
+	}
+	return root
+}
+
+// validate checks the whole command tree for configuration errors and
+// returns the first one found.
+//
+// It always runs from the root, regardless of which command in the tree it
+// is called on, so that Parse on a subcommand still validates the whole
+// tree.
+func (c *Command) validate() error {
+	return c.root().validateTree()
+}
+
+// validateTree checks c and, recursively, each of its subcommands, returning
+// the first error found.
+func (c *Command) validateTree() error {
+	if err := c.validateSelf(); err != nil {
+		return err
+	}
+	for _, sub := range c.subcommands {
+		if err := sub.validateTree(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateSelf checks c's own flags for configuration errors: flag syntax,
+// duplicate names, and positional/subcommand conflicts. It does not descend
+// into subcommands.
+func (c *Command) validateSelf() error {
+	flagsByName := make(map[string]*Flag)
+	hasUnboundedPositional := false
+	for _, group := range c.flagGroups {
+		for _, flag := range group.flags {
+			if err := flag.check(); err != nil {
+				return err
+			}
+			if flag.positional {
+				if len(c.subcommands) > 0 {
+					return errorf(
+						"%s: cannot specify both subcommands and"+
+							" positional arguments",
+						c.name,
+					)
+				}
+				if hasUnboundedPositional {
+					return errorf(
+						"%s: positional arguments cannot follow unbounded"+
+							" positional arguments",
+						c.name,
+					)
+				}
+				if flag.maxCount == 0 {
+					hasUnboundedPositional = true
+				}
+			}
+			if flag.name != "" {
+				key := "--" + flag.name
+				if _, ok := flagsByName[key]; ok {
+					return errorf("%s: flag already declared: %s", c.name, key)
+				}
+				flagsByName[key] = flag
+			}
+			if flag.shortName != "" {
+				key := "-" + flag.shortName
+				if _, ok := flagsByName[key]; ok {
+					return errorf("%s: flag already declared: %s", c.name, key)
+				}
+				flagsByName[key] = flag
+			}
+		}
+	}
+	return nil
+}
+
+// Describe describes the whole command tree that c belongs to and returns
+// the description of c's position within it. It is not limited to c: the
+// tree is found by walking to its root, so the returned node carries
+// complete ancestry via desc.Command.Parent as well as its own subcommands,
+// and configuration errors anywhere in the tree are reported -- including
+// in commands unrelated to c. This is what makes a description correct: a
+// subcommand's usage line, inherited flags and environment variables are
+// all meaningless without its ancestors.
+//
+// The errors returned are the same configuration errors Parse returns,
+// which likewise validates from the root wherever it is called.
+//
+// Describe is pure: it does not mutate the command tree or the variables
+// flags are bound to, so it is safe to call at any time, including while
+// parsed values are live. There is no caching, so every call revalidates
+// and describes the tree afresh.
+func (c *Command) Describe() (*desc.Command, error) {
+	root := c.root()
+	if err := root.validateTree(); err != nil {
+		return nil, err
+	}
+	nodes := make(map[*Command]*desc.Command)
+	root.describe(nil, nodes)
+	return nodes[c], nil
+}
+
+// describe recursively describes the command tree rooted at c, setting
+// parent as the Parent of the resulting node, and recording every node in
+// nodes so callers can look up the node for any source *Command after
+// describing from the root.
+func (c *Command) describe(
+	parent *desc.Command,
+	nodes map[*Command]*desc.Command,
+) *desc.Command {
+	node := &desc.Command{
+		Parent:         parent,
+		Name:           c.name,
+		Usage:          c.usage,
+		Synopsis:       c.synopsis,
+		Hidden:         c.hidden,
+		WithTerminator: c.withTerminator,
+	}
+	nodes[c] = node
+	for _, group := range c.flagGroups {
+		node.FlagGroups = append(node.FlagGroups, group.describe())
+	}
+	for _, sub := range c.subcommands {
+		node.Subcommands = append(node.Subcommands, sub.describe(node, nodes))
+	}
+	return node
+}
+
 // output returns stdout and stderr, inheriting from parents and defaulting to
 // OS defaults.
 func (c *Command) output() (stdout, stderr io.Writer) {
-	stdout, stderr = c.Stdout, c.Stderr
+	stdout, stderr = c.stdout, c.stderr
 	if stdout == nil && stderr == nil {
-		if c.Parent != nil {
-			return c.Parent.output()
+		if c.parent != nil {
+			return c.parent.output()
 		}
 		return os.Stdout, os.Stderr
 	}
@@ -151,14 +251,14 @@ func (c *Command) Run(args []string) int {
 	if err != nil {
 		return c.handleErr(err)
 	}
-	if target.HandlerFunc == nil {
+	if target.handlerFunc == nil {
 		_, stderr := target.output()
 		if err := target.WriteUsage(stderr); err != nil {
 			panic(err)
 		}
 		return 1
 	}
-	return target.HandlerFunc(target.args)
+	return target.handlerFunc(target.args)
 }
 
 func (c *Command) handleErr(err error) int {
@@ -192,88 +292,65 @@ func (c *Command) handleErr(err error) int {
 
 // WriteUsage prints a help message to the given Writer using the configured
 // Formatter.
+//
+// WriteUsage describes the command (see Describe) and hands the result to
+// the resolved FormatFunc, so it returns the same configuration errors
+// Parse would if the tree is misconfigured.
 func (c *Command) WriteUsage(w io.Writer) error {
-	f := c.FormatFunc
-	for p := c; f == nil && p != nil; p = p.Parent {
-		f = p.FormatFunc
+	node, err := c.Describe()
+	if err != nil {
+		return err
+	}
+	f := c.formatFunc
+	for p := c; f == nil && p != nil; p = p.parent {
+		f = p.formatFunc
 	}
 	if f == nil {
 		f = Format
 	}
-	return f(w, c)
-}
-
-// CommandBuilder builds a Command which defines a command and all of its flags.
-// Create a command builder with NewCommand.
-// All chain methods return a pointer to the same builder.
-type CommandBuilder struct {
-	cmd         Command
-	flagGroups  []*flagGroupBuilder
-	subcommands []Commander
-	err         error
-}
-
-// NewCommand returns a CommandBuilder which can be used to define a command and
-// all of its flags.
-func NewCommand(name, usage string) *CommandBuilder {
-	c := &CommandBuilder{
-		cmd: Command{
-			Name:  name,
-			Usage: usage,
-		},
-		flagGroups:  make([]*flagGroupBuilder, 1, 8),
-		subcommands: make([]Commander, 0, 8),
-	}
-	c.flagGroups[0] = newFlagGroupBuilder("options", "Options")
-	return c
-}
-
-func (c *CommandBuilder) error(err error) *CommandBuilder {
-	if c.err != nil {
-		return c
-	}
-	c.err = err
-	return c
+	return f(w, node)
 }
 
 // Synopsis specifies the detailed help message for this command.
-func (c *CommandBuilder) Synopsis(s string) *CommandBuilder {
-	c.cmd.Synopsis = s
+func (c *Command) Synopsis(s string) *Command {
+	c.synopsis = s
 	return c
 }
 
-// HandleFunc registers the handler for the command. If no handler is specified
-// and the command is invoked, it will print usage information to stderr.
-func (c *CommandBuilder) HandleFunc(
-	handler func(args []string) int,
-) *CommandBuilder {
-	if handler == nil {
-		return c.error(errorf("%s: nil handler", c.cmd.Name))
-	}
-	c.cmd.HandlerFunc = handler
+// HandleFunc registers the handler for the command. If no handler is
+// specified and the command is invoked, it will print usage information to
+// stderr.
+func (c *Command) HandleFunc(handler HandlerFunc) *Command {
+	c.handlerFunc = handler
 	return c
 }
 
 // Hidden hides the command from all help messages but still allows the command
 // to be invoked on the command line.
-func (c *CommandBuilder) Hidden() *CommandBuilder {
-	c.cmd.Hidden = true
+func (c *Command) Hidden() *Command {
+	c.hidden = true
 	return c
 }
 
-// Flag adds command line flags to the default FlagGroup for this command.
-func (c *CommandBuilder) Flags(flags ...Flagger) *CommandBuilder {
-	c.flagGroups[0].append(flags...)
+// Flags appends command line flags to the implicit "options" flag group for
+// this command, creating the group on its first use.
+func (c *Command) Flags(flags ...*Flag) *Command {
+	if c.defaultGroup == nil {
+		c.defaultGroup = &FlagGroup{name: "options", usage: "Options"}
+		c.flagGroups = append(c.flagGroups, c.defaultGroup)
+	}
+	c.defaultGroup.flags = append(c.defaultGroup.flags, flags...)
 	return c
 }
 
 // FlagGroup adds a group of command line flags to this command and shows them
 // under a common heading in help messages.
-func (c *CommandBuilder) FlagGroup(
-	name, usage string,
-	flags ...Flagger,
-) *CommandBuilder {
-	c.flagGroups = append(c.flagGroups, newFlagGroupBuilder(name, usage, flags...))
+func (c *Command) FlagGroup(name, usage string, flags ...*Flag) *Command {
+	c.flagGroups = append(c.flagGroups, &FlagGroup{
+		name:  name,
+		usage: usage,
+		flags: flags,
+	})
 	return c
 }
 
@@ -281,74 +358,42 @@ func (c *CommandBuilder) FlagGroup(
 // parsing and error handling is still managed by this package.
 //
 // To import any globally defined flags, import flag.CommandLine.
-func (c *CommandBuilder) FlagSet(flagSet *flag.FlagSet) *CommandBuilder {
+func (c *Command) FlagSet(flagSet *flag.FlagSet) *Command {
 	flagSet.VisitAll(func(f *flag.Flag) {
-		flag, err := Var(f.Value, f.Name, f.Usage).Flag()
-		if err != nil {
-			c.err = err
-			return
-		}
-		c = c.Flags(flag)
+		flg := Var(f.Value, f.Name, f.Usage)
+		flg.defValue = f.DefValue
+		c.Flags(flg)
 	})
 	return c
 }
 
-// Subcommands adds subcommands to this command.
-func (c *CommandBuilder) Subcommands(commands ...Commander) *CommandBuilder {
-	c.subcommands = append(c.subcommands, commands...)
+// Subcommands adds subcommands to this command and sets their parent to this
+// command.
+func (c *Command) Subcommands(cmds ...*Command) *Command {
+	c.subcommands = append(c.subcommands, cmds...)
+	for _, cmd := range cmds {
+		cmd.parent = c
+	}
 	return c
 }
 
-// Formatter specifies a custom Formatter for formatting help messages for this
-// command.
-func (c *CommandBuilder) FormatFunc(fn FormatFunc) *CommandBuilder {
-	c.cmd.FormatFunc = fn
+// FormatFunc specifies a custom FormatFunc for formatting help messages for
+// this command.
+func (c *Command) FormatFunc(fn FormatFunc) *Command {
+	c.formatFunc = fn
 	return c
 }
 
 // WithTerminator specifies that any command line argument after "--" will be
 // passed through to the args parameter of the command's handler without any
 // further processing.
-func (c *CommandBuilder) WithTerminator() *CommandBuilder {
-	c.cmd.WithTerminator = true
+func (c *Command) WithTerminator() *Command {
+	c.withTerminator = true
 	return c
 }
 
 // Output sets the destination for usage and error messages.
-func (c *CommandBuilder) Output(stdout, stderr io.Writer) *CommandBuilder {
-	c.cmd.Stdout, c.cmd.Stderr = stdout, stderr
+func (c *Command) Output(stdout, stderr io.Writer) *Command {
+	c.stdout, c.stderr = stdout, stderr
 	return c
-}
-
-// Command implements the Commander interface and produces a new Command.
-func (c *CommandBuilder) Command() (*Command, error) {
-	if c.err != nil {
-		return nil, c.err
-	}
-	cmd := c.cmd
-	for _, groupBuilder := range c.flagGroups {
-		group, err := groupBuilder.FlagGroup()
-		if err != nil {
-			return nil, err
-		}
-		cmd.FlagGroups = append(cmd.FlagGroups, group)
-	}
-	for _, commandBuilder := range c.subcommands {
-		sub, err := commandBuilder.Command()
-		if err != nil {
-			return nil, err
-		}
-		cmd.Subcommands = append(cmd.Subcommands, sub)
-		sub.Parent = &cmd
-	}
-	return cmd.Command()
-}
-
-// Must is a helper that calls Command and panics if the error is non-nil.
-func (c *CommandBuilder) Must() *Command {
-	cmd, err := c.Command()
-	if err != nil {
-		panic(err)
-	}
-	return cmd
 }

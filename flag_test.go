@@ -13,11 +13,10 @@ func TestBitField(t *testing.T) {
 	var v uint64
 	_, err := NewCommand("test", "").
 		Flags(
-			BitField(&v, 0x01, "foo", false, "").Must(),
-			BitField(&v, 0x02, "bar", false, "").Must(),
-			BitField(&v, 0x04, "baz", true, "").Must(),
+			BitField(&v, 0x01, "foo", false, ""),
+			BitField(&v, 0x02, "bar", false, ""),
+			BitField(&v, 0x04, "baz", true, ""),
 		).
-		Must().
 		Parse([]string{"--foo"})
 	if err != nil {
 		t.Fatal(err)
@@ -27,35 +26,35 @@ func TestBitField(t *testing.T) {
 
 func TestBool(t *testing.T) {
 	v := false
-	if assertFlagParses(t, Bool(&v, "foo", false, "").Must(), "--foo") {
+	if assertFlagParses(t, Bool(&v, "foo", false, ""), "--foo") {
 		assertBool(t, true, v)
 	}
 }
 
 func TestDuration(t *testing.T) {
 	var v time.Duration
-	if assertFlagParses(t, Duration(&v, "foo", 0, "").Must(), "--foo=1s") {
+	if assertFlagParses(t, Duration(&v, "foo", 0, ""), "--foo=1s") {
 		assertDuration(t, time.Second, v)
 	}
 }
 
 func TestFloat64(t *testing.T) {
 	var v float64
-	if assertFlagParses(t, Float64(&v, "foo", 0, "").Must(), "--foo=1.0") {
+	if assertFlagParses(t, Float64(&v, "foo", 0, ""), "--foo=1.0") {
 		assertFloat64(t, 1.0, v)
 	}
 }
 
 func TestInt64(t *testing.T) {
 	var v int64
-	if assertFlagParses(t, Int64(&v, "foo", 0, "").Must(), "--foo=1") {
+	if assertFlagParses(t, Int64(&v, "foo", 0, ""), "--foo=1") {
 		assertInt64(t, 1, v)
 	}
 }
 
 func TestString(t *testing.T) {
 	var v string
-	if assertFlagParses(t, String(&v, "foo", "", "").Must(), "--foo=bar") {
+	if assertFlagParses(t, String(&v, "foo", "", ""), "--foo=bar") {
 		assertString(t, "bar", v)
 	}
 }
@@ -64,7 +63,7 @@ func TestStringSlice(t *testing.T) {
 	var v []string
 	if assertFlagParses(
 		t,
-		Strings(&v, "foo", nil, "").Must(),
+		Strings(&v, "foo", nil, ""),
 		"--foo", "baz", "--foo", "qux",
 	) {
 		assertStrings(t, []string{"baz", "qux"}, v)
@@ -73,7 +72,7 @@ func TestStringSlice(t *testing.T) {
 
 func TestFlagChoices(t *testing.T) {
 	var v string
-	flag := String(&v, "foo", "", "").Choices("bar", "baz").Must()
+	flag := String(&v, "foo", "", "").Choices("bar", "baz")
 	assertFlagParses(t, flag, "--foo=bar")
 	assertFlagParses(t, flag, "--foo=baz")
 	assertErrorAs(t, parseFlag(flag, "--foo=qux"), &ArgumentError{})
@@ -81,7 +80,7 @@ func TestFlagChoices(t *testing.T) {
 	assertErrorAs(t, parseFlag(flag, "--foo=barr"), &ArgumentError{})
 }
 
-func ExampleFlagBuilder_Validate() {
+func ExampleFlag_Validate() {
 	var ip string
 
 	cmd := NewCommand("ping", "").
@@ -178,4 +177,79 @@ func ExampleStrings() {
 
 	RunWithArgs(cmd, "--name=foo", "--name=bar")
 	// Output: Created new widgets: foo, bar
+}
+
+// TestDescribeFlag asserts that every field of a flag configured with the
+// chained setters is described on its desc.Flag counterpart, and that
+// behavior (the Value, the ValidateFunc) is dropped.
+func TestDescribeFlag(t *testing.T) {
+	var s string
+	flg := String(&s, "name", "default-value", "flag usage").
+		ShortName("n").
+		NArgs(1, 3).
+		Hidden().
+		ShowDefault().
+		Env("MY_ENV")
+	cmd := NewCommand("test", "").Flags(flg)
+
+	node, err := cmd.Describe()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := len(node.FlagGroups), 1; got != want {
+		t.Fatalf("len(FlagGroups) = %d, want %d", got, want)
+	}
+	if got, want := len(node.FlagGroups[0].Flags), 1; got != want {
+		t.Fatalf("len(FlagGroups[0].Flags) = %d, want %d", got, want)
+	}
+	df := node.FlagGroups[0].Flags[0]
+	if got, want := df.Name, "name"; got != want {
+		t.Errorf("Name = %q, want %q", got, want)
+	}
+	if got, want := df.ShortName, "n"; got != want {
+		t.Errorf("ShortName = %q, want %q", got, want)
+	}
+	if got, want := df.Usage, "flag usage"; got != want {
+		t.Errorf("Usage = %q, want %q", got, want)
+	}
+	if got, want := df.Default, "default-value"; got != want {
+		t.Errorf("Default = %q, want %q", got, want)
+	}
+	if got, want := df.ShowDefault, true; got != want {
+		t.Errorf("ShowDefault = %v, want %v", got, want)
+	}
+	if got, want := df.Positional, false; got != want {
+		t.Errorf("Positional = %v, want %v", got, want)
+	}
+	if got, want := df.Hidden, true; got != want {
+		t.Errorf("Hidden = %v, want %v", got, want)
+	}
+	if got, want := df.MinCount, 1; got != want {
+		t.Errorf("MinCount = %d, want %d", got, want)
+	}
+	if got, want := df.MaxCount, 3; got != want {
+		t.Errorf("MaxCount = %d, want %d", got, want)
+	}
+	if got, want := df.EnvVar, "MY_ENV"; got != want {
+		t.Errorf("EnvVar = %q, want %q", got, want)
+	}
+}
+
+// TestDescribePositional asserts that Positional is described too, using a
+// separate command since a single command cannot mix positional flags with
+// the regular flag above without also adding subcommands (which is itself
+// disallowed alongside positionals).
+func TestDescribePositional(t *testing.T) {
+	var s string
+	flg := String(&s, "ARG", "", "positional usage").Positional()
+	cmd := NewCommand("test", "").Flags(flg)
+
+	node, err := cmd.Describe()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	df := node.FlagGroups[0].Flags[0]
+	if got, want := df.Positional, true; got != want {
+		t.Errorf("Positional = %v, want %v", got, want)
+	}
 }

@@ -47,11 +47,10 @@ func TestTerminator(t *testing.T) {
 	var bar bool
 	cmd := NewCommand("test", "").
 		Flags(
-			String(&foo, "foo", "", "").Must(),
-			Bool(&bar, "bar", false, "").Must(),
+			String(&foo, "foo", "", ""),
+			Bool(&bar, "bar", false, ""),
 		).
-		WithTerminator().
-		Must()
+		WithTerminator()
 	tailArgs := []string{
 		"baz",
 		"--baz", "--baz=qux", "--baz", "qux",
