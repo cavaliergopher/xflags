@@ -1,0 +1,9 @@
+# Uncommitted drafts and working notes. See CLAUDE.md.
+wip/
+
+# Test binaries and profiling output
+*.test
+*.out
+
+# macOS
+.DS_Store
