@@ -1,0 +1,6 @@
+# Test binaries and profiling output
+*.test
+*.out
+
+# macOS
+.DS_Store

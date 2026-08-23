@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # The Go module has no dependencies; only the workflow actions age.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

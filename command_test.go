@@ -3,7 +3,6 @@ package xflags
 import (
 	"flag"
 	"fmt"
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -316,8 +315,8 @@ func ExampleCommand_Synopsis() {
 func ExampleCommand_WithTerminator() {
 	var verbose bool
 
-	// create a command that passes arguments to /bin/echo
-	cmd := NewCommand("echo_wrapper", "calls /bin/echo").
+	// create a command that forwards arguments to another program
+	cmd := NewCommand("echo_wrapper", "wraps the echo command").
 		Flags(
 			Bool(&verbose, "v", false, "Print verbose output"),
 		).
@@ -325,23 +324,19 @@ func ExampleCommand_WithTerminator() {
 		HandleFunc(func(args []string) (exitCode int) {
 			// read verbose argument which was parsed by xflags
 			if verbose {
-				fmt.Printf("+ /bin/echo %s\n", strings.Join(args, " "))
+				fmt.Printf("+ echo %s\n", strings.Join(args, " "))
 			}
 
-			// pass unparsed arguments after the "--" terminator to /bin/echo
-			output, err := exec.Command("/bin/echo", args...).Output()
-			if err != nil {
-				fmt.Println(err)
-				return 1
-			}
-			fmt.Println(string(output))
+			// args holds everything after the "--" terminator, untouched by
+			// the parser, ready to hand to the wrapped program
+			fmt.Println(strings.Join(args, " "))
 			return
 		})
 
-	// run in verbose mode and pass ["Hello", "World!"] to /bin/echo.
+	// run in verbose mode and pass ["Hello,", "World!"] through the terminator
 	RunWithArgs(cmd, "-v", "--", "Hello,", "World!")
 	// Output:
-	// + /bin/echo Hello, World!
+	// + echo Hello, World!
 	// Hello, World!
 }
 

@@ -47,7 +47,7 @@ func (p *bitFieldValue) IsBoolFlag() bool { return true }
 
 func (p *bitFieldValue) String() string { return fmt.Sprintf("0x%0x", *p.p) }
 
-func (p *bitFieldValue) Get() interface{} { return *p.p }
+func (p *bitFieldValue) Get() any { return *p.p }
 
 func (p *bitFieldValue) Set(s string) error {
 	v, err := strconv.ParseBool(s)
@@ -75,7 +75,7 @@ func (p *boolValue) IsBoolFlag() bool { return true }
 
 func (p *boolValue) String() string { return strconv.FormatBool((bool)(*p)) }
 
-func (p *boolValue) Get() interface{} { return (bool)(*p) }
+func (p *boolValue) Get() any { return (bool)(*p) }
 
 func (p *boolValue) Set(s string) error {
 	v, err := strconv.ParseBool(s)
@@ -95,7 +95,7 @@ func newDurationValue(val time.Duration, p *time.Duration) *durationValue {
 
 func (p *durationValue) String() string { return (time.Duration)(*p).String() }
 
-func (p *durationValue) Get() interface{} { return (time.Duration)(*p) }
+func (p *durationValue) Get() any { return (time.Duration)(*p) }
 
 func (p *durationValue) Set(s string) error {
 	v, err := time.ParseDuration(s)
@@ -117,7 +117,7 @@ func (p *float64Value) String() string {
 	return strconv.FormatFloat((float64)(*p), 'e', -1, 64)
 }
 
-func (p *float64Value) Get() interface{} { return (float64)(*p) }
+func (p *float64Value) Get() any { return (float64)(*p) }
 
 func (p *float64Value) Set(s string) error {
 	v, err := strconv.ParseFloat(s, 64)
@@ -143,7 +143,7 @@ func (p *intValue) String() string {
 	return strconv.FormatInt((int64)(*p), 10)
 }
 
-func (p *intValue) Get() interface{} { return (int64)(*p) }
+func (p *intValue) Get() any { return (int64)(*p) }
 
 func (p *intValue) Set(s string) error {
 	v, err := strconv.ParseInt(s, 10, 64)
@@ -165,7 +165,7 @@ func (p *int64Value) String() string {
 	return strconv.FormatInt((int64)(*p), 10)
 }
 
-func (p *int64Value) Get() interface{} { return (int64)(*p) }
+func (p *int64Value) Get() any { return (int64)(*p) }
 
 func (p *int64Value) Set(s string) error {
 	v, err := strconv.ParseInt(s, 10, 64)
@@ -185,7 +185,7 @@ func newStringValue(val string, p *string) *stringValue {
 
 func (p *stringValue) String() string { return (string)(*p) }
 
-func (p *stringValue) Get() interface{} { return (string)(*p) }
+func (p *stringValue) Get() any { return (string)(*p) }
 
 func (p *stringValue) Set(s string) error {
 	*p = stringValue(s)
@@ -206,7 +206,7 @@ func (p *stringSliceValue) String() string {
 	return fmt.Sprintf("%v", *p.p)
 }
 
-func (p *stringSliceValue) Get() interface{} { return *p.p }
+func (p *stringSliceValue) Get() any { return *p.p }
 
 func (p *stringSliceValue) Set(s string) error {
 	if !p.hot {
@@ -228,7 +228,7 @@ func (p *uintValue) String() string {
 	return strconv.FormatInt((int64)(*p), 10)
 }
 
-func (p *uintValue) Get() interface{} { return (int64)(*p) }
+func (p *uintValue) Get() any { return (int64)(*p) }
 
 func (p *uintValue) Set(s string) error {
 	v, err := strconv.ParseInt(s, 10, 64)
@@ -250,7 +250,7 @@ func (p *uint64Value) String() string {
 	return strconv.FormatInt((int64)(*p), 10)
 }
 
-func (p *uint64Value) Get() interface{} { return (int64)(*p) }
+func (p *uint64Value) Get() any { return (int64)(*p) }
 
 func (p *uint64Value) Set(s string) error {
 	v, err := strconv.ParseInt(s, 10, 64)

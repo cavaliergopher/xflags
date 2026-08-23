@@ -17,18 +17,18 @@ func (e *xflagsErr) Error() string { return "xflags: " + e.String() }
 func (e *xflagsErr) String() string {
 	w := new(bytes.Buffer)
 	if e.Text != "" {
-		fmt.Fprintf(w, e.Text)
+		fmt.Fprint(w, e.Text)
 	}
 	if e.Text != "" && e.Err != nil {
-		fmt.Fprintf(w, ": ")
+		fmt.Fprint(w, ": ")
 	}
 	if e.Err != nil {
-		fmt.Fprintf(w, ": %s", errStr(e.Err))
+		fmt.Fprint(w, errStr(e.Err))
 	}
 	return w.String()
 }
 
-func errorf(format string, a ...interface{}) error {
+func errorf(format string, a ...any) error {
 	return &xflagsErr{Text: fmt.Sprintf(format, a...)}
 }
 
@@ -62,13 +62,13 @@ func (e *ArgumentError) String() string {
 		fmt.Fprintf(w, "%s: ", e.Flag)
 	}
 	if e.Text != "" {
-		fmt.Fprintf(w, e.Text)
+		fmt.Fprint(w, e.Text)
 	}
 	if e.Text != "" && e.Err != nil {
-		fmt.Fprintf(w, ": ")
+		fmt.Fprint(w, ": ")
 	}
 	if e.Err != nil {
-		fmt.Fprintf(w, "%s", errStr(e.Err))
+		fmt.Fprint(w, errStr(e.Err))
 	}
 	return w.String()
 }
@@ -78,7 +78,7 @@ func newArgErr(
 	flag *Flag,
 	arg string,
 	format string,
-	a ...interface{},
+	a ...any,
 ) *ArgumentError {
 	if cmd == nil {
 		panic("developer error: cmd cannot be nil")
