@@ -140,10 +140,9 @@ func (c *Flag) Choices(elems ...string) *Flag {
 					return nil
 				}
 			}
-			return errorf(
-				"invalid argument: \"%s\", expected one of: \"%s\"",
-				arg,
-				strings.Join(elems, "\", \""),
+			return newArgumentErrorf(nil, nil, c, arg,
+				"expected one of: %s",
+				strings.Join(elems, ", "),
 			)
 		},
 	)
@@ -153,23 +152,19 @@ func (c *Flag) Choices(elems ...string) *Flag {
 // command it belongs to.
 func (c *Flag) check() error {
 	if strings.HasPrefix(c.name, "-") {
-		return errorf("%s: invalid flag name", c.keyName())
+		return newConfigErrorf(nil, nil, c, "flag name must not start with '-'")
 	}
 	if c.value == nil {
-		return errorf("%s: value cannot be nil", c.keyName())
+		return newConfigErrorf(nil, nil, c, "flag must be bound to a value")
 	}
 	if len(c.shortName) > 1 {
-		return errorf(
-			"short name must be one character in length: %s",
-			c.shortName,
-		)
+		return newConfigErrorf(nil, nil, c, "short name must be one character in length")
 	}
 	if c.minCount < 0 ||
 		c.maxCount < 0 ||
 		(c.maxCount > 0 && c.minCount > c.maxCount) {
-		return errorf(
-			"%s: invalid NArgs: %d, %d",
-			c.keyName(),
+		return newConfigErrorf(nil, nil, c,
+			"invalid NArgs: %d, %d",
 			c.minCount,
 			c.maxCount,
 		)

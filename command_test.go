@@ -651,29 +651,35 @@ func TestRunExitCodes(t *testing.T) {
 					String(new(string), "foo", "", ""),
 				),
 			wantCode: 2,
-			wantErr:  "Error: test: flag already declared: --foo\n",
+			wantErr:  "Program error: test: flag already declared: --foo\n",
 		},
 		{
 			name:     "Exit",
-			cmd:      handles(Exit(errors.New("boom"), 3)),
+			cmd:      handles(Exit(3, errors.New("boom"))),
 			wantCode: 3,
 			wantErr:  "Error: boom\n",
 		},
 		{
 			name:     "ExitWithoutError",
-			cmd:      handles(Exit(nil, 3)),
+			cmd:      handles(Exit(3, nil)),
 			wantCode: 3,
 			wantErr:  "Error: exit status 3\n",
 		},
 		{
+			name:     "Exitf",
+			cmd:      handles(Exitf(3, "boom: %w", errors.New("kaboom"))),
+			wantCode: 3,
+			wantErr:  "Error: boom: kaboom\n",
+		},
+		{
 			name:     "UsageError",
-			cmd:      handles(UsageErrorf("--foo and --bar are exclusive")),
+			cmd:      handles(Exitf(ExitCodeBadArgument, "--foo and --bar are exclusive")),
 			wantCode: 2,
 			wantErr:  "Error: --foo and --bar are exclusive\n",
 		},
 		{
 			name:     "WrappedExitCoder",
-			cmd:      handles(fmt.Errorf("child failed: %w", Exit(nil, 7))),
+			cmd:      handles(fmt.Errorf("child failed: %w", Exit(7, nil))),
 			wantCode: 7,
 			wantErr:  "Error: child failed: exit status 7\n",
 		},
@@ -856,7 +862,7 @@ func ExampleInvocation() {
 	// it in the message.
 	add := NewCommand("add", "Add a remote").
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
-			return UsageErrorf(
+			return Exitf(ExitCodeBadArgument,
 				"no remote named: try \"%s --help\"",
 				strings.Join(inv.Path, " "),
 			)

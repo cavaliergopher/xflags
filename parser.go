@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"fmt"
 	"os"
 )
 
@@ -8,6 +9,16 @@ import (
 
 // argument to terminate parsing of all remaining arguments
 const terminator = "--"
+
+// helpError is the error returned if the -h or --help argument is specified
+// but no such flag is explicitly defined.
+type helpError struct {
+	Cmd *Command
+}
+
+func (err *helpError) Error() string {
+	return fmt.Sprintf("help requested for command: %s", err.Cmd)
+}
 
 type argParser struct {
 	tokens            []string
@@ -112,10 +123,10 @@ func (c *argParser) checkNArgs() error {
 		for _, flag := range group.flags {
 			n := c.flagsSeen[flag.keyName()]
 			if flag.minCount > 0 && n < flag.minCount {
-				return newArgErr(c.cmd, flag, "", "missing argument: %s", flag)
+				return newArgumentErrorf(nil, c.cmd, flag, "", "missing argument")
 			}
 			if flag.maxCount > 0 && n > flag.maxCount {
-				return newArgErr(c.cmd, flag, "", "argument declared too many times: %s", flag)
+				return newArgumentErrorf(nil, c.cmd, flag, "", "argument specified too many times")
 			}
 		}
 	}
@@ -157,7 +168,7 @@ func (c *argParser) dispatch(token string) error {
 		return nil
 	}
 	if token == "-h" || token == "--help" {
-		return &HelpError{Cmd: c.cmd}
+		return &helpError{c.cmd}
 	}
 	if isPositional(token) {
 		return c.dispatchPositional(token)
@@ -179,11 +190,11 @@ func (c *argParser) dispatchPositional(token string) error {
 
 	// handle subcommand
 	if len(c.cmd.subcommands) == 0 {
-		return newArgErr(c.cmd, nil, token, "unexpected positional argument: %s", token)
+		return newArgumentErrorf(nil, c.cmd, nil, token, "unexpected positional argument: %s", token)
 	}
 	cmd, ok := c.subcommandsByName[token]
 	if !ok {
-		return newArgErr(c.cmd, nil, token, "unrecognized command: %s", token)
+		return newArgumentErrorf(nil, c.cmd, nil, token, "unrecognized subcommand: %s", token)
 	}
 	c.setCommand(cmd)
 	return nil
@@ -193,7 +204,7 @@ func (c *argParser) dispatchRegular(token string) error {
 	// regular flag
 	flag := c.flagsByName[token]
 	if flag == nil {
-		return newArgErr(c.cmd, nil, token, "unrecognized argument: %s", token)
+		return newArgumentErrorf(nil, c.cmd, nil, token, "unrecognized argument: %s", token)
 	}
 	c.observe(flag)
 	if isBoolValue(flag.value) {
@@ -203,15 +214,16 @@ func (c *argParser) dispatchRegular(token string) error {
 	// read the next arg as a value
 	value, ok := c.peek()
 	if !ok || !isPositional(value) {
-		return newArgErr(c.cmd, flag, token, "no value specified for flag: %s", token)
+		return newArgumentErrorf(nil, c.cmd, flag, token, "option requires an argument")
 	}
 	c.next() // consume the value
 	return c.setFlag(flag, value)
 }
 
-func (c *argParser) setFlag(flag *Flag, value string) error {
-	if err := flag.Set(value); err != nil {
-		return wrapArgErr(err, c.cmd, flag, value)
+// Set the value of flag, return any validation error.
+func (c *argParser) setFlag(flag *Flag, token string) error {
+	if err := flag.Set(token); err != nil {
+		return newArgumentErrorf(err, c.cmd, flag, token, "%s", flag)
 	}
 	return nil
 }

@@ -14,7 +14,9 @@ report the fault upwards.
 v0's handler returned an `int`, so the code was whatever each program chose
 and the library promised nothing. The execution model changed handlers to
 return an `error`, which moved the mapping from failure to exit code inside
-the library and forced the question.
+the library and forced the question. That history isn't a constraint here:
+adoption of v0 is effectively zero, the API is pre-v1, and it is free to
+break until v1.0.0 ships (`wip/TODO.md` item 17).
 
 Prior art is settled enough to follow rather than invent. The standard
 library's `flag` package exits with 2 when it cannot parse a command line,
@@ -47,10 +49,11 @@ type ExitCoder interface {
 ```
 
 and the code it names is used; without one the code is 1. The error is
-reported on the command's stderr either way. `Exit(err, code)` wraps an
-error with a code, and `UsageErrorf` reports misuse the parser cannot see —
-contradictory flags, argument semantics — with the same code the parser
-would have used had it been able to see it.
+reported on the command's stderr either way. `Exit(code, err)` wraps an
+error with a code — a handler discovering misuse the parser cannot see,
+contradictory flags say, returns `Exitf(ExitCodeBadArgument, ...)` to
+report it with the same code the parser would have used had it been able
+to see it.
 
 An interface rather than a required error type, because the common case
 should stay untyped: most handlers just return errors and mean 1. The
@@ -80,8 +83,10 @@ requested and delivered, so it is 0.
 - Usage errors are indistinguishable from each other by code alone. An agent
   that needs to know which flag was wrong reads stderr, or `ArgumentError`
   if it is calling `Parse` itself.
-- A parse error and a `UsageErrorf` share a code but not a prefix: the
-  first prints `Argument error:` and the second `Error:`, because only the
-  parser produces an `ArgumentError`. Anything reading stderr rather than
-  the code sees two shapes for one class of failure, which is worth
-  reconciling.
+- A misconfigured tree, a parse error and a handler's
+  `Exitf(ExitCodeBadArgument, ...)` all share code 2 but not a prefix:
+  they print `Program error:`, `Argument error:` and `Error:`
+  respectively. Resolved in `docs/adr/human-readable-errors.md` as a
+  feature rather than a defect — the prefix marks who caused the problem,
+  so a reader learns from it whether to retype the command or report it to
+  the program's author, which the shared exit code cannot tell them.

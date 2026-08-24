@@ -84,10 +84,10 @@ type Command struct {
 
 // NewCommand returns a new Command with the given name and usage string.
 func NewCommand(name, usage string) *Command {
-	return &Command{
+	return (&Command{
 		name:  name,
 		usage: usage,
-	}
+	}).Flags()
 }
 
 func (c *Command) String() string { return c.name }
@@ -155,18 +155,10 @@ func (c *Command) validateSelf() error {
 			}
 			if flag.positional {
 				if len(c.subcommands) > 0 {
-					return errorf(
-						"%s: cannot specify both subcommands and"+
-							" positional arguments",
-						c.name,
-					)
+					return newConfigErrorf(nil, c, flag, "cannot specify both subcommands and positional arguments")
 				}
 				if hasUnboundedPositional {
-					return errorf(
-						"%s: positional arguments cannot follow unbounded"+
-							" positional arguments",
-						c.name,
-					)
+					return newConfigErrorf(nil, c, flag, "positional arguments cannot follow unbounded positional arguments")
 				}
 				if flag.maxCount == 0 {
 					hasUnboundedPositional = true
@@ -175,14 +167,14 @@ func (c *Command) validateSelf() error {
 			if flag.name != "" {
 				key := "--" + flag.name
 				if _, ok := flagsByName[key]; ok {
-					return errorf("%s: flag already declared: %s", c.name, key)
+					return newConfigErrorf(nil, c, flag, "flag already declared: %s", key)
 				}
 				flagsByName[key] = flag
 			}
 			if flag.shortName != "" {
 				key := "-" + flag.shortName
 				if _, ok := flagsByName[key]; ok {
-					return errorf("%s: flag already declared: %s", c.name, key)
+					return newConfigErrorf(nil, c, flag, "flag already declared: %s", key)
 				}
 				flagsByName[key] = flag
 			}
@@ -288,7 +280,7 @@ func (c *Command) getStderr() io.Writer {
 //	2  the command line or the command tree was wrong, or there is no handler
 //
 // A handler may name its own exit code by returning an error that implements
-// ExitCoder; see Exit and UsageErrorf.
+// ExitCoder; see Exit and Exitf.
 //
 // If -h or --help are specified, usage information is printed to the
 // command's stdout. Errors, including a command invoked with no handler, are
@@ -303,10 +295,12 @@ func (c *Command) Run(ctx context.Context, args []string) int {
 		return c.handleErr(err)
 	}
 	if inv.Cmd.handlerFunc == nil {
+		// Subcommand was invoked but its just a place holder.
+		// That's an argument error.
 		if err := inv.Cmd.WriteUsage(inv.Stderr); err != nil {
-			return reportFatal(err)
+			return fallbackToStderr(err)
 		}
-		return exitUsage
+		return ExitCodeBadArgument
 	}
 	return inv.Cmd.handleErr(inv.Cmd.handlerFunc(ctx, inv))
 }
@@ -315,30 +309,49 @@ func (c *Command) Run(ctx context.Context, args []string) int {
 // produced it and returns the exit code the program should terminate with.
 func (c *Command) handleErr(err error) int {
 	if err == nil {
-		return exitSuccess
+		return ExitCodeSuccess
 	}
-	var helpErr *HelpError
-	if errors.As(err, &helpErr) {
-		if err := helpErr.Cmd.WriteUsage(helpErr.Cmd.getStdout()); err != nil {
-			return reportFatal(err)
-		}
-		return exitSuccess
-	}
+
+	errStr := errorOrString(err)
+
+	errTypeName := "Error"
+
+	var helpErr *helpError
 	var argErr *ArgumentError
-	if errors.As(err, &argErr) {
-		fmt.Fprintf(argErr.Cmd.getStderr(), "Argument error: %s\n", argErr.String())
-		return exitUsage
+	var cfgErr *ConfigError
+	switch {
+	case errors.As(err, &helpErr):
+		// Special case handling for --help error sentinel.
+		if err := helpErr.Cmd.WriteUsage(helpErr.Cmd.getStdout()); err != nil {
+			return fallbackToStderr(err)
+		}
+		return ExitCodeSuccess // Help was requested, not an error.
+
+	case errors.As(err, &argErr):
+		errTypeName = "Argument error"
+
+	case errors.As(err, &cfgErr):
+		// The tree is malformed, so the fault is the program's rather than
+		// the user's. Both exit 2, so the prefix is all that says which.
+		errTypeName = "Program error"
 	}
-	fmt.Fprintf(c.getStderr(), "Error: %s\n", errStr(err))
-	return exitCode(err)
+
+	if _, err := fmt.Fprintf(c.getStderr(), "%s: %s\n", errTypeName, errStr); err != nil {
+		return fallbackToStderr(err)
+	}
+	return ExitCode(err)
 }
 
-// reportFatal reports a failure to write to a command's own output, which is
-// the one failure that output cannot report itself, and returns the exit
-// code to terminate with.
-func reportFatal(err error) int {
-	fmt.Fprintf(os.Stderr, "xflags: %s\n", errStr(err))
-	return exitFailure
+// fallbackToStderr reports a failure to write to a command's own output, which
+// is the one failure that output cannot report itself, on os.Stderr and returns
+// the exit code to terminate with.
+//
+// It names xflags, unlike the messages Run prints on the command's own
+// stderr, because a plain write failure says nothing about which program
+// produced it. See docs/adr/human-readable-errors.md.
+func fallbackToStderr(err error) int {
+	fmt.Fprintf(os.Stderr, "xflags: %s\n", err)
+	return ExitCodeFailure
 }
 
 // WriteUsage prints a help message to the given Writer using the configured
@@ -348,6 +361,8 @@ func reportFatal(err error) int {
 // the resolved FormatFunc, so it returns the same configuration errors
 // Parse would if the tree is misconfigured.
 func (c *Command) WriteUsage(w io.Writer) error {
+	// TODO: Usage formatting is a function of the chosen argv vocabulary
+	// (POSIX/GNU, Go, Windows, etc.) so we'll need to break this API.
 	node, err := c.Describe()
 	if err != nil {
 		return err

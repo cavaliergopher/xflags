@@ -1,7 +1,6 @@
 package xflags
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 )
@@ -9,16 +8,27 @@ import (
 // The exit codes Run terminates with. A handler may name any other code by
 // returning an error that implements ExitCoder.
 const (
-	exitSuccess = 0 // the handler returned nil, or help was requested
-	exitFailure = 1 // the handler returned an error
-	exitUsage   = 2 // the command line was wrong
+	ExitCodeSuccess     = 0 // A handler returned nil, or help was requested.
+	ExitCodeFailure     = 1 // A handler returned an error.
+	ExitCodeBadArgument = 2 // The command line, or the command it names, failed validation.
 )
+
+// errorOrString prefers a String() method over Error(). ConfigError and
+// ArgumentError give each a distinct purpose: String() is the plain
+// sentence Run prints for a human, and Error() is that sentence tagged
+// "xflags: ", for a Go caller that prints or logs the error itself.
+func errorOrString(err error) string {
+	if s, ok := err.(fmt.Stringer); ok {
+		return s.String()
+	}
+	return err.Error()
+}
 
 // ExitCoder is an error that names the exit code a program should terminate
 // with. Run looks for one in the chain of errors returned by a handler,
 // using errors.As, and exits with 1 if it finds none.
 //
-// *exec.ExitError implements ExitCoder, so a handler that shells out to
+// TIP: *exec.Error implements ExitCoder, so a handler that shells out to
 // another program can return its error unchanged to exit with the same code
 // as the child process.
 type ExitCoder interface {
@@ -26,17 +36,33 @@ type ExitCoder interface {
 	ExitCode() int
 }
 
-// exitCode returns the exit code named by err, or exitFailure if err names
-// none.
-func exitCode(err error) int {
-	var coder ExitCoder
-	if errors.As(err, &coder) {
-		return coder.ExitCode()
+// ExitCode unwraps err until it finds an ExitCoder and returns its exit code.
+// If none is found, it returns ExitCodeFailure.
+func ExitCode(err error) int {
+	var exitCoder ExitCoder
+	if errors.As(err, &exitCoder) {
+		return exitCoder.ExitCode()
 	}
-	return exitFailure
+	return ExitCodeFailure
 }
 
-// exitError is an error that names its own exit code, as returned by Exit.
+// Exit returns an error that reports err and asks Run to terminate the
+// program with the given exit code.
+//
+// err may be nil to exit with a code and no explanation, in which case the
+// error reads "exit status N", as an *exec.ExitError does.
+func Exit(code int, err error) error {
+	return &exitError{Err: err, Code: code}
+}
+
+// Exitf returns an error that reports the formatted error message and asks Run
+// to terminate the program with the given exit code.
+//
+// Error wrapping is supported using the %w verb like fmt.Errorf.
+func Exitf(code int, format string, a ...any) error {
+	return Exit(code, fmt.Errorf(format, a...))
+}
+
 type exitError struct {
 	Err  error
 	Code int
@@ -53,130 +79,74 @@ func (e *exitError) Error() string {
 	return e.Err.Error()
 }
 
-func (e *exitError) String() string {
-	if e.Err == nil {
-		return fmt.Sprintf("exit status %d", e.Code)
+// ConfigError indicates that an error was detected in the configuration of a
+// command or flag before arguments could be parsed. This is a developer error
+// and should be fixed in the code, not at runtime.
+type ConfigError struct {
+	Err     error
+	Cmd     *Command
+	Flag    *Flag
+	Message string
+}
+
+func newConfigErrorf(err error, cmd *Command, flag *Flag, format string, a ...any) *ConfigError {
+	return &ConfigError{
+		Err:     err,
+		Cmd:     cmd,
+		Flag:    flag,
+		Message: fmt.Sprintf(format, a...),
 	}
-	return errStr(e.Err)
 }
 
-// Exit returns an error that reports err and asks Run to terminate the
-// program with the given exit code.
-//
-// err may be nil to exit with a code and no explanation, in which case the
-// error reads "exit status N", as an *exec.ExitError does.
-func Exit(err error, code int) error {
-	return &exitError{Err: err, Code: code}
-}
+func (e *ConfigError) ExitCode() int { return ExitCodeBadArgument }
+func (e *ConfigError) Unwrap() error { return e.Err }
+func (e *ConfigError) Error() string { return "xflags: " + e.String() }
 
-// UsageErrorf returns an error reporting that a command was invoked
-// incorrectly in a way the parser cannot detect, such as two flags that
-// contradict each other. Run reports it and exits with the same code it uses
-// for a command line it could not parse.
-func UsageErrorf(format string, a ...any) error {
-	return Exit(fmt.Errorf(format, a...), exitUsage)
-}
-
-type xflagsErr struct {
-	Text string
-	Err  error
-}
-
-func (e *xflagsErr) Unwrap() error { return e.Err }
-
-// ExitCode reports a configuration error as a usage error rather than a
-// handler failure. A malformed tree is decided before the handler runs,
-// which is what code 2 covers.
-func (e *xflagsErr) ExitCode() int { return exitUsage }
-
-func (e *xflagsErr) Error() string { return "xflags: " + e.String() }
-
-func (e *xflagsErr) String() string {
-	w := new(bytes.Buffer)
-	if e.Text != "" {
-		fmt.Fprint(w, e.Text)
+// String reports which command or flag is misconfigured, if either is
+// known, followed by the message describing what's wrong with it.
+func (e *ConfigError) String() string {
+	switch {
+	case e.Cmd != nil:
+		return e.Cmd.String() + ": " + e.Message
+	case e.Flag != nil:
+		return e.Flag.String() + ": " + e.Message
+	default:
+		return e.Message
 	}
-	if e.Text != "" && e.Err != nil {
-		fmt.Fprint(w, ": ")
-	}
-	if e.Err != nil {
-		fmt.Fprint(w, errStr(e.Err))
-	}
-	return w.String()
-}
-
-func errorf(format string, a ...any) error {
-	return &xflagsErr{Text: fmt.Sprintf(format, a...)}
-}
-
-// HelpError is the error returned if the -h or --help argument is specified
-// but no such flag is explicitly defined.
-type HelpError struct {
-	Cmd *Command // The command that was invoked and produced this error.
-}
-
-func (err *HelpError) Error() string {
-	return fmt.Sprintf("xflags: help requested: %s", err.Cmd)
 }
 
 // ArgumentError indicates that an argument specified on the command line was
 // incorrect.
 type ArgumentError struct {
-	Text string
-	Err  error
-	Cmd  *Command
-	Flag *Flag
-	Arg  string
+	Err     error
+	Cmd     *Command
+	Flag    *Flag
+	Arg     string // The command line argument that failed validation.
+	Message string
 }
 
-func (e *ArgumentError) Unwrap() error { return e.Err }
+func newArgumentErrorf(err error, cmd *Command, flag *Flag, arg string, format string, a ...any) *ArgumentError {
+	return &ArgumentError{
+		Err:     err,
+		Cmd:     cmd,
+		Flag:    flag,
+		Arg:     arg,
+		Message: fmt.Sprintf(format, a...),
+	}
+}
 
+func (e *ArgumentError) ExitCode() int { return ExitCodeBadArgument }
+func (e *ArgumentError) Unwrap() error { return e.Err }
 func (e *ArgumentError) Error() string { return "xflags: " + e.String() }
 
+// String reports the message describing what was wrong with the argument,
+// followed by the error it wraps, if any.
 func (e *ArgumentError) String() string {
-	w := new(bytes.Buffer)
-	if e.Flag != nil {
-		fmt.Fprintf(w, "%s: ", e.Flag)
+	if e.Err == nil {
+		return e.Message
 	}
-	if e.Text != "" {
-		fmt.Fprint(w, e.Text)
+	if e.Message == "" {
+		return e.Err.Error()
 	}
-	if e.Text != "" && e.Err != nil {
-		fmt.Fprint(w, ": ")
-	}
-	if e.Err != nil {
-		fmt.Fprint(w, errStr(e.Err))
-	}
-	return w.String()
-}
-
-func newArgErr(
-	cmd *Command,
-	flag *Flag,
-	arg string,
-	format string,
-	a ...any,
-) *ArgumentError {
-	if cmd == nil {
-		panic("developer error: cmd cannot be nil")
-	}
-	e := wrapArgErr(nil, cmd, flag, arg)
-	e.Text = fmt.Sprintf(format, a...)
-	return e
-}
-
-func wrapArgErr(err error, cmd *Command, flag *Flag, arg string) *ArgumentError {
-	return &ArgumentError{
-		Err:  err,
-		Cmd:  cmd,
-		Flag: flag,
-		Arg:  arg,
-	}
-}
-
-func errStr(err error) string {
-	if s, ok := err.(fmt.Stringer); ok {
-		return s.String()
-	}
-	return err.Error()
+	return e.Message + ": " + e.Err.Error()
 }
