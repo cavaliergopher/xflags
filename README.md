@@ -25,6 +25,7 @@ go get github.com/cavaliergopher/xflags
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -37,19 +38,32 @@ var App = xflags.NewCommand("greet", "Print a greeting").
 	Flags(
 		xflags.String(&flagName, "name", "World", "Who to greet"),
 	).
-	HandleFunc(func(args []string) int {
+	HandleFunc(func(ctx context.Context, inv *xflags.Invocation) error {
 		fmt.Printf("Hello, %s!\n", flagName)
-		return 0
+		return nil
 	})
 
 func main() {
-	os.Exit(xflags.Run(App))
+	ctx, stop := xflags.NotifyContext(context.Background())
+	defer stop()
+	os.Exit(xflags.Run(ctx, App))
 }
 ```
 
 Flag values are stored in variables you own, so they are read directly with no
 lookup by name. Configuration errors — a duplicate flag, a positional argument
 declared alongside subcommands — are reported when the command line is parsed.
+
+A handler returns an error and `Run` turns it into an exit code: 0 for success
+or `--help`, 1 for a handler that failed, 2 for a command line that was wrong.
+An error may name its own code by implementing `ExitCoder`. The context comes
+from `NotifyContext`, which cancels it on the first interrupt and restores
+default signal handling so a second one kills a wedged process.
+
+The `Invocation` tells the handler how it was called — which command ran, the
+path it was reached by, and anything after a `--` terminator. A command is
+usually mounted by whoever composes the binary rather than by the team that
+wrote it, so its own path is not something it can know until it runs.
 
 ## Describing a command
 

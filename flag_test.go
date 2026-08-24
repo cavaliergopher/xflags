@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -94,15 +95,16 @@ func ExampleFlag_Validate() {
 					return nil
 				}),
 		).
-		HandleFunc(func(args []string) (exitCode int) {
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Printf("ping: %s\n", ip)
-			return
+			return nil
 		})
 
-	RunWithArgs(cmd, "--ip=127.0.0.1")
+	ctx := context.Background()
+	RunWithArgs(ctx, cmd, "--ip=127.0.0.1")
 
 	// 256 is not a valid IPv4 component
-	RunWithArgs(cmd, "--ip=256.0.0.1")
+	RunWithArgs(ctx, cmd, "--ip=256.0.0.1")
 	// Output:
 	// ping: 127.0.0.1
 	// Argument error: --ip: invalid IP: 256.0.0.1
@@ -123,13 +125,13 @@ func ExampleBitField() {
 			BitField(&mode, UserWrite, "w", false, "Enable user write"),
 			BitField(&mode, UserExecute, "x", false, "Enable user execute"),
 		).
-		HandleFunc(func(args []string) (exitCode int) {
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Printf("File mode: %s\n", os.FileMode(mode))
-			return
+			return nil
 		})
 
 	// Enable user read and write
-	RunWithArgs(cmd, "-r", "-w")
+	RunWithArgs(context.Background(), cmd, "-r", "-w")
 	// Output: File mode: -rw-r--r--
 }
 
@@ -147,15 +149,16 @@ func ExampleFunc() {
 				return nil
 			}),
 		).
-		HandleFunc(func(args []string) (exitCode int) {
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Printf("ping: %s\n", ip)
-			return
+			return nil
 		})
 
-	RunWithArgs(cmd, "--ip", "127.0.0.1")
+	ctx := context.Background()
+	RunWithArgs(ctx, cmd, "--ip", "127.0.0.1")
 
 	// 256 is not a valid IPv4 component
-	RunWithArgs(cmd, "--ip", "256.0.0.1")
+	RunWithArgs(ctx, cmd, "--ip", "256.0.0.1")
 	// Output:
 	// ping: 127.0.0.1
 	// Argument error: --ip: invalid IP: 256.0.0.1
@@ -170,12 +173,12 @@ func ExampleStrings() {
 			// at least once.
 			Strings(&widgets, "name", nil, "Widget name").NArgs(1, 0),
 		).
-		HandleFunc(func(args []string) (exitCode int) {
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Printf("Created new widgets: %s", strings.Join(widgets, ", "))
-			return
+			return nil
 		})
 
-	RunWithArgs(cmd, "--name=foo", "--name=bar")
+	RunWithArgs(context.Background(), cmd, "--name=foo", "--name=bar")
 	// Output: Created new widgets: foo, bar
 }
 

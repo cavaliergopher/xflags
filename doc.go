@@ -13,6 +13,7 @@ For compatibility, flag.FlagSets may be imported with Command.FlagSet.
 Every xflags program must define a top-level command using xflags.NewCommand:
 
 	import (
+		"context"
 		"os"
 
 		"github.com/cavaliergopher/xflags"
@@ -21,7 +22,9 @@ Every xflags program must define a top-level command using xflags.NewCommand:
 	var App = xflags.NewCommand(os.Args[0], "My application")
 
 	func main() {
-		os.Exit(xflags.Run(App))
+		ctx, stop := xflags.NotifyContext(context.Background())
+		defer stop()
+		os.Exit(xflags.Run(ctx, App))
 	}
 
 You can import all global flags defined using Go's flag library with Command.FlagSet.
@@ -50,12 +53,18 @@ A handler may be defined for your command by
 
 	var App = xflags.NewCommand(os.Args[0], "").HandleFunc(MyAppHandler)
 
-	func MyAppHandler(args []string) int {
-		return 0
+	func MyAppHandler(ctx context.Context, inv *xflags.Invocation) error {
+		return nil
 	}
 
+The handler is given the context passed to Run, which NotifyContext cancels on
+SIGINT or SIGTERM, and an Invocation describing how it was called: the command
+that was named, the path it was reached by, and any arguments after the "--"
+terminator. A command is often mounted in a tree its author does not own, so
+the path is something only the invocation can tell it.
+
 Flag parsing will stop after "--" only if a command sets WithTerminator. All arguments following the
-terminator will be passed to the command handler.
+terminator are passed to the command handler as Invocation.Args.
 
 You can define subcommands by
 
@@ -69,7 +78,7 @@ You can define subcommands by
 
 After all flags are defined, call
 
-	xflags.Run(App)
+	xflags.Run(ctx, App)
 
 to parse the command line into the defined flags and call the handler associated with the command or
 any if its subcommands if specified in os.Args.
@@ -78,6 +87,20 @@ Flags may then be used directly.
 
 	fmt.Println("ip has value ", ip)
 	fmt.Println("flagvar has value ", flagvar)
+
+# Exit codes
+
+Run returns the exit code the program should terminate with:
+
+	0  the handler returned nil, or -h or --help was given
+	1  the handler returned an error
+	2  the command line was wrong, or named a command with no handler
+
+A handler names its own exit code by returning an error that implements
+ExitCoder. Exit attaches a code to an error, UsageErrorf reports a misuse the
+parser cannot detect itself, and *exec.ExitError already implements ExitCoder,
+so the error from a child process can be returned unchanged to exit with its
+code.
 
 # Command line flag syntax
 

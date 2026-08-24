@@ -58,10 +58,11 @@ func TestTerminator(t *testing.T) {
 		"--", "-", "",
 	}
 	args := append([]string{"--foo=foo", "--bar", "--"}, tailArgs...)
-	if _, err := cmd.Parse(args); err != nil {
+	inv, err := cmd.Parse(args)
+	if err != nil {
 		t.Fatal(err)
 	}
 	assertString(t, "foo", foo)
 	assertBool(t, true, bar)
-	assertStrings(t, tailArgs, cmd.Args())
+	assertStrings(t, tailArgs, inv.Args)
 }

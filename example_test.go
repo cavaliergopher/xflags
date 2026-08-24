@@ -2,8 +2,8 @@
 package xflags
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -58,11 +58,10 @@ var App = NewCommand("helloworld", "Print \"Hello, World!\"").
 	HandleFunc(helloWorld)
 
 // helloWorld is the HandlerFunc for the main App command.
-func helloWorld(args []string) (exitCode int) {
+func helloWorld(ctx context.Context, inv *Invocation) error {
 	s, ok := translations[flagLanguage]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Unsupported language: %s", flagLanguage)
-		return 1
+		return fmt.Errorf("unsupported language: %s", flagLanguage)
 	}
 	if len(flagMessage) > 0 {
 		s = strings.Join(flagMessage, " ")
@@ -71,22 +70,26 @@ func helloWorld(args []string) (exitCode int) {
 	if !flagNoNewLines {
 		fmt.Print("\n")
 	}
-	return
+	return nil
 }
 
 func Example() {
+	ctx := context.Background()
+
 	fmt.Println("+ helloworld --help")
-	RunWithArgs(App, "--help")
+	RunWithArgs(ctx, App, "--help")
 
 	// Most programs will call the following from main:
 	//
 	//     func main() {
-	//         os.Exit(xflags.Run(App))
+	//         ctx, stop := xflags.NotifyContext(context.Background())
+	//         defer stop()
+	//         os.Exit(xflags.Run(ctx, App))
 	//     }
 	//
 	fmt.Println()
 	fmt.Println("+ helloworld --language=es")
-	RunWithArgs(App, "--language=es")
+	RunWithArgs(ctx, App, "--language=es")
 	// Output:
 	// + helloworld --help
 	// Usage: helloworld [OPTIONS] [MESSAGE...]

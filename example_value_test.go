@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"context"
 	"fmt"
 	"net"
 )
@@ -33,11 +34,11 @@ func ExampleValue() {
 			// configure a net.IP flag with our custom Value type
 			IPVar(&ip, "ip", net.IPv6zero, "IP address to ping"),
 		).
-		HandleFunc(func(args []string) (exitCode int) {
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Printf("ping: %s\n", ip)
-			return
+			return nil
 		})
 
-	RunWithArgs(cmd, "--ip=ff02:0000:0000:0000:0000:0000:0000:0001")
+	RunWithArgs(context.Background(), cmd, "--ip=ff02:0000:0000:0000:0000:0000:0000:0001")
 	// Output: ping: ff02::1
 }

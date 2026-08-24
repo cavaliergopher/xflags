@@ -1,8 +1,12 @@
 package xflags
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -26,9 +30,9 @@ func TestSubcommands(t *testing.T) {
 					"",
 				),
 			).
-			HandleFunc(func(args []string) int {
+			HandleFunc(func(ctx context.Context, inv *Invocation) error {
 				ranCommands |= 1 << (n - 1)
-				return 0
+				return nil
 			})
 		if n < of {
 			c.Subcommands(newCommand(n+1, of))
@@ -52,12 +56,15 @@ func TestSubcommands(t *testing.T) {
 		}
 
 		// invoke the subcommand handler
-		subcommand, err := cmd.Parse(args)
+		inv, err := cmd.Parse(args)
 		if err != nil {
 			t.Error(err)
 			return
 		}
-		subcommand.handlerFunc(nil)
+		if err := inv.Cmd.handlerFunc(context.Background(), inv); err != nil {
+			t.Error(err)
+			return
+		}
 
 		// check which commands run and flags were set
 		assertUint64(t, 1<<i, ranCommands)
@@ -198,7 +205,7 @@ func ExampleCommand_FlagGroup() {
 		)
 
 	// Print the help page
-	RunWithArgs(cmd, "--help")
+	RunWithArgs(context.Background(), cmd, "--help")
 	// Output:
 	// Usage: helloworld [OPTIONS]
 	//
@@ -218,19 +225,21 @@ func ExampleCommand_FlagSet() {
 	// import the flagset into an xflags command
 	cmd := NewCommand("helloworld", "").
 		FlagSet(flagSet).
-		HandleFunc(func(args []string) (exitCode int) {
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Println(*message)
-			return
+			return nil
 		})
+
+	ctx := context.Background()
 
 	// Print the help page
 	fmt.Println("+ helloworld --help")
-	RunWithArgs(cmd, "--help")
+	RunWithArgs(ctx, cmd, "--help")
 
 	// Run the command
 	fmt.Println()
 	fmt.Println("+ helloworld")
-	RunWithArgs(cmd)
+	RunWithArgs(ctx, cmd)
 	// Output:
 	// + helloworld --help
 	// Usage: helloworld [OPTIONS]
@@ -247,16 +256,16 @@ func ExampleCommand_Subcommands() {
 
 	// configure a "create" subcommand
 	create := NewCommand("create", "Make new widgets").
-		HandleFunc(func(args []string) (exitCode int) {
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Printf("Created %d widget(s)\n", n)
-			return
+			return nil
 		})
 
 	// configure a "destroy" subcommand
 	destroy := NewCommand("destroy", "Destroy widgets").
-		HandleFunc(func(args []string) (exitCode int) {
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Printf("Destroyed %d widget(s)\n", n)
-			return
+			return nil
 		})
 
 	// configure the main command with two subcommands and a global "n" flag.
@@ -264,14 +273,16 @@ func ExampleCommand_Subcommands() {
 		Flags(Int(&n, "n", 1, "Affect n widgets")).
 		Subcommands(create, destroy)
 
+	ctx := context.Background()
+
 	// Print the help page
 	fmt.Println("+ widgets --help")
-	RunWithArgs(cmd, "--help")
+	RunWithArgs(ctx, cmd, "--help")
 
 	// Invoke the "create" subcommand
 	fmt.Println()
 	fmt.Println("+ widgets create -n=3")
-	RunWithArgs(cmd, "create", "-n=3")
+	RunWithArgs(ctx, cmd, "create", "-n=3")
 	// Output:
 	// + widgets --help
 	// Usage: widgets [OPTIONS] COMMAND
@@ -299,7 +310,7 @@ func ExampleCommand_Synopsis() {
 		Flags(Int(&n, "n", 1, "Print n times"))
 
 	// Print the help page
-	RunWithArgs(cmd, "--help")
+	RunWithArgs(context.Background(), cmd, "--help")
 	// Output:
 	// Usage: helloworld [OPTIONS]
 	//
@@ -321,20 +332,21 @@ func ExampleCommand_WithTerminator() {
 			Bool(&verbose, "v", false, "Print verbose output"),
 		).
 		WithTerminator(). // enable the "--" terminator
-		HandleFunc(func(args []string) (exitCode int) {
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			// read verbose argument which was parsed by xflags
 			if verbose {
-				fmt.Printf("+ echo %s\n", strings.Join(args, " "))
+				fmt.Printf("+ echo %s\n", strings.Join(inv.Args, " "))
 			}
 
-			// args holds everything after the "--" terminator, untouched by
-			// the parser, ready to hand to the wrapped program
-			fmt.Println(strings.Join(args, " "))
-			return
+			// inv.Args holds everything after the "--" terminator,
+			// untouched by the parser, ready to hand to the wrapped
+			// program
+			fmt.Println(strings.Join(inv.Args, " "))
+			return nil
 		})
 
 	// run in verbose mode and pass ["Hello,", "World!"] through the terminator
-	RunWithArgs(cmd, "-v", "--", "Hello,", "World!")
+	RunWithArgs(context.Background(), cmd, "-v", "--", "Hello,", "World!")
 	// Output:
 	// + echo Hello, World!
 	// Hello, World!
@@ -540,4 +552,238 @@ func TestValidateRunsOverSubcommands(t *testing.T) {
 	)
 	root := NewCommand("root", "").Subcommands(sub)
 	assertParseError(t, root, "an invalid subcommand reached from the root")
+}
+
+// *exec.ExitError implements ExitCoder without any help from this package,
+// so a handler that shells out can return its error unchanged.
+var _ ExitCoder = (*exec.ExitError)(nil)
+
+// TestInvocationPath asserts that Parse reports the whole path of commands
+// named by the arguments, root first, and the command they reached.
+func TestInvocationPath(t *testing.T) {
+	leaf := NewCommand("leaf", "")
+	branch := NewCommand("branch", "").Subcommands(leaf)
+	root := NewCommand("root", "").Subcommands(branch)
+
+	inv, err := root.Parse([]string{"branch", "leaf"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertStrings(t, []string{"root", "branch", "leaf"}, inv.Path)
+	if got, want := inv.Cmd, leaf; got != want {
+		t.Errorf("Cmd = %v, want %v", got, want)
+	}
+}
+
+// TestParseIsNotWrittenBack asserts that a parse leaves nothing behind on
+// the command tree, so parsing twice yields two independent results.
+func TestParseIsNotWrittenBack(t *testing.T) {
+	cmd := NewCommand("test", "").WithTerminator()
+	first, err := cmd.Parse([]string{"--", "one"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := cmd.Parse([]string{"--", "two"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertStrings(t, []string{"one"}, first.Args)
+	assertStrings(t, []string{"two"}, second.Args)
+}
+
+// TestRunExitCodes asserts the contract Run documents: 0 for success or
+// help, 1 for a handler that failed, 2 for a command line that was wrong,
+// and whatever an ExitCoder asks for. It also asserts which stream each
+// outcome is reported on -- help on stdout, everything else on stderr.
+func TestRunExitCodes(t *testing.T) {
+	// handles returns a command whose handler returns err.
+	handles := func(err error) *Command {
+		return NewCommand("test", "").
+			HandleFunc(func(ctx context.Context, inv *Invocation) error {
+				return err
+			})
+	}
+	tests := []struct {
+		name     string
+		cmd      *Command
+		args     []string
+		wantCode int
+		wantOut  string
+		wantErr  string
+	}{
+		{
+			name:     "Success",
+			cmd:      handles(nil),
+			wantCode: 0,
+		},
+		{
+			name:     "Help",
+			cmd:      handles(nil),
+			args:     []string{"--help"},
+			wantCode: 0,
+			wantOut:  "Usage: test\n",
+		},
+		{
+			name:     "HandlerError",
+			cmd:      handles(errors.New("boom")),
+			wantCode: 1,
+			wantErr:  "Error: boom\n",
+		},
+		{
+			name:     "UnrecognizedArgument",
+			cmd:      handles(nil),
+			args:     []string{"--nope"},
+			wantCode: 2,
+			wantErr:  "Argument error: unrecognized argument: --nope\n",
+		},
+		{
+			name:     "NoHandler",
+			cmd:      NewCommand("test", ""),
+			wantCode: 2,
+			wantErr:  "Usage: test\n",
+		},
+		{
+			name:     "Exit",
+			cmd:      handles(Exit(errors.New("boom"), 3)),
+			wantCode: 3,
+			wantErr:  "Error: boom\n",
+		},
+		{
+			name:     "ExitWithoutError",
+			cmd:      handles(Exit(nil, 3)),
+			wantCode: 3,
+			wantErr:  "Error: exit status 3\n",
+		},
+		{
+			name:     "UsageError",
+			cmd:      handles(UsageErrorf("--foo and --bar are exclusive")),
+			wantCode: 2,
+			wantErr:  "Error: --foo and --bar are exclusive\n",
+		},
+		{
+			name:     "WrappedExitCoder",
+			cmd:      handles(fmt.Errorf("child failed: %w", Exit(nil, 7))),
+			wantCode: 7,
+			wantErr:  "Error: child failed: exit status 7\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, stdout, stderr := runCaptured(tt.cmd, tt.args...)
+			if got, want := code, tt.wantCode; got != want {
+				t.Errorf("exit code = %d, want %d", got, want)
+			}
+			assertOutput(t, "stdout", stdout, tt.wantOut)
+			assertOutput(t, "stderr", stderr, tt.wantErr)
+		})
+	}
+}
+
+// assertOutput asserts that a captured stream starts with want, or is empty
+// if want is empty. Only the first line of a help message is worth
+// asserting here; format_test covers the rest.
+func assertOutput(t *testing.T, name, got, want string) bool {
+	t.Helper()
+	if want == "" {
+		if got != "" {
+			t.Errorf("%s = %q, want nothing", name, got)
+			return false
+		}
+		return true
+	}
+	if !strings.HasPrefix(got, want) {
+		t.Errorf("%s = %q, want it to start with %q", name, got, want)
+		return false
+	}
+	return true
+}
+
+// TestRunReportsOutputFailure asserts that a command whose own output cannot
+// be written to reports the failure on os.Stderr and exits non-zero, rather
+// than panicking. Both paths that write a help message are covered.
+func TestRunReportsOutputFailure(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  *Command
+		args []string
+	}{
+		{
+			name: "Help",
+			cmd: NewCommand("test", "").
+				HandleFunc(func(ctx context.Context, inv *Invocation) error {
+					return nil
+				}),
+			args: []string{"--help"},
+		},
+		{
+			name: "NoHandler",
+			cmd:  NewCommand("test", ""),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.cmd.Output(errWriter{}, errWriter{})
+			var code int
+			stderr := captureStderr(t, func() {
+				code = tt.cmd.Run(context.Background(), tt.args)
+			})
+			if code == 0 {
+				t.Errorf("exit code = 0, want non-zero")
+			}
+			if want := "xflags: write failed\n"; stderr != want {
+				t.Errorf("os.Stderr = %q, want %q", stderr, want)
+			}
+		})
+	}
+}
+
+// TestHandlerReceivesInvocation asserts that a handler is told how it was
+// called: which command ran, the path it was reached by, and the arguments
+// after the terminator.
+func TestHandlerReceivesInvocation(t *testing.T) {
+	var got *Invocation
+	add := NewCommand("add", "").
+		WithTerminator().
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+			got = inv
+			return nil
+		})
+	app := NewCommand("myapp", "").
+		Subcommands(NewCommand("remote", "").Subcommands(add))
+
+	args := []string{"remote", "add", "--", "origin"}
+	if code := app.Run(context.Background(), args); code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if got == nil {
+		t.Fatal("handler was not called")
+	}
+	assertStrings(t, []string{"myapp", "remote", "add"}, got.Path)
+	assertStrings(t, []string{"origin"}, got.Args)
+	if want := add; got.Cmd != want {
+		t.Errorf("Cmd = %v, want %v", got.Cmd, want)
+	}
+}
+
+func ExampleInvocation() {
+	// A team writes this command without knowing where it will be mounted,
+	// so it reads its own name out of the invocation rather than repeating
+	// it in the message.
+	add := NewCommand("add", "Add a remote").
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+			return UsageErrorf(
+				"no remote named: try \"%s --help\"",
+				strings.Join(inv.Path, " "),
+			)
+		})
+
+	// Whoever composes the binary decides where it hangs.
+	app := NewCommand("myapp", "").
+		Output(os.Stdout, os.Stdout). // for tests
+		Subcommands(NewCommand("remote", "Manage remotes").Subcommands(add))
+
+	fmt.Println("exit code:", RunWithArgs(context.Background(), app, "remote", "add"))
+	// Output:
+	// Error: no remote named: try "myapp remote add --help"
+	// exit code: 2
 }

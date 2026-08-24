@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,14 +13,38 @@ import (
 
 // TODO: Allow packages to declare global flags that are accessible on init.
 
-// A HandlerFunc is a function that handles the invokation a command specified
-// by command line arguments.
-//
-// Args will receive any arguments ignored by the parser after the "--"
-// terminator if it is enabled.
-type HandlerFunc func(args []string) int
+// An Invocation is the result of parsing a command line. It records which
+// command the arguments named and what was left for its handler.
+type Invocation struct {
+	// Cmd is the command the arguments named.
+	Cmd *Command
 
-// Command describes a command that users may invoke from the command line.
+	// Path names each command, starting from the one that was parsed --
+	// conventionally the program itself, named for os.Args[0] -- and ending
+	// with the command that was invoked.
+	Path []string
+
+	// Args holds any arguments that followed a "--" terminator.
+	Args []string
+}
+
+// A HandlerFunc handles the invocation of a command specified by command
+// line arguments.
+//
+// ctx is the context given to Run, so a handler that does anything
+// cancellable should honour it. See NotifyContext for a context that is
+// cancelled on SIGINT or SIGTERM.
+//
+// inv describes the invocation: the command that was named, the path it was
+// reached by, and any arguments the parser ignored after the "--"
+// terminator.
+//
+// Returning nil exits with code 0 and returning an error exits with code 1,
+// unless the error implements ExitCoder, in which case it names its own
+// code. See Command.Run for the whole contract.
+type HandlerFunc func(ctx context.Context, inv *Invocation) error
+
+// Command configures a command that users may invoke from the command line.
 //
 // Programs should not create Command directly and instead use NewCommand to
 // construct one.
@@ -40,8 +65,6 @@ type Command struct {
 	// defaultGroup is the implicit "options" flag group appended to by
 	// Flags, created lazily on first use so an unused group never appears.
 	defaultGroup *FlagGroup
-
-	args []string
 }
 
 // NewCommand returns a new Command with the given name and usage string.
@@ -54,21 +77,6 @@ func NewCommand(name, usage string) *Command {
 
 func (c *Command) String() string { return c.name }
 
-// Args returns any command line arguments specified after the "--" terminator
-// if it was enabled. Args is only populated after the command line is
-// successfully parsed.
-func (c *Command) Args() []string { return c.args }
-
-// Arg returns the i'th argument specified after the "--" terminator if it was enabled. Arg(0) is
-// the first remaining argument after flags the terminator. Arg returns an empty string if the
-// requested element does not exist.
-func (c *Command) Arg(i int) string {
-	if i < 0 || i >= len(c.args) {
-		return ""
-	}
-	return c.args[i]
-}
-
 // Parse parses the given set of command line arguments and stores the value of
 // each argument in each command flag's target. The rules for each flag are
 // checked and any errors are returned.
@@ -76,18 +84,13 @@ func (c *Command) Arg(i int) string {
 // If -h or --help are specified, a HelpError will be returned containing the
 // subcommand that was specified.
 //
-// The returned *Command will be this command or one of its subcommands if
-// specified by the command line arguments.
-func (c *Command) Parse(args []string) (*Command, error) {
+// The returned Invocation names this command, or one of its subcommands if
+// the arguments specified one.
+func (c *Command) Parse(args []string) (*Invocation, error) {
 	if err := c.validate(); err != nil {
 		return nil, err
 	}
-	cmd, args, err := newArgParser(c, args).Parse()
-	if err != nil {
-		return nil, err
-	}
-	cmd.args = args
-	return cmd, nil
+	return newArgParser(c, args).Parse()
 }
 
 // root returns the root of the command tree c belongs to, which is c itself
@@ -194,18 +197,18 @@ func (c *Command) Describe() (*desc.Command, error) {
 	if err := root.validateTree(); err != nil {
 		return nil, err
 	}
-	nodes := make(map[*Command]*desc.Command)
-	root.describe(nil, nodes)
-	return nodes[c], nil
+	nodeMap := make(map[*Command]*desc.Command)
+	root.describe(nil, nodeMap)
+	return nodeMap[c], nil
 }
 
 // describe recursively describes the command tree rooted at c, setting
 // parent as the Parent of the resulting node, and recording every node in
-// nodes so callers can look up the node for any source *Command after
+// nodeMap so callers can look up the node for any source *Command after
 // describing from the root.
 func (c *Command) describe(
 	parent *desc.Command,
-	nodes map[*Command]*desc.Command,
+	nodeMap map[*Command]*desc.Command,
 ) *desc.Command {
 	node := &desc.Command{
 		Parent:         parent,
@@ -215,12 +218,12 @@ func (c *Command) describe(
 		Hidden:         c.hidden,
 		WithTerminator: c.withTerminator,
 	}
-	nodes[c] = node
+	nodeMap[c] = node
 	for _, group := range c.flagGroups {
 		node.FlagGroups = append(node.FlagGroups, group.describe())
 	}
 	for _, sub := range c.subcommands {
-		node.Subcommands = append(node.Subcommands, sub.describe(node, nodes))
+		node.Subcommands = append(node.Subcommands, sub.describe(node, nodeMap))
 	}
 	return node
 }
@@ -239,55 +242,69 @@ func (c *Command) output() (stdout, stderr io.Writer) {
 }
 
 // Run parses the given set of command line arguments and calls the handler
-// for the command or subcommand specified by the arguments.
+// for the command or subcommand specified by the arguments. It returns the
+// exit code the program should terminate with, which follows a three-value
+// contract:
 //
-// If -h or --help are specified, usage information will be printed to os.Stdout
-// and the return code will be 0.
+//	0  the handler returned nil, or -h or --help was given
+//	1  the handler returned an error
+//	2  the command line was wrong, or named a command with no handler
 //
-// If a command is invoked that has no handler, usage information will be
-// printed to os.Stderr and the return code will be non-zero.
-func (c *Command) Run(args []string) int {
-	target, err := c.Parse(args)
+// A handler may name its own exit code by returning an error that implements
+// ExitCoder; see Exit and UsageErrorf.
+//
+// If -h or --help are specified, usage information is printed to the
+// command's stdout. Errors, including a command invoked with no handler, are
+// reported on its stderr. See Output.
+//
+// ctx is passed to the handler unchanged. See NotifyContext for a context
+// that is cancelled on SIGINT or SIGTERM.
+func (c *Command) Run(ctx context.Context, args []string) int {
+	inv, err := c.Parse(args)
 	if err != nil {
 		return c.handleErr(err)
 	}
-	if target.handlerFunc == nil {
-		_, stderr := target.output()
-		if err := target.WriteUsage(stderr); err != nil {
-			panic(err)
+	if inv.Cmd.handlerFunc == nil {
+		_, stderr := inv.Cmd.output()
+		if err := inv.Cmd.WriteUsage(stderr); err != nil {
+			return reportFatal(err)
 		}
-		return 1
+		return exitUsage
 	}
-	return target.handlerFunc(target.args)
+	return inv.Cmd.handleErr(inv.Cmd.handlerFunc(ctx, inv))
 }
 
+// handleErr reports err on the appropriate output for the command that
+// produced it and returns the exit code the program should terminate with.
 func (c *Command) handleErr(err error) int {
 	if err == nil {
-		return 0
+		return exitSuccess
 	}
 	var helpErr *HelpError
 	if errors.As(err, &helpErr) {
 		stdout, _ := helpErr.Cmd.output()
-		if stdout != os.Stdout {
-			if f, ok := stdout.(*os.File); ok {
-				panic(f.Name())
-			}
-			panic(stdout)
-		}
 		if err := helpErr.Cmd.WriteUsage(stdout); err != nil {
-			panic(err)
+			return reportFatal(err)
 		}
-		return 0
+		return exitSuccess
 	}
 	var argErr *ArgumentError
 	if errors.As(err, &argErr) {
 		_, stderr := argErr.Cmd.output()
 		fmt.Fprintf(stderr, "Argument error: %s\n", argErr.String())
-		return 1
+		return exitUsage
 	}
 	_, stderr := c.output()
-	fmt.Fprintf(stderr, "Error: %v\n", errStr(err))
-	return 1
+	fmt.Fprintf(stderr, "Error: %s\n", errStr(err))
+	return exitCode(err)
+}
+
+// reportFatal reports a failure to write to a command's own output, which is
+// the one failure that output cannot report itself, and returns the exit
+// code to terminate with.
+func reportFatal(err error) int {
+	fmt.Fprintf(os.Stderr, "xflags: %s\n", errStr(err))
+	return exitFailure
 }
 
 // WriteUsage prints a help message to the given Writer using the configured
@@ -318,8 +335,8 @@ func (c *Command) Synopsis(s string) *Command {
 }
 
 // HandleFunc registers the handler for the command. If no handler is
-// specified and the command is invoked, it will print usage information to
-// stderr.
+// specified and the command is invoked, Run prints usage information to
+// stderr and exits with the usage error code.
 func (c *Command) HandleFunc(handler HandlerFunc) *Command {
 	c.handlerFunc = handler
 	return c

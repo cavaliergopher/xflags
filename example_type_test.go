@@ -3,6 +3,7 @@
 package xflags
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -31,9 +32,9 @@ func (c *exampleCommand) Command() *Command {
 // If WithTerminator is specified for the App command, any arguments given after
 // the "--" terminator will be passed in as the args parameter without any
 // further parsing.
-func (c *exampleCommand) Run(args []string) int {
+func (c *exampleCommand) Run(ctx context.Context, inv *Invocation) error {
 	fmt.Printf("%s is a variety of species %s\n", c.GopherType, c.Species)
-	return 0
+	return nil
 }
 
 // ExampleCommand is a *Command built from a global instance of the
@@ -43,18 +44,22 @@ func (c *exampleCommand) Run(args []string) int {
 var ExampleCommand = (&exampleCommand{}).Command()
 
 func Example_customTypes() {
+	ctx := context.Background()
+
 	fmt.Println("+ example --help")
-	RunWithArgs(ExampleCommand, "--help")
+	RunWithArgs(ctx, ExampleCommand, "--help")
 
 	// Most programs will call the following from main:
 	//
 	//     func main() {
-	//         os.Exit(xflags.Run(ExampleCommand))
+	//         ctx, stop := xflags.NotifyContext(context.Background())
+	//         defer stop()
+	//         os.Exit(xflags.Run(ctx, ExampleCommand))
 	//     }
 	//
 	fmt.Println()
 	fmt.Println("+ example --gopher_type 'Goldman's pocket gopher'")
-	RunWithArgs(ExampleCommand, "--gopher_type", "Goldman's pocket gopher")
+	RunWithArgs(ctx, ExampleCommand, "--gopher_type", "Goldman's pocket gopher")
 	// Output:
 	// + example --help
 	// Usage: example [OPTIONS]

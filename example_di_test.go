@@ -5,7 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
+	"strings"
 )
 
 // DBClient is our main command with two subcommands.
@@ -24,37 +24,31 @@ var DeleteCommand = NewCommand("delete", "Delete DB resources").
 	HandleFunc(Wrap(Delete))
 
 // Wrap returns a HandlerFunc that initialises common dependencies for command handlers and then
-// injects them into fn.
-func Wrap(fn func(ctx context.Context, db *sql.DB) error) HandlerFunc {
-	return func(args []string) (exitCode int) {
-		// build a context
-		ctx := context.Background()
-
+// injects them into fn. The invocation is passed along too, so a handler behind a wrapper can
+// still tell how it was called.
+func Wrap(fn func(ctx context.Context, inv *Invocation, db *sql.DB) error) HandlerFunc {
+	return func(ctx context.Context, inv *Invocation) error {
 		// build a database connection
 		var db *sql.DB = nil
 
-		// call the handler with all dependencies
-		if err := fn(ctx, db); err != nil {
-			fmt.Fprint(os.Stderr, err)
-			return 1
-		}
-		return 0
+		// call the handler with the invocation and all dependencies
+		return fn(ctx, inv, db)
 	}
 }
 
 // Get is a custom handler for GetCommand
-func Get(ctx context.Context, db *sql.DB) error {
-	fmt.Println("Issued a get query")
+func Get(ctx context.Context, inv *Invocation, db *sql.DB) error {
+	fmt.Printf("%s: issued a get query\n", strings.Join(inv.Path, " "))
 	return nil
 }
 
 // Delete is a custom handler for DeleteCommand
-func Delete(ctx context.Context, db *sql.DB) error {
-	fmt.Println("Issued a delete query")
+func Delete(ctx context.Context, inv *Invocation, db *sql.DB) error {
+	fmt.Printf("%s: issued a delete query\n", strings.Join(inv.Path, " "))
 	return nil
 }
 
 func Example_dependencyInjection() {
-	RunWithArgs(DBClient, "get")
-	// Output: Issued a get query
+	RunWithArgs(context.Background(), DBClient, "get")
+	// Output: db-client get: issued a get query
 }

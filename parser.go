@@ -13,6 +13,7 @@ type argParser struct {
 	tokens            []string
 	args              []string
 	cmd               *Command
+	path              []string
 	isTerminated      bool
 	flagsByName       map[string]*Flag
 	subcommandsByName map[string]*Command
@@ -36,6 +37,7 @@ func newArgParser(cmd *Command, tokens []string) *argParser {
 func (c *argParser) setCommand(cmd *Command) {
 	// accumulate flags
 	c.cmd = cmd
+	c.path = append(c.path, cmd.name)
 	c.positionals = make([]*Flag, 0)
 	for _, group := range cmd.flagGroups {
 		for _, flag := range group.flags {
@@ -58,23 +60,23 @@ func (c *argParser) setCommand(cmd *Command) {
 	}
 }
 
-func (c *argParser) Parse() (cmd *Command, args []string, err error) {
+func (c *argParser) Parse() (*Invocation, error) {
 	for {
 		arg, ok := c.next()
 		if !ok {
 			break
 		}
-		if err = c.dispatch(arg); err != nil {
-			return
+		if err := c.dispatch(arg); err != nil {
+			return nil, err
 		}
 	}
-	if err = c.parseEnvVars(); err != nil {
-		return
+	if err := c.parseEnvVars(); err != nil {
+		return nil, err
 	}
-	if err = c.checkNArgs(); err != nil {
-		return
+	if err := c.checkNArgs(); err != nil {
+		return nil, err
 	}
-	return c.cmd, c.args, nil
+	return &Invocation{Cmd: c.cmd, Path: c.path, Args: c.args}, nil
 }
 
 func (c *argParser) parseEnvVars() error {
