@@ -66,9 +66,9 @@ func helloWorld(ctx context.Context, inv *Invocation) error {
 	if len(flagMessage) > 0 {
 		s = strings.Join(flagMessage, " ")
 	}
-	fmt.Print(s)
+	fmt.Fprint(inv.Stdout, s)
 	if !flagNoNewLines {
-		fmt.Print("\n")
+		fmt.Fprint(inv.Stdout, "\n")
 	}
 	return nil
 }

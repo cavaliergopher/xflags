@@ -28,11 +28,14 @@ should survive.
 
     0  the handler returned nil, or -h or --help was given
     1  the handler returned an error
-    2  the command line was wrong, or named a command with no handler
+    2  the command line or the command tree was wrong, or there is no handler
 
-Code 2 covers everything decided before the handler runs — parse errors,
-argument errors, and a command that has no handler to run — so a caller
-seeing 2 knows nothing was executed.
+Code 2 covers everything decided before the handler runs — configuration
+errors, parse errors, argument errors, and a command that has no handler to
+run — so a caller seeing 2 knows nothing was executed. A misconfigured tree
+is a defect in the program rather than in the command line, but it is still
+decided before the handler runs and still means nothing was executed, which
+is what the code promises.
 
 A handler's error chain is searched with `errors.As` for
 

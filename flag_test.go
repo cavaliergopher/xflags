@@ -85,7 +85,7 @@ func ExampleFlag_Validate() {
 	var ip string
 
 	cmd := NewCommand("ping", "").
-		Output(os.Stdout, os.Stdout). // for tests
+		Stderr(os.Stdout). // for tests
 		Flags(
 			String(&ip, "ip", "127.0.0.1", "IP Address to ping").
 				Validate(func(arg string) error {
@@ -96,7 +96,7 @@ func ExampleFlag_Validate() {
 				}),
 		).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
-			fmt.Printf("ping: %s\n", ip)
+			fmt.Fprintf(inv.Stdout, "ping: %s\n", ip)
 			return nil
 		})
 
@@ -126,7 +126,7 @@ func ExampleBitField() {
 			BitField(&mode, UserExecute, "x", false, "Enable user execute"),
 		).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
-			fmt.Printf("File mode: %s\n", os.FileMode(mode))
+			fmt.Fprintf(inv.Stdout, "File mode: %s\n", os.FileMode(mode))
 			return nil
 		})
 
@@ -139,7 +139,7 @@ func ExampleFunc() {
 	var ip net.IP
 
 	cmd := NewCommand("ping", "").
-		Output(os.Stdout, os.Stdout). // for tests
+		Stderr(os.Stdout). // for tests
 		Flags(
 			Func("ip", "IP address to ping", func(s string) error {
 				ip = net.ParseIP(s)
@@ -150,7 +150,7 @@ func ExampleFunc() {
 			}),
 		).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
-			fmt.Printf("ping: %s\n", ip)
+			fmt.Fprintf(inv.Stdout, "ping: %s\n", ip)
 			return nil
 		})
 

@@ -76,7 +76,14 @@ func (c *argParser) Parse() (*Invocation, error) {
 	if err := c.checkNArgs(); err != nil {
 		return nil, err
 	}
-	return &Invocation{Cmd: c.cmd, Path: c.path, Args: c.args}, nil
+	return &Invocation{
+		Cmd:    c.cmd,
+		Path:   c.path,
+		Args:   c.args,
+		Stdin:  c.cmd.getStdin(),
+		Stdout: c.cmd.getStdout(),
+		Stderr: c.cmd.getStderr(),
+	}, nil
 }
 
 func (c *argParser) parseEnvVars() error {

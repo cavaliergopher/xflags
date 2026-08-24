@@ -33,7 +33,7 @@ func (c *exampleCommand) Command() *Command {
 // the "--" terminator will be passed in as the args parameter without any
 // further parsing.
 func (c *exampleCommand) Run(ctx context.Context, inv *Invocation) error {
-	fmt.Printf("%s is a variety of species %s\n", c.GopherType, c.Species)
+	fmt.Fprintf(inv.Stdout, "%s is a variety of species %s\n", c.GopherType, c.Species)
 	return nil
 }
 

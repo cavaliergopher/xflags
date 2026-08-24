@@ -14,7 +14,8 @@ import (
 // TODO: Allow packages to declare global flags that are accessible on init.
 
 // An Invocation is the result of parsing a command line. It records which
-// command the arguments named and what was left for its handler.
+// command the arguments named, what was left for its handler, and the
+// streams the handler should read and write.
 type Invocation struct {
 	// Cmd is the command the arguments named.
 	Cmd *Command
@@ -26,6 +27,15 @@ type Invocation struct {
 
 	// Args holds any arguments that followed a "--" terminator.
 	Args []string
+
+	// Stdin, Stdout and Stderr are the streams the handler should use in
+	// place of the process streams, so that whoever composes the binary decides
+	// where its input and output go. Each is resolved independently from the
+	// invoked command and its ancestors, defaulting to the matching process
+	// stream; see Command.Stdin, Command.Stdout and Command.Stderr.
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // A HandlerFunc handles the invocation of a command specified by command
@@ -36,8 +46,12 @@ type Invocation struct {
 // cancelled on SIGINT or SIGTERM.
 //
 // inv describes the invocation: the command that was named, the path it was
-// reached by, and any arguments the parser ignored after the "--"
-// terminator.
+// reached by, any arguments the parser ignored after the "--" terminator,
+// and the streams to work with. A handler should read inv.Stdin and write
+// inv.Stdout and inv.Stderr rather than the process streams, so that a
+// caller that redirects the command captures its output too. Nothing
+// enforces it; a handler that reaches for os.Stdout simply escapes the
+// redirection.
 //
 // Returning nil exits with code 0 and returning an error exits with code 1,
 // unless the error implements ExitCoder, in which case it names its own
@@ -59,6 +73,7 @@ type Command struct {
 	subcommands    []*Command
 	formatFunc     FormatFunc
 	handlerFunc    HandlerFunc
+	stdin          io.Reader
 	stdout         io.Writer
 	stderr         io.Writer
 
@@ -228,17 +243,39 @@ func (c *Command) describe(
 	return node
 }
 
-// output returns stdout and stderr, inheriting from parents and defaulting to
-// OS defaults.
-func (c *Command) output() (stdout, stderr io.Writer) {
-	stdout, stderr = c.stdout, c.stderr
-	if stdout == nil && stderr == nil {
-		if c.parent != nil {
-			return c.parent.output()
+// getStdin returns the reader the command's handler reads, inheriting from
+// the nearest ancestor that set one and defaulting to the process stream.
+// Each stream resolves on its own, so redirecting one leaves the others
+// where they were.
+func (c *Command) getStdin() io.Reader {
+	for p := c; p != nil; p = p.parent {
+		if p.stdin != nil {
+			return p.stdin
 		}
-		return os.Stdout, os.Stderr
 	}
-	return
+	return os.Stdin
+}
+
+// getStdout returns the writer for the command's help messages and for
+// whatever its handler writes to Invocation.Stdout. See getStdin.
+func (c *Command) getStdout() io.Writer {
+	for p := c; p != nil; p = p.parent {
+		if p.stdout != nil {
+			return p.stdout
+		}
+	}
+	return os.Stdout
+}
+
+// getStderr returns the writer for the command's error messages and for
+// whatever its handler writes to Invocation.Stderr. See getStdin.
+func (c *Command) getStderr() io.Writer {
+	for p := c; p != nil; p = p.parent {
+		if p.stderr != nil {
+			return p.stderr
+		}
+	}
+	return os.Stderr
 }
 
 // Run parses the given set of command line arguments and calls the handler
@@ -248,14 +285,15 @@ func (c *Command) output() (stdout, stderr io.Writer) {
 //
 //	0  the handler returned nil, or -h or --help was given
 //	1  the handler returned an error
-//	2  the command line was wrong, or named a command with no handler
+//	2  the command line or the command tree was wrong, or there is no handler
 //
 // A handler may name its own exit code by returning an error that implements
 // ExitCoder; see Exit and UsageErrorf.
 //
 // If -h or --help are specified, usage information is printed to the
 // command's stdout. Errors, including a command invoked with no handler, are
-// reported on its stderr. See Output.
+// reported on its stderr. The handler is given the same streams on its
+// Invocation. See Stdin, Stdout and Stderr.
 //
 // ctx is passed to the handler unchanged. See NotifyContext for a context
 // that is cancelled on SIGINT or SIGTERM.
@@ -265,8 +303,7 @@ func (c *Command) Run(ctx context.Context, args []string) int {
 		return c.handleErr(err)
 	}
 	if inv.Cmd.handlerFunc == nil {
-		_, stderr := inv.Cmd.output()
-		if err := inv.Cmd.WriteUsage(stderr); err != nil {
+		if err := inv.Cmd.WriteUsage(inv.Stderr); err != nil {
 			return reportFatal(err)
 		}
 		return exitUsage
@@ -282,20 +319,17 @@ func (c *Command) handleErr(err error) int {
 	}
 	var helpErr *HelpError
 	if errors.As(err, &helpErr) {
-		stdout, _ := helpErr.Cmd.output()
-		if err := helpErr.Cmd.WriteUsage(stdout); err != nil {
+		if err := helpErr.Cmd.WriteUsage(helpErr.Cmd.getStdout()); err != nil {
 			return reportFatal(err)
 		}
 		return exitSuccess
 	}
 	var argErr *ArgumentError
 	if errors.As(err, &argErr) {
-		_, stderr := argErr.Cmd.output()
-		fmt.Fprintf(stderr, "Argument error: %s\n", argErr.String())
+		fmt.Fprintf(argErr.Cmd.getStderr(), "Argument error: %s\n", argErr.String())
 		return exitUsage
 	}
-	_, stderr := c.output()
-	fmt.Fprintf(stderr, "Error: %s\n", errStr(err))
+	fmt.Fprintf(c.getStderr(), "Error: %s\n", errStr(err))
 	return exitCode(err)
 }
 
@@ -409,8 +443,32 @@ func (c *Command) WithTerminator() *Command {
 	return c
 }
 
-// Output sets the destination for usage and error messages.
-func (c *Command) Output(stdout, stderr io.Writer) *Command {
-	c.stdout, c.stderr = stdout, stderr
+// Stdin sets the source the command's handler reads as Invocation.Stdin.
+//
+// A nil reader inherits the stream from the command's parent, and is
+// os.Stdin at the root.
+func (c *Command) Stdin(r io.Reader) *Command {
+	c.stdin = r
+	return c
+}
+
+// Stdout sets the destination for the command's usage messages and for
+// whatever its handler writes to Invocation.Stdout.
+//
+// A nil writer inherits the stream from the command's parent, and is
+// os.Stdout at the root.
+func (c *Command) Stdout(w io.Writer) *Command {
+	c.stdout = w
+	return c
+}
+
+// Stderr sets the destination for the command's error messages and for
+// whatever its handler writes to Invocation.Stderr. Each stream is set on
+// its own, so redirecting stdout still leaves errors on stderr.
+//
+// A nil writer inherits the stream from the command's parent, and is
+// os.Stderr at the root.
+func (c *Command) Stderr(w io.Writer) *Command {
+	c.stderr = w
 	return c
 }

@@ -76,3 +76,45 @@ parse result, which keeps the source type sealed.
 - `Path[0]` is whatever `NewCommand` was given, commonly `os.Args[0]`, so a
   message built from it may show a full binary path. That is the composing
   author's call, not the package's.
+
+## Note: the streams travel with the invocation
+
+Added 2026-08-23, with the same status as the decision above.
+
+`Command.Output(stdout, stderr)` was read only by help and error messages,
+so a program that pointed a command at a buffer captured the
+`Argument error:` line and nothing the handler printed, which is most of
+what a CLI emits. There was no stdin in the API at all. `Invocation`
+therefore carries `Stdin`, `Stdout` and `Stderr`, resolved from the invoked
+command and its ancestors, and `Output` gives way to `Command.Stdin`,
+`Command.Stdout` and `Command.Stderr`, one setter per stream.
+
+This follows from the decision above rather than qualifying it. The premise
+was that a command is mounted by someone other than its author; where its
+output goes is another thing that author cannot know, decided in the same
+place and at the same time as the path. The invocation is already where a
+handler looks for such answers, so there is nothing new to discover, and a
+handler that writes to `os.Stdout` cannot be tested by the very party who
+mounted it.
+
+Consequences, beyond those above:
+
+- `Invocation` is no longer only "what the command line said". It is what
+  the handler needs in order to run, which is the wider promise and the one
+  worth keeping: anything else the package resolves on a handler's behalf
+  belongs here too.
+- Three more field names join the v1 surface, and handlers should use them.
+  Nothing enforces it, as nothing can: `fmt.Println` in a handler is a
+  defect the package can document but not detect. This mirrors `flag`,
+  which offers `SetOutput` and cannot stop anyone printing past it.
+- Each stream is set and resolved on its own, so redirecting stdout leaves
+  errors on stderr. Taking both writers at once meant inheriting them as a
+  set: `Output(&buf, nil)` resolved a nil stderr and panicked on the first
+  error message, and saying "leave this one alone" required passing a nil.
+- One word now follows each stream from `Command.Stdout` through the field
+  and its resolver to `Invocation.Stdout`. That is worth more than matching
+  `flag.FlagSet.SetOutput`, which has a single output stream and so never
+  had to name a second one.
+- `Parse` reads `os.Stdin`, `os.Stdout` and `os.Stderr` to build the
+  invocation, so the streams are the process streams as they stood when
+  argv was parsed. `Describe` remains the entry point that touches nothing.

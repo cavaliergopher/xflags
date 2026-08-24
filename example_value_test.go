@@ -35,7 +35,7 @@ func ExampleValue() {
 			IPVar(&ip, "ip", net.IPv6zero, "IP address to ping"),
 		).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
-			fmt.Printf("ping: %s\n", ip)
+			fmt.Fprintf(inv.Stdout, "ping: %s\n", ip)
 			return nil
 		})
 

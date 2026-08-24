@@ -59,9 +59,20 @@ A handler may be defined for your command by
 
 The handler is given the context passed to Run, which NotifyContext cancels on
 SIGINT or SIGTERM, and an Invocation describing how it was called: the command
-that was named, the path it was reached by, and any arguments after the "--"
-terminator. A command is often mounted in a tree its author does not own, so
-the path is something only the invocation can tell it.
+that was named, the path it was reached by, any arguments after the "--"
+terminator, and the streams to work with. A command is often mounted in a tree
+its author does not own, so the path is something only the invocation can tell
+it.
+
+A handler should read and write the streams on its invocation rather than the
+process streams, for the same reason: whoever composes the binary decides where
+the input and output of any command in the tree go, with Command.Stdin,
+Command.Stdout and Command.Stderr.
+
+	func MyAppHandler(ctx context.Context, inv *xflags.Invocation) error {
+		fmt.Fprintln(inv.Stdout, "Hello, World!")
+		return nil
+	}
 
 Flag parsing will stop after "--" only if a command sets WithTerminator. All arguments following the
 terminator are passed to the command handler as Invocation.Args.
@@ -94,7 +105,7 @@ Run returns the exit code the program should terminate with:
 
 	0  the handler returned nil, or -h or --help was given
 	1  the handler returned an error
-	2  the command line was wrong, or named a command with no handler
+	2  the command line or the command tree was wrong, or there is no handler
 
 A handler names its own exit code by returning an error that implements
 ExitCoder. Exit attaches a code to an error, UsageErrorf reports a misuse the

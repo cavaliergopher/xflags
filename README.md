@@ -39,7 +39,7 @@ var App = xflags.NewCommand("greet", "Print a greeting").
 		xflags.String(&flagName, "name", "World", "Who to greet"),
 	).
 	HandleFunc(func(ctx context.Context, inv *xflags.Invocation) error {
-		fmt.Printf("Hello, %s!\n", flagName)
+		fmt.Fprintf(inv.Stdout, "Hello, %s!\n", flagName)
 		return nil
 	})
 

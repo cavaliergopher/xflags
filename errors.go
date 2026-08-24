@@ -84,6 +84,11 @@ type xflagsErr struct {
 
 func (e *xflagsErr) Unwrap() error { return e.Err }
 
+// ExitCode reports a configuration error as a usage error rather than a
+// handler failure. A malformed tree is decided before the handler runs,
+// which is what code 2 covers.
+func (e *xflagsErr) ExitCode() int { return exitUsage }
+
 func (e *xflagsErr) Error() string { return "xflags: " + e.String() }
 
 func (e *xflagsErr) String() string {

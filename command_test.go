@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -643,6 +644,16 @@ func TestRunExitCodes(t *testing.T) {
 			wantErr:  "Usage: test\n",
 		},
 		{
+			name: "ConfigError",
+			cmd: NewCommand("test", "").
+				Flags(
+					String(new(string), "foo", "", ""),
+					String(new(string), "foo", "", ""),
+				),
+			wantCode: 2,
+			wantErr:  "Error: test: flag already declared: --foo\n",
+		},
+		{
 			name:     "Exit",
 			cmd:      handles(Exit(errors.New("boom"), 3)),
 			wantCode: 3,
@@ -722,7 +733,7 @@ func TestRunReportsOutputFailure(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.cmd.Output(errWriter{}, errWriter{})
+			tt.cmd.Stdout(errWriter{}).Stderr(errWriter{})
 			var code int
 			stderr := captureStderr(t, func() {
 				code = tt.cmd.Run(context.Background(), tt.args)
@@ -765,6 +776,80 @@ func TestHandlerReceivesInvocation(t *testing.T) {
 	}
 }
 
+// TestHandlerStreams asserts that a handler reads and writes the streams on
+// its invocation, and that they are resolved from wherever the command is
+// mounted: redirecting the root captures what a subcommand's handler prints,
+// which is most of what a CLI emits.
+func TestHandlerStreams(t *testing.T) {
+	echo := NewCommand("echo", "").
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+			if _, err := io.Copy(inv.Stdout, inv.Stdin); err != nil {
+				return err
+			}
+			fmt.Fprint(inv.Stderr, "echoed")
+			return nil
+		})
+	app := NewCommand("app", "").
+		Stdin(strings.NewReader("hello")).
+		Subcommands(echo)
+
+	var stdout, stderr strings.Builder
+	app.Stdout(&stdout).Stderr(&stderr)
+	if code := app.Run(context.Background(), []string{"echo"}); code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	assertString(t, "hello", stdout.String())
+	assertString(t, "echoed", stderr.String())
+}
+
+// TestStreamsResolveIndependently asserts that redirecting one stream leaves
+// the others at the process defaults. They used to be inherited all or
+// nothing, so redirecting stdout alone resolved a nil stderr and the first
+// error message panicked.
+func TestStreamsResolveIndependently(t *testing.T) {
+	var stdout strings.Builder
+	cmd := NewCommand("test", "").
+		Stdout(&stdout).
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+			return errors.New("boom")
+		})
+
+	var code int
+	stderr := captureStderr(t, func() {
+		code = cmd.Run(context.Background(), nil)
+	})
+	if got, want := code, 1; got != want {
+		t.Errorf("exit code = %d, want %d", got, want)
+	}
+	if got, want := stderr, "Error: boom\n"; got != want {
+		t.Errorf("os.Stderr = %q, want %q", got, want)
+	}
+	assertString(t, "", stdout.String())
+}
+
+// TestStreamsDefaultToProcess asserts that a command nobody has redirected
+// hands its handler the process streams, rather than nil.
+func TestStreamsDefaultToProcess(t *testing.T) {
+	var got *Invocation
+	cmd := NewCommand("test", "").
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+			got = inv
+			return nil
+		})
+	if code := cmd.Run(context.Background(), nil); code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if got.Stdin != os.Stdin {
+		t.Errorf("Stdin = %v, want os.Stdin", got.Stdin)
+	}
+	if got.Stdout != os.Stdout {
+		t.Errorf("Stdout = %v, want os.Stdout", got.Stdout)
+	}
+	if got.Stderr != os.Stderr {
+		t.Errorf("Stderr = %v, want os.Stderr", got.Stderr)
+	}
+}
+
 func ExampleInvocation() {
 	// A team writes this command without knowing where it will be mounted,
 	// so it reads its own name out of the invocation rather than repeating
@@ -779,7 +864,7 @@ func ExampleInvocation() {
 
 	// Whoever composes the binary decides where it hangs.
 	app := NewCommand("myapp", "").
-		Output(os.Stdout, os.Stdout). // for tests
+		Stderr(os.Stdout). // for tests
 		Subcommands(NewCommand("remote", "Manage remotes").Subcommands(add))
 
 	fmt.Println("exit code:", RunWithArgs(context.Background(), app, "remote", "add"))
