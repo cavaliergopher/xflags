@@ -95,7 +95,14 @@ func (c *Flag) Positional() *Flag {
 // line. Value.Set will be called once for each instance of the flag specified
 // in the command arguments.
 //
-// To disable min or max count checking, set their value to 0.
+// A count of 0 removes the bound, and so means something different at each
+// end: a min of 0 is no floor, making the flag optional, while a max of 0 is
+// no ceiling, letting it repeat without limit.
+//
+//	NArgs(0, 1)  optional, at most once -- the default
+//	NArgs(1, 1)  exactly once; see Required
+//	NArgs(0, 0)  optional, unbounded -- what Strings and Func set
+//	NArgs(1, 0)  required, unbounded
 func (c *Flag) NArgs(min, max int) *Flag {
 	c.minCount = min
 	c.maxCount = max
@@ -160,14 +167,18 @@ func (c *Flag) check() error {
 	if len(c.shortName) > 1 {
 		return newConfigErrorf(nil, nil, c, "short name must be one character in length")
 	}
-	if c.minCount < 0 ||
-		c.maxCount < 0 ||
-		(c.maxCount > 0 && c.minCount > c.maxCount) {
+	if c.minCount < 0 {
 		return newConfigErrorf(nil, nil, c,
-			"invalid NArgs: %d, %d",
-			c.minCount,
-			c.maxCount,
-		)
+			"minimum count must not be negative: %d", c.minCount)
+	}
+	if c.maxCount < 0 {
+		return newConfigErrorf(nil, nil, c,
+			"maximum count must not be negative: %d", c.maxCount)
+	}
+	// A max of 0 is unbounded, so it is never exceeded by the min.
+	if c.maxCount > 0 && c.minCount > c.maxCount {
+		return newConfigErrorf(nil, nil, c,
+			"minimum count %d exceeds maximum count %d", c.minCount, c.maxCount)
 	}
 	return nil
 }

@@ -515,10 +515,42 @@ func TestValidatePositionalAfterUnbounded(t *testing.T) {
 }
 
 func TestValidateInvalidNArgs(t *testing.T) {
-	var a string
-	assertParseError(t, NewCommand("test", "").Flags(
-		String(&a, "foo", "", "").NArgs(2, 1),
-	), "invalid NArgs")
+	for _, tt := range []struct {
+		name     string
+		min, max int
+		want     string
+	}{
+		{"MinExceedsMax", 2, 1, "minimum count 2 exceeds maximum count 1"},
+		{"NegativeMin", -1, 1, "minimum count must not be negative: -1"},
+		{"NegativeMax", 0, -1, "maximum count must not be negative: -1"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var a string
+			cmd := NewCommand("test", "").Flags(
+				String(&a, "foo", "", "").NArgs(tt.min, tt.max),
+			)
+			_, err := cmd.Parse(nil)
+			if err == nil {
+				t.Fatalf("NArgs(%d, %d): expected error, got nil", tt.min, tt.max)
+			}
+			if got, want := errorOrString(err), "--foo: "+tt.want; got != want {
+				t.Errorf("message = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// TestValidateUnboundedMaxIsNotExceeded asserts that a max of 0 means
+// unbounded rather than a ceiling the min can breach, so required-and-
+// repeatable is a valid configuration.
+func TestValidateUnboundedMaxIsNotExceeded(t *testing.T) {
+	var a []string
+	cmd := NewCommand("test", "").Flags(
+		Strings(&a, "foo", nil, "").NArgs(1, 0),
+	)
+	if _, err := cmd.Parse([]string{"--foo", "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestValidateShortNameTooLong(t *testing.T) {
