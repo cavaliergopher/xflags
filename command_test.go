@@ -782,6 +782,46 @@ func TestHandlerReceivesInvocation(t *testing.T) {
 	}
 }
 
+// TestParseReportsHelpRequested asserts that asking for help is reported on
+// the Invocation rather than as an error, naming the subcommand whose usage
+// was asked for, so a caller doing its own dispatch can tell help apart from
+// a failure.
+func TestParseReportsHelpRequested(t *testing.T) {
+	add := NewCommand("add", "")
+	app := NewCommand("myapp", "").Subcommands(add)
+
+	inv, err := app.Parse([]string{"add", "--help"})
+	if err != nil {
+		t.Fatalf("Parse() = %v, want no error", err)
+	}
+	if !inv.HelpRequested {
+		t.Error("HelpRequested = false, want true")
+	}
+	if want := add; inv.Cmd != want {
+		t.Errorf("Cmd = %v, want %v", inv.Cmd, want)
+	}
+}
+
+// TestHelpSkipsFlagRules asserts that help is reported for a command line the
+// user has not finished writing. Parsing stops at -h or --help, so a required
+// flag that was never given is not held against them -- help is most useful
+// to someone who does not yet know what to type.
+func TestHelpSkipsFlagRules(t *testing.T) {
+	var stdout strings.Builder
+	cmd := NewCommand("test", "").
+		Stdout(&stdout).
+		Flags(String(new(string), "name", "", "").Required()).
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+			t.Error("handler was called")
+			return nil
+		})
+
+	if got, want := cmd.Run(context.Background(), []string{"--help"}), 0; got != want {
+		t.Errorf("exit code = %d, want %d", got, want)
+	}
+	assertOutput(t, "stdout", stdout.String(), "Usage: test")
+}
+
 // TestHandlerStreams asserts that a handler reads and writes the streams on
 // its invocation, and that they are resolved from wherever the command is
 // mounted: redirecting the root captures what a subcommand's handler prints,

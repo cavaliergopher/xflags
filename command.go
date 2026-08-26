@@ -28,6 +28,12 @@ type Invocation struct {
 	// Args holds any arguments that followed a "--" terminator.
 	Args []string
 
+	// HelpRequested reports that -h or --help was given, in which case Cmd is
+	// the command whose usage was asked for and no handler should run. The
+	// rest of the command line is not parsed and the flag rules are not
+	// checked, so help works even on an otherwise incomplete command line.
+	HelpRequested bool
+
 	// Stdin, Stdout and Stderr are the streams the handler should use in
 	// place of the process streams, so that whoever composes the binary decides
 	// where its input and output go. Each is resolved independently from the
@@ -96,11 +102,12 @@ func (c *Command) String() string { return c.name }
 // each argument in each command flag's target. The rules for each flag are
 // checked and any errors are returned.
 //
-// If -h or --help are specified, a HelpError will be returned containing the
-// subcommand that was specified.
-//
 // The returned Invocation names this command, or one of its subcommands if
 // the arguments specified one.
+//
+// If -h or --help are specified, parsing stops there and the returned
+// Invocation has HelpRequested set. That is not an error: it is for the
+// caller to report the command's usage. See Command.Run.
 func (c *Command) Parse(args []string) (*Invocation, error) {
 	if err := c.validate(); err != nil {
 		return nil, err
@@ -294,6 +301,12 @@ func (c *Command) Run(ctx context.Context, args []string) int {
 	if err != nil {
 		return c.handleErr(err)
 	}
+	if inv.HelpRequested {
+		if err := inv.Cmd.WriteUsage(inv.Stdout); err != nil {
+			return fallbackToStderr(err)
+		}
+		return ExitCodeSuccess // Help was requested, not an error.
+	}
 	if inv.Cmd.handlerFunc == nil {
 		// Subcommand was invoked but its just a place holder.
 		// That's an argument error.
@@ -316,17 +329,9 @@ func (c *Command) handleErr(err error) int {
 
 	errTypeName := "Error"
 
-	var helpErr *helpError
 	var argErr *ArgumentError
 	var cfgErr *ConfigError
 	switch {
-	case errors.As(err, &helpErr):
-		// Special case handling for --help error sentinel.
-		if err := helpErr.Cmd.WriteUsage(helpErr.Cmd.getStdout()); err != nil {
-			return fallbackToStderr(err)
-		}
-		return ExitCodeSuccess // Help was requested, not an error.
-
 	case errors.As(err, &argErr):
 		errTypeName = "Argument error"
 

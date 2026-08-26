@@ -1,24 +1,11 @@
 package xflags
 
-import (
-	"fmt"
-	"os"
-)
+import "os"
 
 // TODO: fuzz tests?
 
 // argument to terminate parsing of all remaining arguments
 const terminator = "--"
-
-// helpError is the error returned if the -h or --help argument is specified
-// but no such flag is explicitly defined.
-type helpError struct {
-	Cmd *Command
-}
-
-func (err *helpError) Error() string {
-	return fmt.Sprintf("help requested for command: %s", err.Cmd)
-}
 
 type argParser struct {
 	tokens            []string
@@ -26,6 +13,7 @@ type argParser struct {
 	cmd               *Command
 	path              []string
 	isTerminated      bool
+	helpRequested     bool
 	flagsByName       map[string]*Flag
 	subcommandsByName map[string]*Command
 	flagsSeen         map[string]int
@@ -80,6 +68,12 @@ func (c *argParser) Parse() (*Invocation, error) {
 		if err := c.dispatch(arg); err != nil {
 			return nil, err
 		}
+		if c.helpRequested {
+			// Asking for help abandons the rest of the command line. The
+			// flag rules go unchecked so that help is still reported for a
+			// command line the user has not finished writing.
+			return c.invocation(), nil
+		}
 	}
 	if err := c.parseEnvVars(); err != nil {
 		return nil, err
@@ -87,14 +81,21 @@ func (c *argParser) Parse() (*Invocation, error) {
 	if err := c.checkNArgs(); err != nil {
 		return nil, err
 	}
+	return c.invocation(), nil
+}
+
+// invocation returns the Invocation describing the command line parsed so
+// far, naming the deepest command the parser descended into.
+func (c *argParser) invocation() *Invocation {
 	return &Invocation{
-		Cmd:    c.cmd,
-		Path:   c.path,
-		Args:   c.args,
-		Stdin:  c.cmd.getStdin(),
-		Stdout: c.cmd.getStdout(),
-		Stderr: c.cmd.getStderr(),
-	}, nil
+		Cmd:           c.cmd,
+		Path:          c.path,
+		Args:          c.args,
+		HelpRequested: c.helpRequested,
+		Stdin:         c.cmd.getStdin(),
+		Stdout:        c.cmd.getStdout(),
+		Stderr:        c.cmd.getStderr(),
+	}
 }
 
 func (c *argParser) parseEnvVars() error {
@@ -168,7 +169,8 @@ func (c *argParser) dispatch(token string) error {
 		return nil
 	}
 	if token == "-h" || token == "--help" {
-		return &helpError{c.cmd}
+		c.helpRequested = true
+		return nil
 	}
 	if isPositional(token) {
 		return c.dispatchPositional(token)
