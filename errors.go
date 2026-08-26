@@ -82,6 +82,10 @@ func (e *exitError) Error() string {
 // ConfigError indicates that an error was detected in the configuration of a
 // command or flag before arguments could be parsed. This is a developer error
 // and should be fixed in the code, not at runtime.
+//
+// Run reports it as "Program error: ...", which names the culprit rather
+// than the fault: the reader at a terminal did not write this configuration
+// and can only report it onward. See docs/adr/human-readable-errors.md.
 type ConfigError struct {
 	Err     error
 	Cmd     *Command
@@ -117,6 +121,10 @@ func (e *ConfigError) String() string {
 
 // ArgumentError indicates that an argument specified on the command line was
 // incorrect.
+//
+// Run reports it as "Argument error: ...", which tells the reader the command
+// line is theirs to retype. Both types exit 2, so the prefix is the only thing
+// distinguishing them.
 type ArgumentError struct {
 	Err     error
 	Cmd     *Command
