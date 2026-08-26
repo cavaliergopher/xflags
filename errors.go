@@ -8,9 +8,9 @@ import (
 // The exit codes Run terminates with. A handler may name any other code by
 // returning an error that implements ExitCoder.
 const (
-	ExitCodeSuccess     = 0 // A handler returned nil, or help was requested.
-	ExitCodeFailure     = 1 // A handler returned an error.
-	ExitCodeBadArgument = 2 // The command line, or the command it names, failed validation.
+	ExitCodeSuccess = 0 // A handler returned nil, or help was requested.
+	ExitCodeFailure = 1 // A handler returned an error.
+	ExitCodeUsage   = 2 // Nothing ran: the command line or tree was wrong, or no handler.
 )
 
 // errorOrString prefers a String() method over Error(). ConfigError and
@@ -102,7 +102,7 @@ func newConfigErrorf(err error, cmd *Command, flag *Flag, format string, a ...an
 	}
 }
 
-func (e *ConfigError) ExitCode() int { return ExitCodeBadArgument }
+func (e *ConfigError) ExitCode() int { return ExitCodeUsage }
 func (e *ConfigError) Unwrap() error { return e.Err }
 func (e *ConfigError) Error() string { return "xflags: " + e.String() }
 
@@ -143,7 +143,7 @@ func newArgumentErrorf(err error, cmd *Command, flag *Flag, arg string, format s
 	}
 }
 
-func (e *ArgumentError) ExitCode() int { return ExitCodeBadArgument }
+func (e *ArgumentError) ExitCode() int { return ExitCodeUsage }
 func (e *ArgumentError) Unwrap() error { return e.Err }
 func (e *ArgumentError) Error() string { return "xflags: " + e.String() }
 

@@ -104,14 +104,14 @@ them out.
 
 There is still no `UsageErrorf`. A handler that discovers a usage problem
 the parser couldn't see — two mutually exclusive flags, say — returns
-`Exitf(ExitCodeBadArgument, ...)`, which reports it with the same exit
+`Exitf(ExitCodeUsage, ...)`, which reports it with the same exit
 code the parser would have used. A handler wanting the `Argument error:`
 prefix as well constructs an `ArgumentError`, which is exported precisely
 so it can. Neither needs a third spelling.
 
 One decision carried over from the first pass at this ADR, unchanged:
 
-`ConfigError.ExitCode()` is `ExitCodeBadArgument` (2), matching
+`ConfigError.ExitCode()` is `ExitCodeUsage` (2), matching
 `docs/adr/exit-code-contract.md` — "code 2 covers everything decided
 before the handler runs" — and restoring what `wip/TODO.md` records as a
 previous, deliberate choice that a refactor had quietly reverted to 1.

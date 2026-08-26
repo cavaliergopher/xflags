@@ -782,7 +782,7 @@ func TestRunExitCodes(t *testing.T) {
 		},
 		{
 			name:     "UsageError",
-			cmd:      handles(Exitf(ExitCodeBadArgument, "--foo and --bar are exclusive")),
+			cmd:      handles(Exitf(ExitCodeUsage, "--foo and --bar are exclusive")),
 			wantCode: 2,
 			wantErr:  "Error: --foo and --bar are exclusive\n",
 		},
@@ -1011,7 +1011,7 @@ func ExampleInvocation() {
 	// it in the message.
 	add := NewCommand("add", "Add a remote").
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
-			return Exitf(ExitCodeBadArgument,
+			return Exitf(ExitCodeUsage,
 				"no remote named: try \"%s --help\"",
 				strings.Join(inv.Path, " "),
 			)

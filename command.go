@@ -318,7 +318,7 @@ func (c *Command) Run(ctx context.Context, args []string) int {
 		if err := inv.Cmd.WriteUsage(inv.Stderr); err != nil {
 			return fallbackToStderr(err)
 		}
-		return ExitCodeBadArgument
+		return ExitCodeUsage
 	}
 	return inv.Cmd.handleErr(inv.Cmd.handlerFunc(ctx, inv))
 }

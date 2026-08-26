@@ -110,7 +110,7 @@ Run returns the exit code the program should terminate with:
 A handler names its own exit code by returning an error that implements
 ExitCoder. Exit and Exitf attach a code to an error — a handler reporting a
 misuse the parser cannot detect itself, such as two mutually exclusive
-flags, returns Exitf(ExitCodeBadArgument, ...) — and *exec.ExitError already
+flags, returns Exitf(ExitCodeUsage, ...) — and *exec.ExitError already
 implements ExitCoder, so the error from a child process can be returned
 unchanged to exit with its code.
 

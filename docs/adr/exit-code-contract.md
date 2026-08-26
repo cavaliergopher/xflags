@@ -1,6 +1,8 @@
 # Run reports outcomes as exit codes 0, 1 and 2
 
 Status: accepted, 2026-08-23.
+Amended 2026-08-26: the constant for code 2 is `ExitCodeUsage`. It was
+`ExitCodeBadArgument`, which named only one of the three cases below.
 
 ## Context
 
@@ -51,7 +53,7 @@ type ExitCoder interface {
 and the code it names is used; without one the code is 1. The error is
 reported on the command's stderr either way. `Exit(code, err)` wraps an
 error with a code — a handler discovering misuse the parser cannot see,
-contradictory flags say, returns `Exitf(ExitCodeBadArgument, ...)` to
+contradictory flags say, returns `Exitf(ExitCodeUsage, ...)` to
 report it with the same code the parser would have used had it been able
 to see it.
 
@@ -84,7 +86,7 @@ requested and delivered, so it is 0.
   that needs to know which flag was wrong reads stderr, or `ArgumentError`
   if it is calling `Parse` itself.
 - A misconfigured tree, a parse error and a handler's
-  `Exitf(ExitCodeBadArgument, ...)` all share code 2 but not a prefix:
+  `Exitf(ExitCodeUsage, ...)` all share code 2 but not a prefix:
   they print `Program error:`, `Argument error:` and `Error:`
   respectively. Resolved in `docs/adr/human-readable-errors.md` as a
   feature rather than a defect — the prefix marks who caused the problem,
