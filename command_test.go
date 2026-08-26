@@ -514,6 +514,83 @@ func TestValidatePositionalAfterUnbounded(t *testing.T) {
 	), "positional after unbounded positional")
 }
 
+// TestArgumentErrorNamesTheFlag asserts that every parse error a user can
+// provoke names the flag it is about. The flag is carried on the error either
+// way, but a human reading stderr only sees Message.
+func TestArgumentErrorNamesTheFlag(t *testing.T) {
+	// Each case builds its own command, since checkNArgs reports the first
+	// unsatisfied flag and a shared one would let cases mask each other.
+	for _, tt := range []struct {
+		name string
+		flag *Flag
+		args []string
+		want string
+	}{
+		{
+			"MissingRequired",
+			String(new(string), "req", "", "").Required(),
+			nil,
+			"missing required argument: --req",
+		},
+		{
+			"TooFewExactCount",
+			Strings(&[]string{}, "pair", nil, "").NArgs(2, 2),
+			[]string{"--pair", "a"},
+			"expected 2 arguments, got 1: --pair",
+		},
+		{
+			"TooFewAtLeast",
+			Strings(&[]string{}, "least", nil, "").NArgs(2, 0),
+			[]string{"--least", "a"},
+			"expected at least 2 arguments, got 1: --least",
+		},
+		{
+			"TooManyOccurrences",
+			Strings(&[]string{}, "many", nil, "").NArgs(0, 2),
+			[]string{"--many", "a", "--many", "b", "--many", "c"},
+			"argument specified too many times: --many",
+		},
+		{
+			"OptionNeedsValue",
+			String(new(string), "opt", "", ""),
+			[]string{"--opt"},
+			"option requires an argument: --opt",
+		},
+		{
+			"UnrecognizedOption",
+			String(new(string), "opt", "", ""),
+			[]string{"--nope"},
+			"unrecognized option: --nope",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewCommand("test", "").Flags(tt.flag).Parse(tt.args)
+			if err == nil {
+				t.Fatalf("expected error for %v, got nil", tt.args)
+			}
+			if got, want := errorOrString(err), tt.want; got != want {
+				t.Errorf("message = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// TestArgumentErrorNamesPositional asserts the same for a positional, which
+// renders as its upper-cased name rather than with a leading dash.
+func TestArgumentErrorNamesPositional(t *testing.T) {
+	var files []string
+	cmd := NewCommand("test", "").Flags(
+		Strings(&files, "file", nil, "").Positional().NArgs(1, 0),
+	)
+	_, err := cmd.Parse(nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got, want := errorOrString(err), "missing required argument: FILE"; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
 func TestValidateInvalidNArgs(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
@@ -667,7 +744,7 @@ func TestRunExitCodes(t *testing.T) {
 			cmd:      handles(nil),
 			args:     []string{"--nope"},
 			wantCode: 2,
-			wantErr:  "Argument error: unrecognized argument: --nope\n",
+			wantErr:  "Argument error: unrecognized option: --nope\n",
 		},
 		{
 			name:     "NoHandler",

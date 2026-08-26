@@ -121,15 +121,35 @@ func (c *argParser) parseEnvVars() error {
 	return nil
 }
 
+// checkNArgs verifies each flag was given as many times as it requires.
+//
+// The offending flag goes at the end of these messages, which is where
+// Go's flag package, argparse and getopt all put it when nothing follows
+// it. A flag leads the message only when a wrapped error follows, as in
+// "--ip: invalid IP: 256.0.0.1", where it scopes what comes after the
+// colon; see docs/adr/human-readable-errors.md.
 func (c *argParser) checkNArgs() error {
 	for _, group := range c.cmd.flagGroups {
 		for _, flag := range group.flags {
 			n := c.flagsSeen[flag.keyName()]
 			if flag.minCount > 0 && n < flag.minCount {
-				return newArgumentErrorf(nil, c.cmd, flag, "", "missing argument")
+				switch {
+				case flag.minCount == 1:
+					return newArgumentErrorf(nil, c.cmd, flag, "",
+						"missing required argument: %s", flag)
+				case flag.minCount == flag.maxCount:
+					return newArgumentErrorf(nil, c.cmd, flag, "",
+						"expected %d arguments, got %d: %s",
+						flag.minCount, n, flag)
+				default:
+					return newArgumentErrorf(nil, c.cmd, flag, "",
+						"expected at least %d arguments, got %d: %s",
+						flag.minCount, n, flag)
+				}
 			}
 			if flag.maxCount > 0 && n > flag.maxCount {
-				return newArgumentErrorf(nil, c.cmd, flag, "", "argument specified too many times")
+				return newArgumentErrorf(nil, c.cmd, flag, "",
+					"argument specified too many times: %s", flag)
 			}
 		}
 	}
@@ -224,7 +244,7 @@ func (c *argParser) parseLongOption(token string) error {
 	name, value, attached := splitLongOption(token)
 	flag := c.flagsByName[name]
 	if flag == nil {
-		return newArgumentErrorf(nil, c.cmd, nil, name, "unrecognized argument: %s", name)
+		return newArgumentErrorf(nil, c.cmd, nil, name, "unrecognized option: %s", name)
 	}
 	c.observe(flag)
 
@@ -253,7 +273,7 @@ func (c *argParser) parseShortOptions(arg string) error {
 		name := "-" + string(r)
 		flag := c.flagsByName[name]
 		if flag == nil {
-			return newArgumentErrorf(nil, c.cmd, nil, name, "unrecognized argument: %s", name)
+			return newArgumentErrorf(nil, c.cmd, nil, name, "unrecognized option: %s", name)
 		}
 		c.observe(flag)
 		rest := arg[i+utf8.RuneLen(r):]
@@ -294,7 +314,8 @@ func (c *argParser) parseShortOptions(arg string) error {
 func (c *argParser) parseDetachedValue(flag *Flag, name string) error {
 	next, ok := c.peek()
 	if !ok || !isOperand(next) {
-		return newArgumentErrorf(nil, c.cmd, flag, name, "option requires an argument")
+		return newArgumentErrorf(nil, c.cmd, flag, name,
+			"option requires an argument: %s", name)
 	}
 	c.next() // consume the value
 	return c.setFlag(flag, next)
