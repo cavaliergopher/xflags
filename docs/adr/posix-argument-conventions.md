@@ -68,7 +68,9 @@ in hand, which is why it is not implemented yet.
 takes a value or never does, decided by its bound `Value`: a boolean flag
 takes none, everything else takes one. This is why `--verbose true` sets
 `--verbose` and leaves `true` as an operand rather than guessing, and it is
-the rule that makes guideline 5 decidable at all.
+the rule that makes guideline 5 decidable at all. It governs detached
+values only: an attached `--verbose=false` sets false, for which see
+*Attached values follow Go, not getopt* below.
 
 **Guidelines 11 and 12 — options commute, operands do not.** Two flags may
 be given in either order; positional flags bind left to right in
@@ -94,13 +96,12 @@ it into two arguments and loses the fact that they arrived as one.
 **Guideline 6 — one argument per option.** Adopted as the recommended form
 and the one help output shows. The two attached forms `getopt_long`
 accepts are accepted with it: `--name=value` splits at the first `=`, and
-`-nvalue` takes the whole remainder of the argument as the value. The
-remainder is taken literally, so `-n=value` gives `-n` the value `=value`,
-which is how a value beginning with `=` is given attached. Today the parser
-strips that `=`, and it should not: the convenience is worth less than
-agreeing with every other tool a user has met. Under guideline 5 the
-remainder after a short name that takes no value is read as further short
-names, so `-a=false` is an unknown option rather than a value.
+`-nvalue` takes the whole remainder of the argument as the value. Under
+guideline 5 the remainder after a short name that takes no value is read as
+further short names, so `-a=false` is an unknown option rather than a
+value. How the two forms interact is the one place this ADR departs from
+`getopt_long` for reasons of its own; see *Attached values follow Go, not
+getopt* below.
 
 **Guideline 9 — options precede operands.** Not adopted in POSIX's strict
 reading, which stops option processing at the first operand; adopted in
@@ -162,35 +163,84 @@ every program to have one; the library has no version string to report and
 no place to put one that would not be a guess. A convenience for declaring
 it is a reasonable thing to add later.
 
+### Attached values follow Go, not getopt
+
+Two rules about values attached to their option depart from `getopt_long`
+deliberately. `-n=value` sets `value` and not `=value`, and a boolean long
+option accepts an attached value, so `--verbose=false` sets false. This is
+what the parser does today; it is recorded here because it is a departure
+and not because it is a fix.
+
+Measured, rather than recalled:
+
+    implementation           -n=value    --verbose=false
+    C getopt_long (POSIX)    =value      error: doesn't allow an argument
+    Python getopt            =value      n/a
+    git parse-options        =value      n/a
+    Python argparse          value       error: ignored explicit argument
+    Go flag                  value       false
+    pflag / cobra            value       false
+
+The standard does not in fact rule on `-n=value`. POSIX has no long options
+and never mentions `=` in any position; guideline 6 gives short options one
+attached form, the remainder of the argument, and with no delimiter in that
+grammar `=` can only be data. GNU then defined `=` freely for long options
+because they were new and carry no remainder rule — `--namevalue` is simply
+unrecognized — while short options could not be changed without altering
+the meaning of every program already linked against `getopt`. The literal
+reading is therefore an inherited compatibility constraint rather than a
+principle, and this package has no installed base to inherit it from.
+
+What decides it instead is who arrives here. Users of a Go flags package
+come from `flag`, and every widely used modern parser above strips the `=`.
+A Go developer writing `-n=value` and silently receiving `=value` has a
+wrong value rather than an error, which is the worse of the two failure
+modes; the value that is lost is one that begins with `=`, given attached,
+for which `-n =value` and `--name==value` both remain available.
+
+The boolean rule has the same shape and one more reason: without it there
+is no way to set a boolean false from argv at all, since a detached value
+is never consumed by a boolean and negated booleans are not settled.
+`getopt_long` and argparse both reject the form, so this departure is the
+larger of the two and belongs in the README's list.
+
+Neither rule touches detached values. Guideline 14 still decides those, so
+`--count -5` is a missing value, `--verbose false` still leaves `false` as
+an operand, and both departures are confined to a single argument that
+already carries its own value.
+
 ## Consequences
 
 - The parser has a specification to be tested against, guideline by
   guideline, and the deviations above are the test list as much as the
   conformances are.
-- Six defects are named by this ADR rather than discovered later:
-  `--count=-5` fails; `-n=value` strips the `=`; `--` is consumed as an
-  operand by commands that did not opt into it; `--help` is honored only
-  until something ahead of it fails; a declared `-h` never fires; and
-  short-name validation counts bytes and permits punctuation. None is a
-  design question, and all six are cheap once the parser preserves whether
-  a value arrived attached.
+- Five defects are named by this ADR rather than discovered later:
+  `--count=-5` fails; `--` is consumed as an operand by commands that did
+  not opt into it; `--help` is honored only until something ahead of it
+  fails; a declared `-h` never fires; and short-name validation counts
+  bytes and permits punctuation. None is a design question, and all five
+  are cheap once the parser preserves whether a value arrived attached.
+  `--verbose=false` is the same defect as `--count=-5` wearing different
+  clothes — the attached value is dropped and falls through as an operand —
+  and the same preservation fixes both.
 - Guideline 5 is now a decision and not an open question. It changes what
   `-ab` means for two boolean flags, from a stray positional argument to
   two set flags, and it must land with the schema-aware pass rather than
   in `normalize`, which cannot see whether `-a` takes a value.
-- `-n=value` changes meaning, from `value` to `=value`. Every other change
-  here turns something into an error or an error into something; this one
-  quietly returns a different string, so it is the one to call out in
-  release notes. It is worth making while the package is pre-v1: a
-  deviation kept for ergonomics is one more place where what a user knows
-  about `getopt` is wrong here, and conformance is the whole claim.
+- No change here silently returns a different value. Every one turns
+  something into an error, or an error into something, which is what makes
+  them safe to land pre-v1 without release notes reading like a warning.
+  That is a consequence of keeping the attached-value rules rather than
+  conforming them, and it was not the reason for keeping them.
 - Guideline 7 constrains the data model, not just the parser: an
   optional-valued flag cannot be added later without giving up grouping
   and the detached-value rule together.
 - Negated booleans (`--no-verbose`), flag aliases and mutually exclusive
   sets are all within this dialect and none is settled here. They are
   declarations on the data model that change help and validation, not
-  argv's shape.
+  argv's shape. Negation is wanted rather than needed now that
+  `--verbose=false` works; under the conforming rule it would have been the
+  only way to turn a boolean off, and so a prerequisite for v1.
 - Conformance is claimable in the README, with the departures listed. That
   is worth more than the word "POSIX" on its own, which is what the
   package can honestly say today.
