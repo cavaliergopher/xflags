@@ -37,6 +37,9 @@ func TestDuration(t *testing.T) {
 	if assertFlagParses(t, Duration(&v, "foo", 0, ""), "--foo=1s") {
 		assertDuration(t, time.Second, v)
 	}
+	if assertFlagParses(t, Duration(&v, "foo", 0, ""), "--foo=-1s") {
+		assertDuration(t, -time.Second, v)
+	}
 }
 
 func TestFloat64(t *testing.T) {
@@ -44,12 +47,18 @@ func TestFloat64(t *testing.T) {
 	if assertFlagParses(t, Float64(&v, "foo", 0, ""), "--foo=1.0") {
 		assertFloat64(t, 1.0, v)
 	}
+	if assertFlagParses(t, Float64(&v, "foo", 0, ""), "--foo=-1.0") {
+		assertFloat64(t, -1.0, v)
+	}
 }
 
 func TestInt64(t *testing.T) {
 	var v int64
 	if assertFlagParses(t, Int64(&v, "foo", 0, ""), "--foo=1") {
 		assertInt64(t, 1, v)
+	}
+	if assertFlagParses(t, Int64(&v, "foo", 0, ""), "--foo=-1") {
+		assertInt64(t, -1, v)
 	}
 }
 

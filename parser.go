@@ -21,7 +21,6 @@ type argParser struct {
 }
 
 func newArgParser(cmd *Command, tokens []string) *argParser {
-	tokens = normalize(tokens, cmd.withTerminator)
 	c := &argParser{
 		tokens:            tokens,
 		flagsByName:       make(map[string]*Flag),
@@ -206,25 +205,36 @@ func (c *argParser) parseOperand(token string) error {
 	return nil
 }
 
-// parseOption binds an option to its option-argument: the next token
-// for a flag that takes a value, or an implicit "true" for a boolean.
+// parseOption binds an option to its option-argument: one attached to the
+// same argument, the next argument for a flag that takes a value, or an
+// implicit "true" for a boolean.
 func (c *argParser) parseOption(token string) error {
-	flag := c.flagsByName[token]
+	name, value, attached := splitOption(token)
+	flag := c.flagsByName[name]
 	if flag == nil {
-		return newArgumentErrorf(nil, c.cmd, nil, token, "unrecognized argument: %s", token)
+		return newArgumentErrorf(nil, c.cmd, nil, name, "unrecognized argument: %s", name)
 	}
 	c.observe(flag)
+
+	// An attached value is unambiguous by construction, so it binds
+	// whatever it looks like and whatever the flag's type. A boolean takes
+	// one here and nowhere else, which is how it is set false.
+	if attached {
+		return c.setFlag(flag, value)
+	}
 	if isBoolValue(flag.value) {
 		return c.setFlag(flag, "true")
 	}
 
-	// read the next arg as a value
-	value, ok := c.peek()
-	if !ok || !isOperand(value) {
-		return newArgumentErrorf(nil, c.cmd, flag, token, "option requires an argument")
+	// Guideline 14: an argument that parses as an option is one, so a
+	// detached value may never begin with "-". A value that must, such as
+	// -5, is given attached instead.
+	next, ok := c.peek()
+	if !ok || !isOperand(next) {
+		return newArgumentErrorf(nil, c.cmd, flag, name, "option requires an argument")
 	}
 	c.next() // consume the value
-	return c.setFlag(flag, value)
+	return c.setFlag(flag, next)
 }
 
 // Set the value of flag, return any validation error.
@@ -256,35 +266,33 @@ func isOperand(arg string) bool {
 	return !isShortOption(arg) && !isLongOption(arg)
 }
 
-// normalize splits any arguments that declare both a key and a value (E.g.
-// --key=value, or -kV) into two distinct arguments.
-func normalize(args []string, withTerminator bool) []string {
-	out := make([]string, 0, len(args))
-	for i, arg := range args {
-		if withTerminator && arg == terminator {
-			out = append(out, args[i:]...)
-			return out
-		}
-		if isShortOption(arg) {
-			out = append(out, arg[:2])
-			arg = arg[2:]
-			if len(arg) > 0 {
-				if arg[0] == '=' {
-					arg = arg[1:]
-				}
-			} else {
-				continue
-			}
-		} else if isLongOption(arg) {
-			for i := 3; i < len(arg); i++ {
-				if arg[i] == '=' {
-					out = append(out, arg[:i])
-					arg = arg[i+1:]
-					break
-				}
+// splitOption divides an option argument into its name and any
+// option-argument attached to it, reporting whether one was attached at
+// all. Guideline 6 gives two attached forms: "--name=value" splits at the
+// first "=", and "-nvalue" takes the remainder of the argument.
+//
+// A leading "=" is dropped from a short option's remainder, so "-n=value"
+// gives "value" where getopt gives "=value". That is a departure, and
+// docs/adr/posix-argument-conventions.md is where it is argued.
+//
+// arg must be an option; isOperand decides that.
+func splitOption(arg string) (name, value string, attached bool) {
+	if isLongOption(arg) {
+		// From index 3, because a long name is at least one character
+		// wide and "--=value" therefore names nothing.
+		for i := 3; i < len(arg); i++ {
+			if arg[i] == '=' {
+				return arg[:i], arg[i+1:], true
 			}
 		}
-		out = append(out, arg)
+		return arg, "", false
 	}
-	return out
+	name, value = arg[:2], arg[2:]
+	if value == "" {
+		return name, "", false
+	}
+	if value[0] == '=' {
+		value = value[1:]
+	}
+	return name, value, true
 }

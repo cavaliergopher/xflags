@@ -119,16 +119,25 @@ unchanged to exit with its code.
 In addition to positional arguments, the following forms are permitted:
 
 	-f
+	-fx
 	-f=x
 	-f x // non-boolean flags only
 	--flag
 	--flag=x
 	--flag x // non-boolean flags only
 
-The noted forms are not permitted for boolean flags because of the meaning of the command
+The detached forms are not permitted for boolean flags because the meaning
+of the command
 
 	cmd -x *
 
-where * is a Unix shell wildcard, will change if there is a file called 0, false, etc.
+where * is a Unix shell wildcard, would change if there were a file called
+0, false, and so on. A boolean is set false with an attached value instead,
+as in --flag=false.
+
+An attached value is taken literally, so it may look like a flag: --flag=-5
+is negative five, where --flag -5 is a missing value. See
+docs/adr/posix-argument-conventions.md for the dialect in full, and for the
+two places it departs from getopt.
 */
 package xflags
