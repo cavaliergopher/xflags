@@ -240,7 +240,7 @@ func TestDescribeFlag(t *testing.T) {
 
 // TestDescribePositional asserts that Positional is described too, using a
 // separate command since a single command cannot mix positional flags with
-// the regular flag above without also adding subcommands (which is itself
+// the option above without also adding subcommands (which is itself
 // disallowed alongside positionals).
 func TestDescribePositional(t *testing.T) {
 	var s string

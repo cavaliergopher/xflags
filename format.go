@@ -55,7 +55,7 @@ func getPositionals(cmd *desc.Command) []*desc.Flag {
 	return a
 }
 
-func hasRegular(cmd *desc.Command) bool {
+func hasOptions(cmd *desc.Command) bool {
 	if cmd == nil {
 		return false
 	}
@@ -67,7 +67,7 @@ func hasRegular(cmd *desc.Command) bool {
 			return true
 		}
 	}
-	return hasRegular(cmd.Parent)
+	return hasOptions(cmd.Parent)
 }
 
 func printUsage(w io.Writer, cmd *desc.Command) error {
@@ -76,7 +76,7 @@ func printUsage(w io.Writer, cmd *desc.Command) error {
 		fullName = fmt.Sprintf("%s %s", p.Name, fullName)
 	}
 	fmt.Fprintf(w, "Usage: %s", fullName)
-	if hasRegular(cmd) {
+	if hasOptions(cmd) {
 		fmt.Fprintf(w, " [OPTIONS]")
 	}
 	if len(cmd.Subcommands) > 0 {
@@ -122,7 +122,7 @@ func detailPositionals(w io.Writer, cmd *desc.Command) error {
 	return w.(*tabwriter.Writer).Flush()
 }
 
-func filterRegular(flags []*desc.Flag) []*desc.Flag {
+func filterOptions(flags []*desc.Flag) []*desc.Flag {
 	a := make([]*desc.Flag, 0, 8)
 	for _, flag := range flags {
 		if flag.Hidden || flag.Positional {
@@ -134,7 +134,7 @@ func filterRegular(flags []*desc.Flag) []*desc.Flag {
 }
 
 func detailFlagGroup(w io.Writer, group *desc.FlagGroup) error {
-	flags := filterRegular(group.Flags)
+	flags := filterOptions(group.Flags)
 	if len(flags) == 0 {
 		return nil
 	}

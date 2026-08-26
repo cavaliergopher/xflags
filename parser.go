@@ -65,7 +65,7 @@ func (c *argParser) Parse() (*Invocation, error) {
 		if !ok {
 			break
 		}
-		if err := c.dispatch(arg); err != nil {
+		if err := c.parseOne(arg); err != nil {
 			return nil, err
 		}
 		if c.helpRequested {
@@ -156,7 +156,10 @@ func (c *argParser) observe(flag *Flag) int {
 	return c.flagsSeen[flag.keyName()]
 }
 
-func (c *argParser) dispatch(token string) error {
+// parseOne parses one token from the command line: an argument being
+// forwarded past the terminator, the terminator itself, a help request,
+// an operand, or an option.
+func (c *argParser) parseOne(token string) error {
 	if c.isTerminated {
 		if c.args == nil {
 			c.args = make([]string, 0, 1)
@@ -172,14 +175,15 @@ func (c *argParser) dispatch(token string) error {
 		c.helpRequested = true
 		return nil
 	}
-	if isPositional(token) {
-		return c.dispatchPositional(token)
+	if isOperand(token) {
+		return c.parseOperand(token)
 	}
-	return c.dispatchRegular(token)
+	return c.parseOption(token)
 }
 
-func (c *argParser) dispatchPositional(token string) error {
-	// handle positional flag
+// parseOperand binds an operand to the next positional flag awaiting
+// one, or, when the command takes none, resolves it as a subcommand name.
+func (c *argParser) parseOperand(token string) error {
 	if len(c.positionals) > 0 {
 		flag := c.positionals[0]
 		n := c.observe(flag)
@@ -202,8 +206,9 @@ func (c *argParser) dispatchPositional(token string) error {
 	return nil
 }
 
-func (c *argParser) dispatchRegular(token string) error {
-	// regular flag
+// parseOption binds an option to its option-argument: the next token
+// for a flag that takes a value, or an implicit "true" for a boolean.
+func (c *argParser) parseOption(token string) error {
 	flag := c.flagsByName[token]
 	if flag == nil {
 		return newArgumentErrorf(nil, c.cmd, nil, token, "unrecognized argument: %s", token)
@@ -215,7 +220,7 @@ func (c *argParser) dispatchRegular(token string) error {
 
 	// read the next arg as a value
 	value, ok := c.peek()
-	if !ok || !isPositional(value) {
+	if !ok || !isOperand(value) {
 		return newArgumentErrorf(nil, c.cmd, flag, token, "option requires an argument")
 	}
 	c.next() // consume the value
@@ -230,22 +235,25 @@ func (c *argParser) setFlag(flag *Flag, token string) error {
 	return nil
 }
 
-func isSingleDash(arg string) bool {
+func isShortOption(arg string) bool {
 	if len(arg) < 2 {
 		return false
 	}
 	return arg[0] == '-' && arg[1] != '-'
 }
 
-func isDoubleDash(arg string) bool {
+func isLongOption(arg string) bool {
 	if len(arg) < 3 {
 		return false
 	}
 	return arg[0] == '-' && arg[1] == '-'
 }
 
-func isPositional(arg string) bool {
-	return !isSingleDash(arg) && !isDoubleDash(arg)
+// isOperand reports whether arg is an operand rather than an option.
+// Guideline 14: if it parses as an option, it is one, so the syntax alone
+// decides -- a token is an operand only when it looks like neither form.
+func isOperand(arg string) bool {
+	return !isShortOption(arg) && !isLongOption(arg)
 }
 
 // normalize splits any arguments that declare both a key and a value (E.g.
@@ -257,7 +265,7 @@ func normalize(args []string, withTerminator bool) []string {
 			out = append(out, args[i:]...)
 			return out
 		}
-		if isSingleDash(arg) {
+		if isShortOption(arg) {
 			out = append(out, arg[:2])
 			arg = arg[2:]
 			if len(arg) > 0 {
@@ -267,7 +275,7 @@ func normalize(args []string, withTerminator bool) []string {
 			} else {
 				continue
 			}
-		} else if isDoubleDash(arg) {
+		} else if isLongOption(arg) {
 			for i := 3; i < len(arg); i++ {
 				if arg[i] == '=' {
 					out = append(out, arg[:i])
