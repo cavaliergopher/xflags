@@ -15,7 +15,8 @@ type argParser struct {
 	args              []string
 	cmd               *Command
 	path              []string
-	isTerminated      bool
+	forwarding        bool
+	optionsEnded      bool
 	helpRequested     bool
 	flagsByName       map[string]*Flag
 	subcommandsByName map[string]*Command
@@ -181,26 +182,41 @@ func (c *argParser) observe(flag *Flag) int {
 // parseOne parses one token from the command line: an argument being
 // forwarded past the terminator, the terminator itself, a help request,
 // an operand, or an option.
+//
+// Guideline 10 gives "--" two readings and a command picks one. By default
+// it ends option processing, so every argument after it is an operand
+// however many dashes it starts with -- the escape hatch that lets a
+// command take an operand named "-rf". A command that set ForwardArgs
+// instead hands everything after it to the handler unparsed.
+//
+// Only the first "--" is special. Once options have ended, a later one is
+// an ordinary operand, as is a "-h" that would otherwise ask for help.
 func (c *argParser) parseOne(token string) error {
-	if c.isTerminated {
+	if c.forwarding {
 		if c.args == nil {
 			c.args = make([]string, 0, 1)
 		}
 		c.args = append(c.args, token)
 		return nil
 	}
-	if token == terminator && c.cmd.forwardArgs {
-		c.isTerminated = true
-		return nil
+	if !c.optionsEnded {
+		if token == terminator {
+			if c.cmd.forwardArgs {
+				c.forwarding = true
+			} else {
+				c.optionsEnded = true
+			}
+			return nil
+		}
+		if token == "-h" || token == "--help" {
+			c.helpRequested = true
+			return nil
+		}
+		if !isOperand(token) {
+			return c.parseOption(token)
+		}
 	}
-	if token == "-h" || token == "--help" {
-		c.helpRequested = true
-		return nil
-	}
-	if isOperand(token) {
-		return c.parseOperand(token)
-	}
-	return c.parseOption(token)
+	return c.parseOperand(token)
 }
 
 // parseOperand binds an operand to the next positional flag awaiting

@@ -1,10 +1,12 @@
 # The dialect is the POSIX syntax guidelines plus GNU long options
 
-Status: accepted, 2026-08-23. Amended 2026-08-26: twice over how an
-attached value is read, see *Attached values follow Go, not getopt*; and
-once to rename guideline 10's opt-in to `ForwardArgs`, which hands the
-arguments to `Invocation.Forwarded`. Implemented apart from the four gaps
-named in the consequences.
+Status: accepted, 2026-08-23. Amended 2026-08-26, three times: twice over
+how an attached value is read, see *Attached values follow Go, not getopt*;
+and once over guideline 10, where `--` now ends option processing by
+default rather than a command that did not opt in rejecting it, and the
+opt-in is `ForwardArgs`, which hands the arguments to
+`Invocation.Forwarded`. Implemented apart from the three gaps named in the
+consequences.
 
 ## Context
 
@@ -117,14 +119,22 @@ from the point its own command is named onward, so `app --sub-only sub` is
 an error about ordering that no amount of permutation fixes. See
 `docs/adr/path-scoped-flag-names.md`.
 
-**Guideline 10 — `--` ends option processing.** Adopted for commands that
-set `ForwardArgs`, and everything after it reaches the handler as
-`Invocation.Forwarded` rather than binding to operand slots. POSIX has no third
-category, but POSIX has no subcommands either, and the arguments a command
-means to forward to something else are not the same as the operands it
-consumes itself. A command that has not opted in must reject a bare `--`;
-today it silently binds it as an operand, which is the worst of both
-readings.
+**Guideline 10 — `--` ends option processing.** Adopted, in the standard's
+own reading, as the default: every argument after `--` is an operand
+however many dashes it starts with, so a command can be given an operand
+named `-rf`. This is the escape hatch guideline 14 depends on for a
+detached value, the attached form being the other.
+
+A command that sets `ForwardArgs` takes the second reading instead, and
+everything after `--` reaches the handler as `Invocation.Forwarded` rather
+than binding to operand slots. POSIX has no third category, but POSIX has
+no subcommands either, and the arguments a command means to forward to
+something else are not the same as the operands it consumes itself.
+
+The two readings disagree about where the arguments go, so a command has
+one or the other and `ForwardArgs` says which. Only the first `--` is
+special either way; after it, a second is an ordinary operand, as is a
+`-h` that would otherwise ask for help.
 
 ### Not adopted
 
@@ -231,15 +241,16 @@ already carries its own value.
   guideline, and the deviations above are the test list as much as the
   conformances are.
 - Five defects were named by this ADR rather than discovered later, and
-  two are fixed. `--count=-5` failed and `--verbose=false` was the same
+  three are fixed. `--count=-5` failed and `--verbose=false` was the same
   defect wearing different clothes, both cured by preserving whether a
   value arrived attached (e53ae05); short-name validation counted bytes and
-  permitted punctuation (6195ed8). Three remain: `--` is consumed as an
-  operand by commands that did not opt into it; `--help` is honored only
-  until something ahead of it fails; and a declared `-h` never fires. None
-  is a design question. A fourth gap is a long name going unchecked for
-  `=` and whitespace, which break parsing rather than merely departing from
-  convention.
+  permitted punctuation (6195ed8); and `--` was consumed as an operand by
+  commands that had not opted into it, which ending option processing by
+  default resolves without the rejection this ADR first called for. Two
+  remain: `--help` is honored only until something ahead of it fails, and a
+  declared `-h` never fires. Neither is a design question. A third gap is a
+  long name going unchecked for `=` and whitespace, which break parsing
+  rather than merely departing from convention.
 - Guideline 5 is now a decision and not an open question. It changes what
   `-ab` means for two boolean flags, from a stray positional argument to
   two set flags. It could not live in `normalize`, which could not see

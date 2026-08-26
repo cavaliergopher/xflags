@@ -74,8 +74,9 @@ Command.Stdout and Command.Stderr.
 		return nil
 	}
 
-Flag parsing will stop after "--" only if a command sets ForwardArgs. All arguments following the
-terminator are passed to the command handler as Invocation.Args.
+Option parsing stops at "--". By default every argument after it is an operand, so a command can be
+given an operand that looks like an option. A command that sets ForwardArgs takes the other reading:
+everything after "--" is handed to the handler unparsed as Invocation.Forwarded.
 
 You can define subcommands by
 

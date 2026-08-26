@@ -168,6 +168,89 @@ func TestAttachedValues(t *testing.T) {
 	}
 }
 
+// TestTerminatorEndsOptions asserts the default reading of "--": it ends
+// option processing, so every argument after it is an operand however many
+// dashes it starts with. This is the escape hatch guideline 14 relies on
+// for a detached operand, since an argument that parses as an option is
+// one.
+func TestTerminatorEndsOptions(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			"OperandLooksLikeShortOption",
+			[]string{"--", "-rf"},
+			[]string{"-rf"},
+		},
+		{
+			"OperandLooksLikeLongOption",
+			[]string{"--", "--not-a-flag"},
+			[]string{"--not-a-flag"},
+		},
+		{
+			"TerminatorIsNotItselfAnOperand",
+			[]string{"--", "a"},
+			[]string{"a"},
+		},
+		{
+			"OnlyTheFirstTerminatorIsSpecial",
+			[]string{"--", "--", "a"},
+			[]string{"--", "a"},
+		},
+		{
+			"HelpAfterTerminatorIsAnOperand",
+			[]string{"--", "-h"},
+			[]string{"-h"},
+		},
+		{
+			"OptionsStillParseBeforeIt",
+			[]string{"--flag", "x", "--", "-rf"},
+			[]string{"-rf"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var flag string
+			var files []string
+			cmd := NewCommand("test", "").Flags(
+				String(&flag, "flag", "", ""),
+				Strings(&files, "file", nil, "").Positional().NArgs(0, 0),
+			)
+			inv, err := cmd.Parse(tt.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			assertStrings(t, tt.want, files)
+			if inv.HelpRequested {
+				t.Error("HelpRequested = true, want false")
+			}
+			if len(inv.Forwarded) != 0 {
+				t.Errorf("Forwarded = %v, want empty", inv.Forwarded)
+			}
+		})
+	}
+}
+
+// TestTerminatorSelectsSubcommand asserts that ending option processing
+// does not stop an operand resolving as a subcommand, and that options
+// stay ended once the parser has descended.
+func TestTerminatorSelectsSubcommand(t *testing.T) {
+	var files []string
+	sub := NewCommand("sub", "").Flags(
+		Strings(&files, "file", nil, "").Positional().NArgs(0, 0),
+	)
+	cmd := NewCommand("test", "").Subcommands(sub)
+	inv, err := cmd.Parse([]string{"--", "sub", "-rf"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := inv.Cmd, sub; got != want {
+		t.Errorf("Cmd = %v, want %v", got, want)
+	}
+	assertStrings(t, []string{"-rf"}, files)
+}
+
 func TestTerminator(t *testing.T) {
 	var foo string
 	var bar bool
