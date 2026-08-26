@@ -1,7 +1,9 @@
 package xflags
 
 import (
+	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/cavaliergopher/xflags/desc"
@@ -35,6 +37,152 @@ type Flag struct {
 	envVar      string
 	validate    ValidateFunc
 	value       Value
+}
+
+// Var returns a Flag that can be used to define a command line flag with
+// custom value parsing.
+//
+// A one-character name becomes a short name rather than a long one, so
+// Var(v, "n", usage) declares "-n" and not "--n". Every constructor in this
+// package is built on Var and shares the rule. Declare both spellings by
+// giving the long one here and the short one to Flag.ShortName.
+func Var(value Value, name, usage string) *Flag {
+	c := &Flag{
+		name:     name,
+		usage:    usage,
+		minCount: defaultMinNArgs,
+		maxCount: defaultMaxNArgs,
+		value:    value,
+	}
+	if len(name) == 1 {
+		// A single character is a short name: "-n", never "--n".
+		c.shortName = c.name
+		c.name = ""
+	}
+	return c
+}
+
+// stringifyDefault returns the string form of a flag's default value, using
+// its Value's String method if it implements fmt.Stringer.
+func stringifyDefault(v Value) string {
+	if s, ok := v.(fmt.Stringer); ok {
+		return s.String()
+	}
+	return ""
+}
+
+// BitField returns a Flag that can be used to define a uint64 flag
+// with specified name, default value, and usage string. The argument p points
+// to a uint64 variable in which to toggle each of the bits in the mask
+// argument. You can specify multiple BitFieldVars to toggle bits in the same
+// underlying uint64.
+func BitField(p *uint64, mask uint64, name string, value bool, usage string) *Flag {
+	v := newBitFieldValue(value, p, mask)
+	c := Var(v, name, usage)
+	c.defValue = stringifyDefault(v)
+	return c
+}
+
+// Bool returns a Flag that can be used to define a bool flag with
+// specified name, default value, and usage string. The argument p points to a
+// bool variable in which to store the value of the flag.
+func Bool(p *bool, name string, value bool, usage string) *Flag {
+	v := newBoolValue(value, p)
+	c := Var(v, name, usage)
+	c.defValue = stringifyDefault(v)
+	return c
+}
+
+// Duration returns a Flag that can be used to define a time.Duration
+// flag with specified name, default value, and usage string. The argument p
+// points to a time.Duration variable in which to store the value of the flag.
+// The flag accepts a value acceptable to time.ParseDuration.
+func Duration(p *time.Duration, name string, value time.Duration, usage string) *Flag {
+	v := newDurationValue(value, p)
+	c := Var(v, name, usage)
+	c.defValue = stringifyDefault(v)
+	return c
+}
+
+// Float64 returns a Flag that can be used to define a float64 flag
+// with specified name, default value, and usage string. The argument p points
+// to a float64 variable in which to store the value of the flag.
+func Float64(p *float64, name string, value float64, usage string) *Flag {
+	v := newFloat64Value(value, p)
+	c := Var(v, name, usage)
+	c.defValue = stringifyDefault(v)
+	return c
+}
+
+// Func returns a Flag that can used to define a flag with the specified name and usage
+// string.
+// Each time the flag is seen, fn is called with the value of the flag.
+// If fn returns a non-nil error, it will be treated as a flag value parsing error.
+//
+// The flag may be given any number of times, since fn accumulates whatever it
+// likes; constrain it with NArgs.
+func Func(name, usage string, fn func(s string) error) *Flag {
+	return Var(funcValue(fn), name, usage).NArgs(0, 0)
+}
+
+// Int returns a Flag that can be used to define an int flag with
+// specified name, default value, and usage string. The argument p points to an
+// int variable in which to store the value of the flag.
+func Int(p *int, name string, value int, usage string) *Flag {
+	v := newIntValue(value, p)
+	c := Var(v, name, usage)
+	c.defValue = stringifyDefault(v)
+	return c
+}
+
+// Int64 returns a Flag that can be used to define an int64 flag with
+// specified name, default value, and usage string. The argument p points to an
+// int64 variable in which to store the value of the flag.
+func Int64(p *int64, name string, value int64, usage string) *Flag {
+	v := newInt64Value(value, p)
+	c := Var(v, name, usage)
+	c.defValue = stringifyDefault(v)
+	return c
+}
+
+// String returns a Flag that can be used to define a string flag with
+// specified name, default value, and usage string. The argument p points to a
+// string variable in which to store the value of the flag.
+func String(p *string, name, value, usage string) *Flag {
+	v := newStringValue(value, p)
+	c := Var(v, name, usage)
+	c.defValue = stringifyDefault(v)
+	return c
+}
+
+// Strings returns a Flag that can be used to define a string slice flag with specified name,
+// default value, and usage string. The argument p points to a string slice variable in which each
+// flag value will be stored in command line order.
+func Strings(p *[]string, name string, value []string, usage string) *Flag {
+	v := newStringSliceValue(value, p)
+	c := Var(v, name, usage).NArgs(0, 0)
+	c.defValue = stringifyDefault(v)
+	return c
+}
+
+// Uint returns a Flag that can be used to define an uint flag with
+// specified name, default value, and usage string. The argument p points to an
+// uint variable in which to store the value of the flag.
+func Uint(p *uint, name string, value uint, usage string) *Flag {
+	v := newUintValue(value, p)
+	c := Var(v, name, usage)
+	c.defValue = stringifyDefault(v)
+	return c
+}
+
+// Uint64 returns a Flag that can be used to define an uint64 flag
+// with specified name, default value, and usage string. The argument p points
+// to an uint64 variable in which to store the value of the flag.
+func Uint64(p *uint64, name string, value uint64, usage string) *Flag {
+	v := newUint64Value(value, p)
+	c := Var(v, name, usage)
+	c.defValue = stringifyDefault(v)
+	return c
 }
 
 func (c *Flag) String() string {
