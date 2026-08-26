@@ -65,6 +65,46 @@ path it was reached by, and anything after a `--` terminator. A command is
 usually mounted by whoever composes the binary rather than by the team that
 wrote it, so its own path is not something it can know until it runs.
 
+## Command line syntax
+
+The dialect is the POSIX Utility Syntax Guidelines plus GNU long options —
+what `getopt_long` accepts — rather than Go's `flag` package, where one dash
+and two mean the same thing.
+
+```
+-f            --flag           a flag taking no value
+-f=false      --flag=false     a boolean set false
+-fx  -f=x     --flag=x         a value attached to its flag
+-f x          --flag x         a value in the next argument
+-abc                           -a -b -c, while each takes no value
+-abfx                          -a -b -f x, where -f takes one
+```
+
+Two arguments are not flags at all. A bare `-` is an ordinary operand, left
+to the handler to interpret, and `--` ends option processing for commands
+that set `WithTerminator`.
+
+An argument beginning with `-` is never taken as a detached value, so
+`--count -5` is a missing value rather than negative five; write
+`--count=-5`. Flags may appear among the operands in any order, and a flag
+is legal from the point its own command is named onward.
+
+Four departures from `getopt_long` are deliberate, and
+[the ADR](docs/adr/posix-argument-conventions.md) argues each one:
+
+- **Attached values follow Go, not getopt.** `-n=value` sets `value` rather
+  than `=value`, and a boolean accepts an attached value, so `--flag=false`
+  and `-f=false` both set false. Without it a boolean could not be turned
+  off at all.
+- **Long options may not be abbreviated.** `getopt_long` accepts any unique
+  prefix, but a command tree makes "unique" a moving target: adding a flag
+  to a subcommand can break a script that never changed.
+- **`--` is opt-in**, via `WithTerminator`, and what follows it reaches the
+  handler as `Invocation.Args` rather than binding to operand slots. POSIX
+  has no subcommands, so it has no case to forward arguments to.
+- **`-h` and `--help` are reserved** by the parser, which is GNU practice
+  rather than POSIX.
+
 ## Describing a command
 
 `Command.Describe` compiles a command tree into the plain data types in the
