@@ -630,11 +630,35 @@ func TestValidateUnboundedMaxIsNotExceeded(t *testing.T) {
 	}
 }
 
-func TestValidateShortNameTooLong(t *testing.T) {
-	var a string
-	assertParseError(t, NewCommand("test", "").Flags(
-		String(&a, "foo", "", "").ShortName("xx"),
-	), "short name too long")
+// TestValidateShortName asserts POSIX guideline 3: a short name is one
+// character from [A-Za-z0-9].
+func TestValidateShortName(t *testing.T) {
+	for _, shortName := range []string{
+		"xx", // more than one character
+		"!",  // outside the portable character set
+		"=",  // ... and this one the parser reads as a delimiter
+		"-",
+		" ",
+		"é", // one character, but not one byte, and still not portable
+	} {
+		t.Run(shortName, func(t *testing.T) {
+			var a string
+			assertParseError(t, NewCommand("test", "").Flags(
+				String(&a, "foo", "", "").ShortName(shortName),
+			), "illegal short name")
+		})
+	}
+	for _, shortName := range []string{"x", "X", "0"} {
+		t.Run(shortName, func(t *testing.T) {
+			var a string
+			cmd := NewCommand("test", "").Flags(
+				String(&a, "foo", "", "").ShortName(shortName),
+			)
+			if _, err := cmd.Parse(nil); err != nil {
+				t.Errorf("expected %q to be a legal short name: %v", shortName, err)
+			}
+		})
+	}
 }
 
 // TestValidateErrorsSurfaceAtParse asserts that a misconfigured tree does not

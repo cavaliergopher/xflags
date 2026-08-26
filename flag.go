@@ -2,6 +2,7 @@ package xflags
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cavaliergopher/xflags/desc"
 )
@@ -78,6 +79,9 @@ func (c *Flag) ShowDefault() *Flag {
 // ShortName specifies an alternative short name for a command line flag. For
 // example, a command named "foo" can be specified on the command line with
 // "--foo" but may also use a short name of "f" to be specified by "-f".
+//
+// A short name is one character from [A-Za-z0-9]. Short names that take no
+// value group into a single argument, so "-a -b" may also be written "-ab".
 func (c *Flag) ShortName(name string) *Flag {
 	c.shortName = name
 	return c
@@ -164,8 +168,12 @@ func (c *Flag) check() error {
 	if c.value == nil {
 		return newConfigErrorf(nil, nil, c, "flag must be bound to a value")
 	}
-	if len(c.shortName) > 1 {
-		return newConfigErrorf(nil, nil, c, "short name must be one character in length")
+	if c.shortName != "" && !isShortName(c.shortName) {
+		return newConfigErrorf(
+			nil, nil, c,
+			"short name must be one character from [A-Za-z0-9]: %q",
+			c.shortName,
+		)
 	}
 	if c.minCount < 0 {
 		return newConfigErrorf(nil, nil, c,
@@ -181,6 +189,23 @@ func (c *Flag) check() error {
 			"minimum count %d exceeds maximum count %d", c.minCount, c.maxCount)
 	}
 	return nil
+}
+
+// isShortName reports whether s is a legal short name. POSIX guideline 3
+// confines one to a single character from the portable character set, and
+// the parser leans on that: reading "=" as a delimiter after a boolean
+// short flag costs no ambiguity only because "=" can never be a name.
+//
+// Measured in characters rather than bytes, so a multi-byte rune is
+// rejected for falling outside the set rather than for its length.
+func isShortName(s string) bool {
+	r, size := utf8.DecodeRuneInString(s)
+	if size != len(s) {
+		return false
+	}
+	return ('a' <= r && r <= 'z') ||
+		('A' <= r && r <= 'Z') ||
+		('0' <= r && r <= '9')
 }
 
 func (c *Flag) describe() *desc.Flag {
