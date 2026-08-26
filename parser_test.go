@@ -251,6 +251,53 @@ func TestTerminatorSelectsSubcommand(t *testing.T) {
 	assertStrings(t, []string{"-rf"}, files)
 }
 
+// FuzzParse asserts the parser's contract over arbitrary command lines:
+// Parse never panics, and it returns an Invocation or an error, never
+// both and never neither. The tree is rebuilt inside the fuzz body
+// because repeat parses of one tree are not idempotent, and no flag
+// reads the environment, so iterations cannot bleed into each other.
+func FuzzParse(f *testing.F) {
+	for _, seed := range [][3]string{
+		{"--name=x", "sub", "left.txt"},    // attached long value
+		{"--name", "x", "--verbose=false"}, // detached value, bool false
+		{"-abc", "", ""},                   // grouped shorts, one unknown
+		{"-vc5", "-n=x", "-n="},            // grouped shorts, attached values
+		{"-", "--", "-"},                   // a lone "-" is an operand
+		{"--", "-rf", "--not-a-flag"},      // terminator ends options
+		{"", "", ""},                       // empty arguments
+		{"--name=héllo", "-é", "日本語"},      // multi-byte arguments
+		{"sub", "--sub-name", "left.txt"},  // subcommand path
+	} {
+		f.Add(seed[0], seed[1], seed[2])
+	}
+	f.Fuzz(func(t *testing.T, arg1, arg2, arg3 string) {
+		var (
+			name    string
+			verbose bool
+			count   int
+			tags    []string
+			subName string
+			files   []string
+		)
+		sub := NewCommand("sub", "").Flags(
+			String(&subName, "sub-name", "", "").ShortName("s"),
+			Strings(&files, "file", nil, "").Positional().NArgs(0, 0),
+		)
+		cmd := NewCommand("fuzz", "").
+			Flags(
+				String(&name, "name", "", "").ShortName("n"),
+				Bool(&verbose, "verbose", false, "").ShortName("v"),
+				Int(&count, "count", 0, "").ShortName("c"),
+				Strings(&tags, "tag", nil, "").ShortName("t"),
+			).
+			Subcommands(sub, NewCommand("other", ""))
+		inv, err := cmd.Parse([]string{arg1, arg2, arg3})
+		if (inv == nil) == (err == nil) {
+			t.Fatalf("Parse returned (%v, %v), want exactly one", inv, err)
+		}
+	})
+}
+
 func TestTerminator(t *testing.T) {
 	var foo string
 	var bar bool

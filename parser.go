@@ -5,8 +5,6 @@ import (
 	"unicode/utf8"
 )
 
-// TODO: fuzz tests?
-
 // argument to terminate parsing of all remaining arguments
 const terminator = "--"
 
