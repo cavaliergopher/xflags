@@ -77,6 +77,11 @@ func stringifyDefault(v Value) string {
 
 // Var returns a Flag that can be used to define a command line flag with
 // custom value parsing.
+//
+// A one-character name becomes a short name rather than a long one, so
+// Var(v, "n", usage) declares "-n" and not "--n". Every constructor in this
+// package is built on Var and shares the rule. Declare both spellings by
+// giving the long one here and the short one to Flag.ShortName.
 func Var(value Value, name, usage string) *Flag {
 	c := &Flag{
 		name:     name,
@@ -86,6 +91,7 @@ func Var(value Value, name, usage string) *Flag {
 		value:    value,
 	}
 	if len(name) == 1 {
+		// A single character is a short name: "-n", never "--n".
 		c.shortName = c.name
 		c.name = ""
 	}

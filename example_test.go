@@ -26,8 +26,9 @@ var App = NewCommand("helloworld", "Print \"Hello, World!\"").
 			" output multiple languages.",
 	).
 	Flags(
-		// Bool flag to turn off newline printing with -n. The flag value is
-		// stored in cmd.NoNewLines.
+		// Bool flag to turn off newline printing with -n. A
+		// one-character name is a short name, so this declares "-n" and
+		// not "--n". The flag value is stored in flagNoNewLines.
 		Bool(
 			&flagNoNewLines,
 			"n",
