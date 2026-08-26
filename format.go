@@ -19,8 +19,8 @@ func Format(w io.Writer, cmd *desc.Command) error {
 	if err := printUsage(aw, cmd); err != nil {
 		return err
 	}
-	if cmd.Usage != "" {
-		fmt.Fprintf(aw, "\n%s\n", cmd.Usage)
+	if cmd.Summary != "" {
+		fmt.Fprintf(aw, "\n%s\n", cmd.Summary)
 	}
 	if err := detailPositionals(aw, cmd); err != nil {
 		return err
@@ -36,8 +36,8 @@ func Format(w io.Writer, cmd *desc.Command) error {
 	if err := detailEnvVars(aw, cmd); err != nil {
 		return err
 	}
-	if cmd.Synopsis != "" {
-		fmt.Fprintf(aw, "\n%s\n", cmd.Synopsis)
+	if cmd.Description != "" {
+		fmt.Fprintf(aw, "\n%s\n", cmd.Description)
 	}
 	return aw.Err()
 }
@@ -206,7 +206,7 @@ func detailSubcommands(w io.Writer, subcommands []*desc.Command) error {
 		if cmd.Hidden {
 			continue
 		}
-		fmt.Fprintf(w, "  %s\t%s\n", cmd.Name, cmd.Usage)
+		fmt.Fprintf(w, "  %s\t%s\n", cmd.Name, cmd.Summary)
 	}
 	return w.(*tabwriter.Writer).Flush()
 }

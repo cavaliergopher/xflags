@@ -71,8 +71,8 @@ type HandlerFunc func(ctx context.Context, inv *Invocation) error
 type Command struct {
 	parent         *Command
 	name           string
-	usage          string
-	synopsis       string
+	summary        string
+	description    string
 	hidden         bool
 	withTerminator bool
 	flagGroups     []*FlagGroup
@@ -88,11 +88,16 @@ type Command struct {
 	defaultGroup *FlagGroup
 }
 
-// NewCommand returns a new Command with the given name and usage string.
-func NewCommand(name, usage string) *Command {
+// NewCommand returns a new Command with the given name and summary.
+//
+// summary is the one-line description of the command, shown beside its name
+// where a parent lists its subcommands, and beneath the usage line in the
+// command's own help message. See Command.Description for the longer prose
+// that follows it.
+func NewCommand(name, summary string) *Command {
 	return (&Command{
-		name:  name,
-		usage: usage,
+		name:    name,
+		summary: summary,
 	}).Flags()
 }
 
@@ -227,8 +232,8 @@ func (c *Command) describe(
 	node := &desc.Command{
 		Parent:         parent,
 		Name:           c.name,
-		Usage:          c.usage,
-		Synopsis:       c.synopsis,
+		Summary:        c.summary,
+		Description:    c.description,
 		Hidden:         c.hidden,
 		WithTerminator: c.withTerminator,
 	}
@@ -382,9 +387,11 @@ func (c *Command) WriteUsage(w io.Writer) error {
 	return f(w, node)
 }
 
-// Synopsis specifies the detailed help message for this command.
-func (c *Command) Synopsis(s string) *Command {
-	c.synopsis = s
+// Description specifies the prose printed at the end of this command's help
+// message, after its flags and subcommands. It carries the detail that does
+// not fit the one-line summary given to NewCommand.
+func (c *Command) Description(s string) *Command {
+	c.description = s
 	return c
 }
 

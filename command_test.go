@@ -299,12 +299,12 @@ func ExampleCommand_Subcommands() {
 	// Created 3 widget(s)
 }
 
-func ExampleCommand_Synopsis() {
+func ExampleCommand_Description() {
 	var n int
 	cmd := NewCommand("helloworld", "Say \"Hello, World!\"").
-		// Configure a synopsis to print detailed usage information on the help
+		// Configure a description to print detailed information on the help
 		// page.
-		Synopsis(
+		Description(
 			"This utility prints \"Hello, World!\" to the standard output.\n" +
 				"Print more than once with -n.",
 		).
@@ -354,9 +354,9 @@ func ExampleCommand_WithTerminator() {
 }
 
 func TestDescribeRoot(t *testing.T) {
-	sub := NewCommand("sub", "Sub command usage")
-	root := NewCommand("root", "Root command usage").
-		Synopsis("Root synopsis").
+	sub := NewCommand("sub", "Sub command summary")
+	root := NewCommand("root", "Root command summary").
+		Description("Root description").
 		Subcommands(sub)
 
 	node, err := root.Describe()
@@ -366,11 +366,11 @@ func TestDescribeRoot(t *testing.T) {
 	if got, want := node.Name, "root"; got != want {
 		t.Errorf("Name = %q, want %q", got, want)
 	}
-	if got, want := node.Usage, "Root command usage"; got != want {
-		t.Errorf("Usage = %q, want %q", got, want)
+	if got, want := node.Summary, "Root command summary"; got != want {
+		t.Errorf("Summary = %q, want %q", got, want)
 	}
-	if got, want := node.Synopsis, "Root synopsis"; got != want {
-		t.Errorf("Synopsis = %q, want %q", got, want)
+	if got, want := node.Description, "Root description"; got != want {
+		t.Errorf("Description = %q, want %q", got, want)
 	}
 	if node.Parent != nil {
 		t.Errorf("Parent = %v, want nil", node.Parent)
@@ -387,9 +387,9 @@ func TestDescribeRoot(t *testing.T) {
 }
 
 func TestDescribeSubcommand(t *testing.T) {
-	foo := NewCommand("foo", "Foo usage")
-	bar := NewCommand("bar", "Bar usage")
-	NewCommand("root", "Root usage").Subcommands(foo, bar)
+	foo := NewCommand("foo", "Foo summary")
+	bar := NewCommand("bar", "Bar summary")
+	NewCommand("root", "Root summary").Subcommands(foo, bar)
 
 	node, err := foo.Describe()
 	if err != nil {

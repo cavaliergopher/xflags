@@ -14,10 +14,17 @@ package desc
 
 // Command is the compiled description of an xflags.Command.
 type Command struct {
-	Parent         *Command `json:"-"`
-	Name           string
-	Usage          string
-	Synopsis       string
+	Parent *Command `json:"-"`
+	Name   string
+
+	// Summary is the one-line description of the command, shown beside its
+	// name where a parent lists its subcommands.
+	Summary string
+
+	// Description is the prose shown at the end of the command's help
+	// message, after its flags and subcommands.
+	Description string
+
 	Hidden         bool
 	WithTerminator bool
 	FlagGroups     []*FlagGroup

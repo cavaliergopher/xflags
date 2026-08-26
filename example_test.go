@@ -21,7 +21,7 @@ var translations = map[string]string{
 }
 
 var App = NewCommand("helloworld", "Print \"Hello, World!\"").
-	Synopsis(
+	Description(
 		"The helloworld utility writes \"Hello, World!\" to the standard\n"+
 			" output multiple languages.",
 	).
