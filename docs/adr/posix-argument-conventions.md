@@ -1,6 +1,8 @@
 # The dialect is the POSIX syntax guidelines plus GNU long options
 
-Status: proposed, 2026-08-23. Partly implemented.
+Status: accepted, 2026-08-23. Amended 2026-08-26, twice, over how an
+attached value is read; see *Attached values follow Go, not getopt*.
+Implemented apart from the four gaps named in the consequences.
 
 ## Context
 
@@ -49,9 +51,11 @@ POSIX terms when it means the standard's concept:
 
 **Guideline 3 — one alphanumeric character per short name.** `ShortName`
 takes a single character from the portable character set: `[A-Za-z0-9]`.
-Today the check is `len(shortName) > 1`, which counts bytes and admits
-punctuation, so `-é` is rejected for the wrong reason and `-!` is accepted
-for none. The reserved `-W` is not adopted; it is a vendor escape hatch in
+The check counted bytes and admitted punctuation until 6195ed8, so `-é` was
+rejected for the wrong reason and `-!` was accepted for none. Guideline 5
+now leans on the rule rather than merely agreeing with it: `=` is read as a
+delimiter after a boolean precisely because it can never be a name. The
+reserved `-W` is not adopted; it is a vendor escape hatch in
 a standard that has vendors, and this package has authors.
 
 **Guideline 4 — options are introduced by a delimiter.** `-` for short
@@ -90,17 +94,17 @@ of that name is the handler's business, exactly as the guideline says.
 beginning with `-` is never taken as a detached option-argument, so
 `--count -5` is a missing value and not negative five. The escape hatch is
 the attached form, `--count=-5`, which is unambiguous by construction and
-must therefore always work; today it does not, because `normalize` splits
-it into two arguments and loses the fact that they arrived as one.
+must therefore always work. It did not until e53ae05: a normalization pass
+split it into two arguments and lost the fact that they arrived as one.
 
 ### Adopted with a translation
 
 **Guideline 6 — one argument per option.** Adopted as the recommended form
 and the one help output shows. The two attached forms `getopt_long`
 accepts are accepted with it: `--name=value` splits at the first `=`, and
-`-nvalue` takes the whole remainder of the argument as the value. How the two forms interact is where this ADR departs
-from `getopt_long` for reasons of its own; see *Attached values follow Go,
-not getopt* below.
+`-nvalue` takes the whole remainder of the argument as the value. How the
+two forms interact is where this ADR departs from `getopt_long` for reasons
+of its own; see *Attached values follow Go, not getopt* below.
 
 **Guideline 9 — options precede operands.** Not adopted in POSIX's strict
 reading, which stops option processing at the first operand; adopted in
@@ -224,15 +228,16 @@ already carries its own value.
 - The parser has a specification to be tested against, guideline by
   guideline, and the deviations above are the test list as much as the
   conformances are.
-- Five defects are named by this ADR rather than discovered later:
-  `--count=-5` fails; `--` is consumed as an operand by commands that did
-  not opt into it; `--help` is honored only until something ahead of it
-  fails; a declared `-h` never fires; and short-name validation counts
-  bytes and permits punctuation. None is a design question, and all five
-  are cheap once the parser preserves whether a value arrived attached.
-  `--verbose=false` is the same defect as `--count=-5` wearing different
-  clothes — the attached value is dropped and falls through as an operand —
-  and the same preservation fixes both.
+- Five defects were named by this ADR rather than discovered later, and
+  two are fixed. `--count=-5` failed and `--verbose=false` was the same
+  defect wearing different clothes, both cured by preserving whether a
+  value arrived attached (e53ae05); short-name validation counted bytes and
+  permitted punctuation (6195ed8). Three remain: `--` is consumed as an
+  operand by commands that did not opt into it; `--help` is honored only
+  until something ahead of it fails; and a declared `-h` never fires. None
+  is a design question. A fourth gap is a long name going unchecked for
+  `=` and whitespace, which break parsing rather than merely departing from
+  convention.
 - Guideline 5 is now a decision and not an open question. It changes what
   `-ab` means for two boolean flags, from a stray positional argument to
   two set flags. It could not live in `normalize`, which could not see
