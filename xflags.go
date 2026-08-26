@@ -139,8 +139,11 @@ func Float64(p *float64, name string, value float64, usage string) *Flag {
 // string.
 // Each time the flag is seen, fn is called with the value of the flag.
 // If fn returns a non-nil error, it will be treated as a flag value parsing error.
+//
+// The flag may be given any number of times, since fn accumulates whatever it
+// likes; constrain it with NArgs.
 func Func(name, usage string, fn func(s string) error) *Flag {
-	return Var(funcValue(fn), name, usage)
+	return Var(funcValue(fn), name, usage).NArgs(0, 0)
 }
 
 // Int returns a Flag that can be used to define an int flag with

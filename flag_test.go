@@ -71,6 +71,26 @@ func TestStringSlice(t *testing.T) {
 	}
 }
 
+func TestFunc(t *testing.T) {
+	var v []string
+	fn := func(s string) error {
+		v = append(v, s)
+		return nil
+	}
+	if assertFlagParses(
+		t,
+		Func("foo", "", fn),
+		"--foo", "baz", "--foo", "qux",
+	) {
+		assertStrings(t, []string{"baz", "qux"}, v)
+	}
+}
+
+func TestFuncError(t *testing.T) {
+	fn := func(s string) error { return fmt.Errorf("nope: %s", s) }
+	assertErrorAs(t, parseFlag(Func("foo", "", fn), "--foo=bar"), &ArgumentError{})
+}
+
 func TestFlagChoices(t *testing.T) {
 	var v string
 	flag := String(&v, "foo", "", "").Choices("bar", "baz")
