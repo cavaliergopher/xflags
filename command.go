@@ -48,8 +48,8 @@ type Invocation struct {
 // line arguments.
 //
 // ctx is the context given to Run, so a handler that does anything
-// cancellable should honour it. See NotifyContext for a context that is
-// cancelled on SIGINT or SIGTERM.
+// cancelable should honor it. See NotifyContext for a context that is
+// canceled on SIGINT or SIGTERM.
 //
 // inv describes the invocation: the command that was named, the path it was
 // reached by, any arguments the parser ignored after the "--" terminator,
@@ -300,7 +300,7 @@ func (c *Command) getStderr() io.Writer {
 // Invocation. See Stdin, Stdout and Stderr.
 //
 // ctx is passed to the handler unchanged. See NotifyContext for a context
-// that is cancelled on SIGINT or SIGTERM.
+// that is canceled on SIGINT or SIGTERM.
 func (c *Command) Run(ctx context.Context, args []string) int {
 	inv, err := c.Parse(args)
 	if err != nil {
@@ -313,8 +313,10 @@ func (c *Command) Run(ctx context.Context, args []string) int {
 		return ExitCodeSuccess // Help was requested, not an error.
 	}
 	if inv.Cmd.handlerFunc == nil {
-		// Subcommand was invoked but its just a place holder.
-		// That's an argument error.
+		// The command exists only to group its subcommands, so naming it
+		// alone is a usage error rather than a request for help. Its usage
+		// goes to stderr, unlike the help path above, and the exit code
+		// says nothing ran.
 		if err := inv.Cmd.WriteUsage(inv.Stderr); err != nil {
 			return fallbackToStderr(err)
 		}

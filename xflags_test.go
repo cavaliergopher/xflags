@@ -136,15 +136,15 @@ func captureStderr(t *testing.T, fn func()) string {
 	return <-captured
 }
 
-// assertCancelled asserts that ctx is cancelled, allowing time for the
-// goroutine watching for signals to observe whatever cancelled it.
-func assertCancelled(t *testing.T, ctx context.Context, cause string) bool {
+// assertCanceled asserts that ctx is canceled, allowing time for the
+// goroutine watching for signals to observe whatever canceled it.
+func assertCanceled(t *testing.T, ctx context.Context, cause string) bool {
 	t.Helper()
 	select {
 	case <-ctx.Done():
 		return true
 	case <-time.After(10 * time.Second):
-		t.Errorf("context was not cancelled by %s", cause)
+		t.Errorf("context was not canceled by %s", cause)
 		return false
 	}
 }
@@ -153,11 +153,11 @@ func TestNotifyContextStop(t *testing.T) {
 	ctx, stop := NotifyContext(context.Background())
 	select {
 	case <-ctx.Done():
-		t.Fatal("context was cancelled before stop was called")
+		t.Fatal("context was canceled before stop was called")
 	default:
 	}
 	stop()
-	if assertCancelled(t, ctx, "stop") {
+	if assertCanceled(t, ctx, "stop") {
 		if got, want := ctx.Err(), context.Canceled; !errors.Is(got, want) {
 			t.Errorf("ctx.Err() = %v, want %v", got, want)
 		}
@@ -169,7 +169,7 @@ func TestNotifyContextParent(t *testing.T) {
 	ctx, stop := NotifyContext(parent)
 	defer stop()
 	cancel()
-	assertCancelled(t, ctx, "cancelling the parent")
+	assertCanceled(t, ctx, "canceling the parent")
 }
 
 // TestNotifyContextSignal asserts that an interrupt cancels the context. It
@@ -189,5 +189,5 @@ func TestNotifyContextSignal(t *testing.T) {
 	if err := proc.Signal(os.Interrupt); err != nil {
 		t.Fatal(err)
 	}
-	assertCancelled(t, ctx, "an interrupt")
+	assertCanceled(t, ctx, "an interrupt")
 }

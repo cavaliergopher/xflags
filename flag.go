@@ -49,7 +49,7 @@ func (c *Flag) String() string {
 	return "unknown"
 }
 
-// keyName returns the name or shortname of the flag in that order of
+// keyName returns the name or short name of the flag in that order of
 // precedence.
 func (c *Flag) keyName() string {
 	if c.name != "" {
@@ -68,8 +68,8 @@ func (c *Flag) Set(s string) error {
 	return c.value.Set(s)
 }
 
-// ShowDefault specifies that the default vlaue of this flag should be show in
-// the help message.
+// ShowDefault specifies that the default value of this flag should be shown
+// in the help message.
 func (c *Flag) ShowDefault() *Flag {
 	c.showDefault = true
 	return c
@@ -84,7 +84,7 @@ func (c *Flag) ShortName(name string) *Flag {
 }
 
 // Positional indicates that this flag is a positional argument, and therefore
-// has no "-" or "--" delimeter. You cannot specify both positional arguments
+// has no "-" or "--" delimiter. You cannot specify both positional arguments
 // and subcommands.
 func (c *Flag) Positional() *Flag {
 	c.positional = true

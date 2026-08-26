@@ -33,13 +33,13 @@ func RunWithArgs(ctx context.Context, cmd *Command, args ...string) int {
 	return cmd.Run(ctx, args)
 }
 
-// NotifyContext returns a copy of parent that is cancelled when the program
+// NotifyContext returns a copy of parent that is canceled when the program
 // is interrupted, on SIGINT or SIGTERM, and a stop function that releases
 // the signal handler.
 //
 // Unlike signal.NotifyContext, default signal handling is restored once the
-// context is cancelled, so a second interrupt terminates the program even if
-// it is wedged. This is the behaviour a user expects of a command line
+// context is canceled, so a second interrupt terminates the program even if
+// it is wedged. This is the behavior a user expects of a command line
 // program: the first interrupt asks it to stop, and the second insists.
 //
 // Programs that call os.Exit skip deferred calls, so stop may never run.
@@ -54,7 +54,7 @@ func NotifyContext(parent context.Context) (ctx context.Context, stop func()) {
 		case <-ch:
 		case <-ctx.Done():
 		}
-		// However this ended -- a signal, stop, or a cancelled parent --
+		// However this ended -- a signal, stop, or a canceled parent --
 		// stop relaying signals, which restores their default disposition
 		// so a second one kills a process that did not stop on the first.
 		signal.Stop(ch)

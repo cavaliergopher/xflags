@@ -19,11 +19,11 @@ var DBClient = NewCommand("db-client", "query a database").
 var GetCommand = NewCommand("get", "Get DB resources").
 	HandleFunc(Wrap(Get))
 
-// DeleteCommand is a subcommand with dependecnies injected into the handler by Wrap.
+// DeleteCommand is a subcommand with dependencies injected into the handler by Wrap.
 var DeleteCommand = NewCommand("delete", "Delete DB resources").
 	HandleFunc(Wrap(Delete))
 
-// Wrap returns a HandlerFunc that initialises common dependencies for command handlers and then
+// Wrap returns a HandlerFunc that initializes common dependencies for command handlers and then
 // injects them into fn. The invocation is passed along too, so a handler behind a wrapper can
 // still tell how it was called.
 func Wrap(fn func(ctx context.Context, inv *Invocation, db *sql.DB) error) HandlerFunc {
