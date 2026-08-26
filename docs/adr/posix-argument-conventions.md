@@ -62,7 +62,9 @@ a long name, which is the whole of the earlier ADR.
 while each short name is a flag that takes no value; the first that takes
 one takes the remainder of the argument as its attached value, so `-abfx`
 is `-a -b -f x`. This is `getopt`'s rule and needs the compiled description
-in hand, which is why it is not implemented yet.
+in hand, which is why it could not live in a pass over argv alone. The one
+place the remainder is not spent on names is an `=` following a boolean;
+see *Attached values follow Go, not getopt* below.
 
 **Guideline 7 — option-arguments are not optional.** A flag either always
 takes a value or never does, decided by its bound `Value`: a boolean flag
@@ -96,12 +98,9 @@ it into two arguments and loses the fact that they arrived as one.
 **Guideline 6 — one argument per option.** Adopted as the recommended form
 and the one help output shows. The two attached forms `getopt_long`
 accepts are accepted with it: `--name=value` splits at the first `=`, and
-`-nvalue` takes the whole remainder of the argument as the value. Under
-guideline 5 the remainder after a short name that takes no value is read as
-further short names, so `-a=false` is an unknown option rather than a
-value. How the two forms interact is the one place this ADR departs from
-`getopt_long` for reasons of its own; see *Attached values follow Go, not
-getopt* below.
+`-nvalue` takes the whole remainder of the argument as the value. How the two forms interact is where this ADR departs
+from `getopt_long` for reasons of its own; see *Attached values follow Go,
+not getopt* below.
 
 **Guideline 9 — options precede operands.** Not adopted in POSIX's strict
 reading, which stops option processing at the first operand; adopted in
@@ -165,11 +164,12 @@ it is a reasonable thing to add later.
 
 ### Attached values follow Go, not getopt
 
-Two rules about values attached to their option depart from `getopt_long`
-deliberately. `-n=value` sets `value` and not `=value`, and a boolean long
-option accepts an attached value, so `--verbose=false` sets false. This is
-what the parser does today; it is recorded here because it is a departure
-and not because it is a fix.
+Three rules about values attached to their option depart from `getopt_long`
+deliberately. `-n=value` sets `value` and not `=value`; a boolean long
+option accepts an attached value, so `--verbose=false` sets false; and an
+`=` following a short boolean is a delimiter rather than another name, so
+`-v=false` sets false too. They are recorded here because they are
+departures and not because they are fixes.
 
 Measured, rather than recalled:
 
@@ -198,11 +198,21 @@ wrong value rather than an error, which is the worse of the two failure
 modes; the value that is lost is one that begins with `=`, given attached,
 for which `-n =value` and `--name==value` both remain available.
 
-The boolean rule has the same shape and one more reason: without it there
-is no way to set a boolean false from argv at all, since a detached value
-is never consumed by a boolean and negated booleans are not settled.
-`getopt_long` and argparse both reject the form, so this departure is the
-larger of the two and belongs in the README's list.
+The boolean rules have the same shape and one more reason: without them
+there is no way to set a boolean false from argv at all, since a detached
+value is never consumed by a boolean and negated booleans are not settled.
+`getopt_long` and argparse both reject the long form, so this departure is
+the larger one and belongs in the README's list.
+
+The short boolean costs something the long one does not, and is worth
+stating plainly: guideline 5 spends the whole remainder of a short argument
+on further names, so reading `=` as a delimiter takes a character back from
+grouping. It costs no ambiguity, because guideline 3 confines a short name
+to `[A-Za-z0-9]` and `=` can therefore never be one. What it buys is that a
+flag's two spellings agree — `-v=false` and `--verbose=false` both set
+false — where conforming would have made the short form the only spelling
+that cannot express it. An asymmetry between a flag's own two names is a
+worse thing to explain than a departure from a guideline.
 
 Neither rule touches detached values. Guideline 14 still decides those, so
 `--count -5` is a missing value, `--verbose false` still leaves `false` as
@@ -225,8 +235,9 @@ already carries its own value.
   and the same preservation fixes both.
 - Guideline 5 is now a decision and not an open question. It changes what
   `-ab` means for two boolean flags, from a stray positional argument to
-  two set flags, and it must land with the schema-aware pass rather than
-  in `normalize`, which cannot see whether `-a` takes a value.
+  two set flags. It could not live in `normalize`, which could not see
+  whether `-a` takes a value; removing that pass is what made it a loop
+  over one argument rather than a second pass over argv.
 - No change here silently returns a different value. Every one turns
   something into an error, or an error into something, which is what makes
   them safe to land pre-v1 without release notes reading like a warning.

@@ -1,6 +1,9 @@
 package xflags
 
-import "os"
+import (
+	"os"
+	"unicode/utf8"
+)
 
 // TODO: fuzz tests?
 
@@ -205,11 +208,20 @@ func (c *argParser) parseOperand(token string) error {
 	return nil
 }
 
-// parseOption binds an option to its option-argument: one attached to the
-// same argument, the next argument for a flag that takes a value, or an
-// implicit "true" for a boolean.
+// parseOption binds an option to its option-argument. The two forms are
+// spelled differently enough to be worth separate readers.
 func (c *argParser) parseOption(token string) error {
-	name, value, attached := splitOption(token)
+	if isShortOption(token) {
+		return c.parseShortOptions(token)
+	}
+	return c.parseLongOption(token)
+}
+
+// parseLongOption binds one long option to its option-argument: one
+// attached with "=", the next argument for a flag that takes a value, or
+// an implicit "true" for a boolean.
+func (c *argParser) parseLongOption(token string) error {
+	name, value, attached := splitLongOption(token)
 	flag := c.flagsByName[name]
 	if flag == nil {
 		return newArgumentErrorf(nil, c.cmd, nil, name, "unrecognized argument: %s", name)
@@ -225,10 +237,61 @@ func (c *argParser) parseOption(token string) error {
 	if isBoolValue(flag.value) {
 		return c.setFlag(flag, "true")
 	}
+	return c.parseDetachedValue(flag, name)
+}
 
-	// Guideline 14: an argument that parses as an option is one, so a
-	// detached value may never begin with "-". A value that must, such as
-	// -5, is given attached instead.
+// parseShortOptions resolves one argument's worth of short options.
+// Guideline 5: consumption continues while each name is a flag that takes
+// no value, and the first that takes one takes the whole remainder of the
+// argument as its attached value, so -abfx is -a -b -f x. This is why the
+// argument cannot be split before the flag table is known.
+func (c *argParser) parseShortOptions(arg string) error {
+	for i, r := range arg {
+		if i == 0 {
+			continue // the delimiter
+		}
+		name := "-" + string(r)
+		flag := c.flagsByName[name]
+		if flag == nil {
+			return newArgumentErrorf(nil, c.cmd, nil, name, "unrecognized argument: %s", name)
+		}
+		c.observe(flag)
+		rest := arg[i+utf8.RuneLen(r):]
+
+		if isBoolValue(flag.value) {
+			// Guideline 5 spends the whole remainder on further names,
+			// which would leave a boolean no short spelling for false. A
+			// short name can never be "=", so reading one as a delimiter
+			// costs no ambiguity; see
+			// docs/adr/posix-argument-conventions.md.
+			if len(rest) > 0 && rest[0] == '=' {
+				return c.setFlag(flag, rest[1:])
+			}
+			if err := c.setFlag(flag, "true"); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// This flag takes a value, so the rest of the argument is it and
+		// no further name is read. A leading "=" is again the delimiter
+		// rather than the value.
+		if rest == "" {
+			return c.parseDetachedValue(flag, name)
+		}
+		if rest[0] == '=' {
+			rest = rest[1:]
+		}
+		return c.setFlag(flag, rest)
+	}
+	return nil
+}
+
+// parseDetachedValue binds the next argument to flag as its value.
+// Guideline 14: an argument that parses as an option is one, so a detached
+// value may never begin with "-". A value that must, such as -5, is given
+// attached instead.
+func (c *argParser) parseDetachedValue(flag *Flag, name string) error {
 	next, ok := c.peek()
 	if !ok || !isOperand(next) {
 		return newArgumentErrorf(nil, c.cmd, flag, name, "option requires an argument")
@@ -266,33 +329,19 @@ func isOperand(arg string) bool {
 	return !isShortOption(arg) && !isLongOption(arg)
 }
 
-// splitOption divides an option argument into its name and any
+// splitLongOption divides a long option argument into its name and any
 // option-argument attached to it, reporting whether one was attached at
-// all. Guideline 6 gives two attached forms: "--name=value" splits at the
-// first "=", and "-nvalue" takes the remainder of the argument.
+// all. Guideline 6's attached form for a long option is "--name=value",
+// which splits at the first "=".
 //
-// A leading "=" is dropped from a short option's remainder, so "-n=value"
-// gives "value" where getopt gives "=value". That is a departure, and
-// docs/adr/posix-argument-conventions.md is where it is argued.
-//
-// arg must be an option; isOperand decides that.
-func splitOption(arg string) (name, value string, attached bool) {
-	if isLongOption(arg) {
-		// From index 3, because a long name is at least one character
-		// wide and "--=value" therefore names nothing.
-		for i := 3; i < len(arg); i++ {
-			if arg[i] == '=' {
-				return arg[:i], arg[i+1:], true
-			}
+// arg must be a long option; isLongOption decides that.
+func splitLongOption(arg string) (name, value string, attached bool) {
+	// From index 3, because a long name is at least one character wide and
+	// "--=value" therefore names nothing.
+	for i := 3; i < len(arg); i++ {
+		if arg[i] == '=' {
+			return arg[:i], arg[i+1:], true
 		}
-		return arg, "", false
 	}
-	name, value = arg[:2], arg[2:]
-	if value == "" {
-		return name, "", false
-	}
-	if value[0] == '=' {
-		value = value[1:]
-	}
-	return name, value, true
+	return arg, "", false
 }

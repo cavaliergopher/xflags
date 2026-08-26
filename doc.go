@@ -122,9 +122,15 @@ In addition to positional arguments, the following forms are permitted:
 	-fx
 	-f=x
 	-f x // non-boolean flags only
+	-abc // equivalent to -a -b -c, for boolean -a and -b
 	--flag
 	--flag=x
 	--flag x // non-boolean flags only
+
+Short flags group into one argument while each takes no value. The first
+that takes one takes the rest of the argument as its value, so -abfx is
+-a -b -f x when -a and -b are boolean. An "=" is always a delimiter rather
+than a flag name, so a boolean is set false as -f=false or --flag=false.
 
 The detached forms are not permitted for boolean flags because the meaning
 of the command
@@ -132,8 +138,7 @@ of the command
 	cmd -x *
 
 where * is a Unix shell wildcard, would change if there were a file called
-0, false, and so on. A boolean is set false with an attached value instead,
-as in --flag=false.
+0, false, and so on.
 
 An attached value is taken literally, so it may look like a flag: --flag=-5
 is negative five, where --flag -5 is a missing value. See

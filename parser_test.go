@@ -5,18 +5,13 @@ import (
 	"testing"
 )
 
-func TestSplitOption(t *testing.T) {
+func TestSplitLongOption(t *testing.T) {
 	for _, tt := range []struct {
 		arg      string
 		name     string
 		value    string
 		attached bool
 	}{
-		{"-x", "-x", "", false},
-		{"-xVar", "-x", "Var", true},
-		{"-x=Var", "-x", "Var", true}, // the "=" is a delimiter, not data
-		{"-x=", "-x", "", true},       // ... so this is the empty value
-		{"-x-5", "-x", "-5", true},    // an attached value may look like an option
 		{"--x", "--x", "", false},
 		{"--xVar", "--xVar", "", false}, // long options have no remainder form
 		{"--x=Var", "--x", "Var", true},
@@ -26,13 +21,86 @@ func TestSplitOption(t *testing.T) {
 		{"--=foo", "--=foo", "", false}, // names nothing, so it is not a split
 	} {
 		t.Run(tt.arg, func(t *testing.T) {
-			name, value, attached := splitOption(tt.arg)
+			name, value, attached := splitLongOption(tt.arg)
 			if name != tt.name || value != tt.value || attached != tt.attached {
 				t.Errorf(
 					"expected (%q, %q, %v), got (%q, %q, %v)",
 					tt.name, tt.value, tt.attached, name, value, attached,
 				)
 			}
+		})
+	}
+}
+
+// TestShortOptionGrouping covers POSIX guideline 5: short names are
+// consumed while each takes no value, and the first that takes one takes
+// the remainder of the argument. Every case here was confirmed against
+// getopt(3) with the same declarations.
+func TestShortOptionGrouping(t *testing.T) {
+	for _, tt := range []struct {
+		args []string
+		a, b bool
+		f    string
+		arg  string
+		err  bool
+	}{
+		{args: []string{"-a"}, a: true},
+		{args: []string{"-ab"}, a: true, b: true},
+		{args: []string{"-ba"}, a: true, b: true},
+		{args: []string{"-a", "-b"}, a: true, b: true},
+
+		// The first name that takes a value ends the cluster.
+		{args: []string{"-abfx"}, a: true, b: true, f: "x"},
+		{args: []string{"-abf", "x"}, a: true, b: true, f: "x"},
+		{args: []string{"-abf=x"}, a: true, b: true, f: "x"},
+		{args: []string{"-fab"}, f: "ab"},
+		{args: []string{"-fx"}, f: "x"},
+		{args: []string{"-f", "x"}, f: "x"},
+
+		// A value ends the cluster even when it looks like more names.
+		{args: []string{"-f-5"}, f: "-5"},
+		{args: []string{"-fa"}, f: "a"},
+
+		{args: []string{"-abf"}, err: true},      // nothing left to take
+		{args: []string{"-abz"}, err: true},      // no such flag
+		{args: []string{"-af", "-b"}, err: true}, // detached value parses as an option
+
+		// "=" after a boolean is a delimiter, not another name, so a
+		// short boolean can be set false like a long one.
+		{args: []string{"-a=false"}, a: false},
+		{args: []string{"-a=true"}, a: true},
+		{args: []string{"-ba=false"}, b: true, a: false},
+		{args: []string{"-ab=false"}, a: true, b: false},
+		{args: []string{"-a=nonsense"}, err: true},
+		{args: []string{"-a="}, err: true}, // the empty string is not a bool
+		{args: []string{"-a", "false"}, a: true, arg: "false"},
+
+		// An operand is still an operand.
+		{args: []string{"-a", "arg"}, a: true, arg: "arg"},
+	} {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			var a, b bool
+			var f, operand string
+			cmd := NewCommand("test", "").Flags(
+				Bool(&a, "alpha", false, "").ShortName("a"),
+				Bool(&b, "bravo", false, "").ShortName("b"),
+				String(&f, "foxtrot", "", "").ShortName("f"),
+				String(&operand, "OPERAND", "", "").Positional(),
+			)
+			_, err := cmd.Parse(tt.args)
+			if tt.err {
+				if err == nil {
+					t.Fatalf("expected an error, got a=%v b=%v f=%q", a, b, f)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertBool(t, tt.a, a)
+			assertBool(t, tt.b, b)
+			assertString(t, tt.f, f)
+			assertString(t, tt.arg, operand)
 		})
 	}
 }
