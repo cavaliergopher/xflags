@@ -25,8 +25,14 @@ type Invocation struct {
 	// with the command that was invoked.
 	Path []string
 
-	// Args holds any arguments that followed a "--" terminator.
-	Args []string
+	// Forwarded holds the arguments that followed a "--" terminator, which
+	// the parser did not interpret. It is empty unless the command opted in
+	// with Command.ForwardArgs.
+	//
+	// This is not the command's operands, which bind to positional flags as
+	// usual. These are the arguments the command means to hand on to
+	// something else.
+	Forwarded []string
 
 	// HelpRequested reports that -h or --help was given, in which case Cmd is
 	// the command whose usage was asked for and no handler should run. The
@@ -52,8 +58,8 @@ type Invocation struct {
 // canceled on SIGINT or SIGTERM.
 //
 // inv describes the invocation: the command that was named, the path it was
-// reached by, any arguments the parser ignored after the "--" terminator,
-// and the streams to work with. A handler should read inv.Stdin and write
+// reached by, any arguments forwarded past a "--" terminator, and the
+// streams to work with. A handler should read inv.Stdin and write
 // inv.Stdout and inv.Stderr rather than the process streams, so that a
 // caller that redirects the command captures its output too. Nothing
 // enforces it; a handler that reaches for os.Stdout simply escapes the
@@ -69,19 +75,19 @@ type HandlerFunc func(ctx context.Context, inv *Invocation) error
 // Programs should not create Command directly and instead use NewCommand to
 // construct one.
 type Command struct {
-	parent         *Command
-	name           string
-	summary        string
-	description    string
-	hidden         bool
-	withTerminator bool
-	flagGroups     []*FlagGroup
-	subcommands    []*Command
-	formatFunc     FormatFunc
-	handlerFunc    HandlerFunc
-	stdin          io.Reader
-	stdout         io.Writer
-	stderr         io.Writer
+	parent      *Command
+	name        string
+	summary     string
+	description string
+	hidden      bool
+	forwardArgs bool
+	flagGroups  []*FlagGroup
+	subcommands []*Command
+	formatFunc  FormatFunc
+	handlerFunc HandlerFunc
+	stdin       io.Reader
+	stdout      io.Writer
+	stderr      io.Writer
 
 	// defaultGroup is the implicit "options" flag group appended to by
 	// Flags, created lazily on first use so an unused group never appears.
@@ -230,12 +236,12 @@ func (c *Command) describe(
 	nodeMap map[*Command]*desc.Command,
 ) *desc.Command {
 	node := &desc.Command{
-		Parent:         parent,
-		Name:           c.name,
-		Summary:        c.summary,
-		Description:    c.description,
-		Hidden:         c.hidden,
-		WithTerminator: c.withTerminator,
+		Parent:      parent,
+		Name:        c.name,
+		Summary:     c.summary,
+		Description: c.description,
+		Hidden:      c.hidden,
+		ForwardArgs: c.forwardArgs,
 	}
 	nodeMap[c] = node
 	for _, group := range c.flagGroups {
@@ -464,11 +470,16 @@ func (c *Command) FormatFunc(fn FormatFunc) *Command {
 	return c
 }
 
-// WithTerminator specifies that any command line argument after "--" will be
-// passed through to the args parameter of the command's handler without any
-// further processing.
-func (c *Command) WithTerminator() *Command {
-	c.withTerminator = true
+// ForwardArgs specifies that a "--" on the command line ends option
+// processing, and that everything after it reaches the handler unparsed as
+// Invocation.Forwarded rather than binding to positional flags.
+//
+// This is for a command that hands arguments on to something else -- a
+// subprocess, or another parser -- which is why they are kept apart from
+// the operands it consumes itself. A command that has not opted in gives
+// "--" no meaning. See docs/adr/posix-argument-conventions.md.
+func (c *Command) ForwardArgs() *Command {
+	c.forwardArgs = true
 	return c
 }
 

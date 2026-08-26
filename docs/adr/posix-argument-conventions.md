@@ -1,8 +1,10 @@
 # The dialect is the POSIX syntax guidelines plus GNU long options
 
-Status: accepted, 2026-08-23. Amended 2026-08-26, twice, over how an
-attached value is read; see *Attached values follow Go, not getopt*.
-Implemented apart from the four gaps named in the consequences.
+Status: accepted, 2026-08-23. Amended 2026-08-26: twice over how an
+attached value is read, see *Attached values follow Go, not getopt*; and
+once to rename guideline 10's opt-in to `ForwardArgs`, which hands the
+arguments to `Invocation.Forwarded`. Implemented apart from the four gaps
+named in the consequences.
 
 ## Context
 
@@ -116,8 +118,8 @@ an error about ordering that no amount of permutation fixes. See
 `docs/adr/path-scoped-flag-names.md`.
 
 **Guideline 10 — `--` ends option processing.** Adopted for commands that
-set `WithTerminator`, and everything after it reaches the handler as
-`Invocation.Args` rather than binding to operand slots. POSIX has no third
+set `ForwardArgs`, and everything after it reaches the handler as
+`Invocation.Forwarded` rather than binding to operand slots. POSIX has no third
 category, but POSIX has no subcommands either, and the arguments a command
 means to forward to something else are not the same as the operands it
 consumes itself. A command that has not opted in must reject a bare `--`;

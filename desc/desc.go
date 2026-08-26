@@ -25,10 +25,10 @@ type Command struct {
 	// message, after its flags and subcommands.
 	Description string
 
-	Hidden         bool
-	WithTerminator bool
-	FlagGroups     []*FlagGroup
-	Subcommands    []*Command
+	Hidden      bool
+	ForwardArgs bool
+	FlagGroups  []*FlagGroup
+	Subcommands []*Command
 }
 
 // FlagGroup is the compiled description of an xflags.FlagGroup.

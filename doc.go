@@ -74,7 +74,7 @@ Command.Stdout and Command.Stderr.
 		return nil
 	}
 
-Flag parsing will stop after "--" only if a command sets WithTerminator. All arguments following the
+Flag parsing will stop after "--" only if a command sets ForwardArgs. All arguments following the
 terminator are passed to the command handler as Invocation.Args.
 
 You can define subcommands by

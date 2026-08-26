@@ -29,7 +29,7 @@ func (c *exampleCommand) Command() *Command {
 
 // Run handles calls to this command from the command line.
 //
-// If WithTerminator is specified for the App command, any arguments given after
+// If ForwardArgs is specified for the App command, any arguments given after
 // the "--" terminator will be passed in as the args parameter without any
 // further parsing.
 func (c *exampleCommand) Run(ctx context.Context, inv *Invocation) error {

@@ -176,7 +176,7 @@ func TestTerminator(t *testing.T) {
 			String(&foo, "foo", "", ""),
 			Bool(&bar, "bar", false, ""),
 		).
-		WithTerminator()
+		ForwardArgs()
 	tailArgs := []string{
 		"baz",
 		"--baz", "--baz=qux", "--baz", "qux",
@@ -190,5 +190,5 @@ func TestTerminator(t *testing.T) {
 	}
 	assertString(t, "foo", foo)
 	assertBool(t, true, bar)
-	assertStrings(t, tailArgs, inv.Args)
+	assertStrings(t, tailArgs, inv.Forwarded)
 }

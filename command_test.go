@@ -324,7 +324,7 @@ func ExampleCommand_Description() {
 	// Print more than once with -n.
 }
 
-func ExampleCommand_WithTerminator() {
+func ExampleCommand_ForwardArgs() {
 	var verbose bool
 
 	// create a command that forwards arguments to another program
@@ -332,17 +332,17 @@ func ExampleCommand_WithTerminator() {
 		Flags(
 			Bool(&verbose, "v", false, "Print verbose output"),
 		).
-		WithTerminator(). // enable the "--" terminator
+		ForwardArgs(). // enable the "--" terminator
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			// read verbose argument which was parsed by xflags
 			if verbose {
-				fmt.Printf("+ echo %s\n", strings.Join(inv.Args, " "))
+				fmt.Printf("+ echo %s\n", strings.Join(inv.Forwarded, " "))
 			}
 
-			// inv.Args holds everything after the "--" terminator,
+			// inv.Forwarded holds everything after the "--" terminator,
 			// untouched by the parser, ready to hand to the wrapped
 			// program
-			fmt.Println(strings.Join(inv.Args, " "))
+			fmt.Println(strings.Join(inv.Forwarded, " "))
 			return nil
 		})
 
@@ -712,7 +712,7 @@ func TestInvocationPath(t *testing.T) {
 // TestParseIsNotWrittenBack asserts that a parse leaves nothing behind on
 // the command tree, so parsing twice yields two independent results.
 func TestParseIsNotWrittenBack(t *testing.T) {
-	cmd := NewCommand("test", "").WithTerminator()
+	cmd := NewCommand("test", "").ForwardArgs()
 	first, err := cmd.Parse([]string{"--", "one"})
 	if err != nil {
 		t.Fatal(err)
@@ -721,8 +721,8 @@ func TestParseIsNotWrittenBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertStrings(t, []string{"one"}, first.Args)
-	assertStrings(t, []string{"two"}, second.Args)
+	assertStrings(t, []string{"one"}, first.Forwarded)
+	assertStrings(t, []string{"two"}, second.Forwarded)
 }
 
 // TestRunExitCodes asserts the contract Run documents: 0 for success or
@@ -893,7 +893,7 @@ func TestRunReportsOutputFailure(t *testing.T) {
 func TestHandlerReceivesInvocation(t *testing.T) {
 	var got *Invocation
 	add := NewCommand("add", "").
-		WithTerminator().
+		ForwardArgs().
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			got = inv
 			return nil
@@ -909,7 +909,7 @@ func TestHandlerReceivesInvocation(t *testing.T) {
 		t.Fatal("handler was not called")
 	}
 	assertStrings(t, []string{"myapp", "remote", "add"}, got.Path)
-	assertStrings(t, []string{"origin"}, got.Args)
+	assertStrings(t, []string{"origin"}, got.Forwarded)
 	if want := add; got.Cmd != want {
 		t.Errorf("Cmd = %v, want %v", got.Cmd, want)
 	}

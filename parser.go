@@ -92,7 +92,7 @@ func (c *argParser) invocation() *Invocation {
 	return &Invocation{
 		Cmd:           c.cmd,
 		Path:          c.path,
-		Args:          c.args,
+		Forwarded:     c.args,
 		HelpRequested: c.helpRequested,
 		Stdin:         c.cmd.getStdin(),
 		Stdout:        c.cmd.getStdout(),
@@ -189,7 +189,7 @@ func (c *argParser) parseOne(token string) error {
 		c.args = append(c.args, token)
 		return nil
 	}
-	if token == terminator && c.cmd.withTerminator {
+	if token == terminator && c.cmd.forwardArgs {
 		c.isTerminated = true
 		return nil
 	}
