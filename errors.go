@@ -196,7 +196,7 @@ func (e *ArgumentError) String() string {
 		return e.Message
 	}
 	if e.Message == "" {
-		return e.Err.Error()
+		return humanMessage(e.Err)
 	}
-	return e.Message + ": " + e.Err.Error()
+	return e.Message + ": " + humanMessage(e.Err)
 }

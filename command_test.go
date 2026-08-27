@@ -792,6 +792,28 @@ func TestValidateCollectsAllErrors(t *testing.T) {
 	}
 }
 
+// TestArgumentErrorWrapsArgumentErrorOnce asserts that an ArgumentError
+// wrapping another, such as Choices reporting a bad value, prints its
+// wrapped message plain: Error() tags it "xflags: " for a Go caller, and
+// that tag must not leak into the sentence Run prints for a human.
+func TestArgumentErrorWrapsArgumentErrorOnce(t *testing.T) {
+	cmd := NewCommand("test", "").Flags(
+		String(new(string), "foo", "", "").Choices("a", "b"),
+	)
+	code, _, stderr := runCaptured(cmd, "--foo=c")
+	if got, want := code, 2; got != want {
+		t.Errorf("exit code = %d, want %d", got, want)
+	}
+	want := "Argument error: --foo: expected one of: a, b\n" +
+		"Usage: test [OPTIONS]\n" +
+		"\n" +
+		"Options:\n" +
+		"   --foo  \n"
+	if got := stderr; got != want {
+		t.Errorf("stderr = %q, want %q", got, want)
+	}
+}
+
 // TestHandlerJoinedErrorReportsWhole asserts that only the batches
 // validation collects are split into one line per error: a handler's own
 // joined error reports whole, keeping the wrapper text a per-line split
