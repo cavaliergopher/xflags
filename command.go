@@ -279,8 +279,16 @@ func (c *Command) validateSelf(claimed map[string]*Command) error {
 // current command is legal only once its own command is named, so
 // unrecognized-option errors use this to say where the name would work;
 // see docs/adr/path-scoped-flag-names.md.
+//
+// A hidden command, and its whole subtree, is skipped: it is deliberately
+// unadvertised, so the hint must not name it either. The flag stays
+// usable; the error just falls back to the plain "unrecognized option"
+// message.
 func (c *Command) findDescendantWithFlag(key string) *Command {
 	for _, sub := range c.subcommands {
+		if sub.hidden {
+			continue
+		}
 		for _, group := range sub.flagGroups {
 			for _, flag := range group.flags {
 				if flag.positional {

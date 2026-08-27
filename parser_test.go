@@ -256,6 +256,54 @@ func TestUnrecognizedOptionNamesSubtree(t *testing.T) {
 	}
 }
 
+// TestUnrecognizedOptionSkipsHiddenSubtree asserts that a hidden
+// subcommand's flags are never named in the hint: a hidden command is
+// deliberately unadvertised, so the hint must not advertise it either. The
+// flag stays usable once its own command is named; only the hint goes
+// quiet, falling back to the plain message. A visible sibling is
+// unaffected.
+func TestUnrecognizedOptionSkipsHiddenSubtree(t *testing.T) {
+	newApp := func() *Command {
+		hidden := NewCommand("hidden", "").
+			Flags(Bool(new(bool), "force", false, "")).
+			Hidden()
+		visible := NewCommand("visible", "").
+			Flags(Bool(new(bool), "tags", false, ""))
+		return NewCommand("app", "").Subcommands(hidden, visible)
+	}
+
+	t.Run("HiddenSubcommandNoHint", func(t *testing.T) {
+		_, err := newApp().Parse([]string{"--force"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if got, want := humanMessage(err), "unrecognized option: --force"; got != want {
+			t.Errorf("message = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("VisibleSiblingStillHints", func(t *testing.T) {
+		_, err := newApp().Parse([]string{"--tags"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		want := `unrecognized option: --tags (defined by subcommand "visible")`
+		if got := humanMessage(err); got != want {
+			t.Errorf("message = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("HiddenFlagStillUsable", func(t *testing.T) {
+		inv, err := newApp().Parse([]string{"hidden", "--force"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := inv.Cmd.String(), "hidden"; got != want {
+			t.Errorf("cmd = %q, want %q", got, want)
+		}
+	})
+}
+
 // TestCheckNArgsSpansThePath asserts that the count rules cover every
 // flag that became active along the descended path: an ancestor's
 // Required flag is still enforced when a subcommand is invoked, and its
