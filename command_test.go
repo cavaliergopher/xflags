@@ -747,6 +747,140 @@ func TestValidateShortName(t *testing.T) {
 	}
 }
 
+// TestValidateCollectsAllErrors asserts that a malformed tree reports
+// every configuration error in one run -- they surface in a batch at
+// startup -- and that Run prints each on its own prefixed line.
+func TestValidateCollectsAllErrors(t *testing.T) {
+	var a, b, c string
+	cmd := NewCommand("test", "").Flags(
+		String(&a, "foo", "", ""),
+		String(&b, "foo", "", ""),                 // duplicate name
+		String(&c, "bar", "", "").ShortName("xx"), // illegal short name
+	)
+	_, err := cmd.Parse(nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var cfgErr *ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Fatalf("expected a *ConfigError in %v", err)
+	}
+	code, _, stderr := runCaptured(cmd)
+	if got, want := code, 2; got != want {
+		t.Errorf("exit code = %d, want %d", got, want)
+	}
+	want := "Program error: test: flag already declared: --foo\n" +
+		"Program error: --bar: short name must be one character from [A-Za-z0-9]: \"xx\"\n"
+	if got := stderr; got != want {
+		t.Errorf("stderr = %q, want %q", got, want)
+	}
+}
+
+// TestHandlerJoinedErrorReportsWhole asserts that only the batches
+// validation collects are split into one line per error: a handler's own
+// joined error reports whole, keeping the wrapper text a per-line split
+// would drop.
+func TestHandlerJoinedErrorReportsWhole(t *testing.T) {
+	errA := errors.New("a is stale")
+	errB := errors.New("b is stale")
+	cmd := NewCommand("test", "").HandleFunc(
+		func(ctx context.Context, inv *Invocation) error {
+			return fmt.Errorf("syncing a and b failed: %w, %w", errA, errB)
+		},
+	)
+	code, _, stderr := runCaptured(cmd)
+	if got, want := code, 1; got != want {
+		t.Errorf("exit code = %d, want %d", got, want)
+	}
+	if got, want := stderr, "Error: syncing a and b failed: a is stale, b is stale\n"; got != want {
+		t.Errorf("stderr = %q, want %q", got, want)
+	}
+}
+
+// TestValidateFlagName asserts that a long name containing "=" or
+// whitespace is rejected -- both break parsing -- while names that merely
+// look unusual, such as a hyphenated one, remain legal.
+func TestValidateFlagName(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		want string
+	}{
+		{"foo=bar", "flag name must not contain '='"},
+		{"foo bar", "flag name must not contain whitespace"},
+		{"foo\tbar", "flag name must not contain whitespace"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var a string
+			cmd := NewCommand("test", "").Flags(String(&a, tt.name, "", ""))
+			_, err := cmd.Parse(nil)
+			if err == nil {
+				t.Fatalf("expected error for flag name %q, got nil", tt.name)
+			}
+			if got, want := humanMessage(err), "--"+tt.name+": "+tt.want; got != want {
+				t.Errorf("message = %q, want %q", got, want)
+			}
+		})
+	}
+	for _, name := range []string{"dry-run", "helper"} {
+		t.Run(name, func(t *testing.T) {
+			var a string
+			cmd := NewCommand("test", "").Flags(String(&a, name, "", ""))
+			if _, err := cmd.Parse(nil); err != nil {
+				t.Errorf("expected %q to be a legal flag name: %v", name, err)
+			}
+		})
+	}
+}
+
+// TestValidateReservedHelpNames asserts that a flag cannot claim "-h" or
+// "--help": the parser resolves both before the flag table, so such a
+// declaration would silently never fire.
+func TestValidateReservedHelpNames(t *testing.T) {
+	var a string
+	for _, tt := range []struct {
+		name string
+		flag *Flag
+		want string
+	}{
+		{
+			"LongHelp",
+			String(&a, "help", "", ""),
+			"--help: flag name is reserved for help: --help",
+		},
+		{
+			"ShortH",
+			String(&a, "foo", "", "").ShortName("h"),
+			"--foo: short name is reserved for help: -h",
+		},
+		{
+			"PromotedH", // a one-character name declares a short name
+			String(&a, "h", "", ""),
+			"-h: short name is reserved for help: -h",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewCommand("test", "").Flags(tt.flag).Parse(nil)
+			if err == nil {
+				t.Fatal("expected error for a reserved help name, got nil")
+			}
+			if got, want := humanMessage(err), tt.want; got != want {
+				t.Errorf("message = %q, want %q", got, want)
+			}
+		})
+	}
+	// Reservation is exact: "H" is not "h", "helper" is not "help".
+	t.Run("Legal", func(t *testing.T) {
+		var b string
+		cmd := NewCommand("test", "").Flags(
+			String(&a, "helper", "", "").ShortName("H"),
+			String(&b, "no-help", "", ""),
+		)
+		if _, err := cmd.Parse(nil); err != nil {
+			t.Errorf("expected nearby names to remain legal: %v", err)
+		}
+	})
+}
+
 // TestValidateErrorsSurfaceAtParse asserts that a misconfigured tree does not
 // error, or panic, at construction time -- only once Parse is called.
 func TestValidateErrorsSurfaceAtParse(t *testing.T) {
@@ -809,6 +943,57 @@ func TestParseIsNotWrittenBack(t *testing.T) {
 	}
 	assertStrings(t, []string{"one"}, first.Forwarded)
 	assertStrings(t, []string{"two"}, second.Forwarded)
+}
+
+// TestParseRestoresDefaults asserts that a second Parse of the same tree
+// starts from the declared defaults rather than inheriting the first
+// parse's values -- trees get parsed twice mostly in tests.
+func TestParseRestoresDefaults(t *testing.T) {
+	var name string
+	var items []string
+	var word uint64
+	cmd := NewCommand("test", "").Flags(
+		String(&name, "name", "default", ""),
+		Strings(&items, "item", []string{"a"}, ""),
+		BitField(&word, 0x1, "one", false, ""),
+		BitField(&word, 0x2, "two", true, ""),
+	)
+	args := []string{"--name=x", "--item=p", "--item=q", "--one"}
+	for i := 0; i < 2; i++ {
+		if _, err := cmd.Parse(args); err != nil {
+			t.Fatal(err)
+		}
+		assertString(t, "x", name)
+		assertStrings(t, []string{"p", "q"}, items)
+		assertUint64(t, 0x3, word)
+	}
+	// A parse of nothing restores every default outright.
+	if _, err := cmd.Parse(nil); err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "default", name)
+	assertStrings(t, []string{"a"}, items)
+	assertUint64(t, 0x2, word)
+}
+
+// TestParseResetsEnvironmentValue asserts that a flag filled from its
+// environment variable on one parse returns to its default on a later
+// parse run without the variable set.
+func TestParseResetsEnvironmentValue(t *testing.T) {
+	var name string
+	cmd := NewCommand("test", "").Flags(
+		String(&name, "name", "default", "").Env("XFLAGS_TEST_NAME"),
+	)
+	t.Setenv("XFLAGS_TEST_NAME", "from-env")
+	if _, err := cmd.Parse(nil); err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "from-env", name)
+	os.Unsetenv("XFLAGS_TEST_NAME") // t.Setenv restores it after the test
+	if _, err := cmd.Parse(nil); err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "default", name)
 }
 
 // TestRunExitCodes asserts the contract Run documents: 0 for success or

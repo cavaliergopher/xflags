@@ -29,17 +29,30 @@ func isBoolValue(v Value) bool {
 	return false
 }
 
+// Resetter is an optional interface for a Value whose Set method cannot
+// restore its default: one that accumulates each value it is given, or one
+// that shares state with other values. Parse restores every flag to its
+// default before reading any arguments, so that parsing the same tree
+// twice yields the same values; a value implementing Resetter is restored
+// by Reset, and any other by re-applying the default its flag's
+// constructor captured.
+type Resetter interface {
+	Reset()
+}
+
 // ValidateFunc is a function that validates an argument before it is parsed.
 type ValidateFunc = func(arg string) error
 
 type bitFieldValue struct {
 	p    *uint64
 	mask uint64
+	def  uint64
 }
 
 func newBitFieldValue(val bool, p *uint64, mask uint64) *bitFieldValue {
 	v := &bitFieldValue{p: p, mask: mask}
 	v.set(val)
+	v.def = *p & mask
 	return v
 }
 
@@ -56,6 +69,13 @@ func (p *bitFieldValue) Set(s string) error {
 	}
 	p.set(v)
 	return nil
+}
+
+// Reset restores this flag's bits to their state at construction. Several
+// flags share the one word, so only the mask may be touched -- and Set
+// only ever raises bits, so it could not lower them back itself.
+func (p *bitFieldValue) Reset() {
+	*p.p = *p.p&^p.mask | p.def
 }
 
 func (p *bitFieldValue) set(v bool) {
@@ -194,12 +214,13 @@ func (p *stringValue) Set(s string) error {
 
 type stringSliceValue struct {
 	p   *[]string
+	def []string
 	hot bool
 }
 
 func newStringSliceValue(val []string, p *[]string) *stringSliceValue {
 	*p = val
-	return &stringSliceValue{p: p}
+	return &stringSliceValue{p: p, def: val}
 }
 
 func (p *stringSliceValue) String() string {
@@ -215,6 +236,13 @@ func (p *stringSliceValue) Set(s string) error {
 	}
 	*p.p = append(*p.p, s)
 	return nil
+}
+
+// Reset restores the default slice. Set appends, so it could never get
+// back to the default on its own.
+func (p *stringSliceValue) Reset() {
+	*p.p = p.def
+	p.hot = false
 }
 
 type uintValue uint

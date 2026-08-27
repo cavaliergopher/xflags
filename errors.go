@@ -25,6 +25,47 @@ func humanMessage(err error) string {
 	return err.Error()
 }
 
+// joinErrors joins collected validation errors, but hands a lone error back
+// unwrapped so it keeps its own type and String method -- the single-error
+// report reads exactly as it always has, and joining is reserved for the
+// batch.
+func joinErrors(errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+	if len(errs) == 1 {
+		return errs[0]
+	}
+	return &joinedError{errors.Join(errs...)}
+}
+
+// joinedError marks a batch that joinErrors collected, so flattenErrors
+// splits only those. A caller's own joined error -- errors.Join, or
+// fmt.Errorf with several %w verbs -- reports whole, wrapper text and all.
+type joinedError struct{ error }
+
+// Unwrap exposes the joined errors, so errors.As and errors.Is still see
+// inside the batch. The embedded field's static type hides the method the
+// join provides, so it is restated here.
+func (e *joinedError) Unwrap() []error {
+	return e.error.(interface{ Unwrap() []error }).Unwrap()
+}
+
+// flattenErrors returns the individual errors joinErrors collected into
+// err, in order, or err itself when it is no such batch. Tree validation
+// reports every configuration error in one run, and each deserves its own
+// legible line rather than a shared prefix on a multi-line blob.
+func flattenErrors(err error) []error {
+	if joined, ok := err.(*joinedError); ok {
+		var errs []error
+		for _, e := range joined.Unwrap() {
+			errs = append(errs, flattenErrors(e)...)
+		}
+		return errs
+	}
+	return []error{err}
+}
+
 // ExitCoder is an error that names the exit code a program should terminate
 // with. Run looks for one in the chain of errors returned by a handler,
 // using errors.As, and exits with 1 if it finds none.

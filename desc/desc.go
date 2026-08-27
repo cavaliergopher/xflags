@@ -50,4 +50,5 @@ type Flag struct {
 	MinCount    int
 	MaxCount    int
 	EnvVar      string
+	Choices     []string
 }

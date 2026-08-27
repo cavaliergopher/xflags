@@ -2,8 +2,10 @@ package xflags
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/cavaliergopher/xflags/desc"
@@ -25,16 +27,23 @@ const (
 // Programs should not create Flag directly and instead use one of the typed
 // constructors such as String, Int or Var to construct one.
 type Flag struct {
-	name        string
-	shortName   string
-	usage       string
-	defValue    string
+	name      string
+	shortName string
+	usage     string
+	defValue  string
+
+	// hasDefault records that a typed constructor captured defValue from a
+	// live Value, so Parse may re-apply it. It stays false for Var and for
+	// flags imported from a flag.FlagSet, whose defValue is display-only.
+	hasDefault bool
+
 	showDefault bool
 	positional  bool
 	minCount    int
 	maxCount    int
 	hidden      bool
 	envVar      string
+	choices     []string
 	validate    ValidateFunc
 	value       Value
 }
@@ -80,6 +89,7 @@ func BitField(p *uint64, mask uint64, name string, value bool, usage string) *Fl
 	v := newBitFieldValue(value, p, mask)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
+	c.hasDefault = true
 	return c
 }
 
@@ -90,6 +100,7 @@ func Bool(p *bool, name string, value bool, usage string) *Flag {
 	v := newBoolValue(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
+	c.hasDefault = true
 	return c
 }
 
@@ -101,6 +112,7 @@ func Duration(p *time.Duration, name string, value time.Duration, usage string) 
 	v := newDurationValue(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
+	c.hasDefault = true
 	return c
 }
 
@@ -111,6 +123,7 @@ func Float64(p *float64, name string, value float64, usage string) *Flag {
 	v := newFloat64Value(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
+	c.hasDefault = true
 	return c
 }
 
@@ -132,6 +145,7 @@ func Int(p *int, name string, value int, usage string) *Flag {
 	v := newIntValue(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
+	c.hasDefault = true
 	return c
 }
 
@@ -142,6 +156,7 @@ func Int64(p *int64, name string, value int64, usage string) *Flag {
 	v := newInt64Value(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
+	c.hasDefault = true
 	return c
 }
 
@@ -152,6 +167,7 @@ func String(p *string, name, value, usage string) *Flag {
 	v := newStringValue(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
+	c.hasDefault = true
 	return c
 }
 
@@ -162,6 +178,7 @@ func Strings(p *[]string, name string, value []string, usage string) *Flag {
 	v := newStringSliceValue(value, p)
 	c := Var(v, name, usage).NArgs(0, 0)
 	c.defValue = stringifyDefault(v)
+	c.hasDefault = true
 	return c
 }
 
@@ -172,6 +189,7 @@ func Uint(p *uint, name string, value uint, usage string) *Flag {
 	v := newUintValue(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
+	c.hasDefault = true
 	return c
 }
 
@@ -182,6 +200,7 @@ func Uint64(p *uint64, name string, value uint64, usage string) *Flag {
 	v := newUint64Value(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
+	c.hasDefault = true
 	return c
 }
 
@@ -289,54 +308,68 @@ func (c *Flag) Validate(f ValidateFunc) *Flag {
 	return c
 }
 
-// Choices is a convenience method that calls Validate and sets a ValidateFunc
-// that enforces that the flag value must be one of the given choices.
+// Choices restricts the flag's value to one of elems: any other value
+// fails to parse, naming the legal choices.
 func (c *Flag) Choices(elems ...string) *Flag {
+	c.choices = elems
 	return c.Validate(
 		func(arg string) error {
-			for _, elem := range elems {
+			for _, elem := range c.choices {
 				if arg == elem {
 					return nil
 				}
 			}
 			return newArgumentErrorf(nil, nil, c, arg,
 				"expected one of: %s",
-				strings.Join(elems, ", "),
+				strings.Join(c.choices, ", "),
 			)
 		},
 	)
 }
 
 // check verifies that the flag is configured correctly, independent of the
-// command it belongs to.
+// command it belongs to, reporting every rule it breaks.
 func (c *Flag) check() error {
+	var errs []error
+	fail := func(format string, a ...any) {
+		errs = append(errs, newConfigErrorf(nil, nil, c, format, a...))
+	}
 	if strings.HasPrefix(c.name, "-") {
-		return newConfigErrorf(nil, nil, c, "flag name must not start with '-'")
+		fail("flag name must not start with '-'")
+	}
+	// "=" reads as the delimiter of an attached value and whitespace as an
+	// argument break, so a name containing either can never be matched.
+	if strings.ContainsRune(c.name, '=') {
+		fail("flag name must not contain '='")
+	}
+	if strings.ContainsFunc(c.name, unicode.IsSpace) {
+		fail("flag name must not contain whitespace")
+	}
+	// The parser matches -h and --help before the flag table, so a flag
+	// claiming either spelling would silently never fire.
+	if c.name == "help" {
+		fail("flag name is reserved for help: --help")
 	}
 	if c.value == nil {
-		return newConfigErrorf(nil, nil, c, "flag must be bound to a value")
+		fail("flag must be bound to a value")
 	}
 	if c.shortName != "" && !isShortName(c.shortName) {
-		return newConfigErrorf(
-			nil, nil, c,
-			"short name must be one character from [A-Za-z0-9]: %q",
-			c.shortName,
-		)
+		fail("short name must be one character from [A-Za-z0-9]: %q", c.shortName)
+	}
+	if c.shortName == "h" {
+		fail("short name is reserved for help: -h")
 	}
 	if c.minCount < 0 {
-		return newConfigErrorf(nil, nil, c,
-			"minimum count must not be negative: %d", c.minCount)
+		fail("minimum count must not be negative: %d", c.minCount)
 	}
 	if c.maxCount < 0 {
-		return newConfigErrorf(nil, nil, c,
-			"maximum count must not be negative: %d", c.maxCount)
+		fail("maximum count must not be negative: %d", c.maxCount)
 	}
 	// A max of 0 is unbounded, so it is never exceeded by the min.
 	if c.maxCount > 0 && c.minCount > c.maxCount {
-		return newConfigErrorf(nil, nil, c,
-			"minimum count %d exceeds maximum count %d", c.minCount, c.maxCount)
+		fail("minimum count %d exceeds maximum count %d", c.minCount, c.maxCount)
 	}
-	return nil
+	return joinErrors(errs)
 }
 
 // isShortName reports whether s is a legal short name. POSIX guideline 3
@@ -368,6 +401,7 @@ func (c *Flag) describe() *desc.Flag {
 		MinCount:    c.minCount,
 		MaxCount:    c.maxCount,
 		EnvVar:      c.envVar,
+		Choices:     slices.Clone(c.choices),
 	}
 }
 

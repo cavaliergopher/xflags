@@ -113,6 +113,9 @@ func (c *Command) String() string { return c.name }
 // each argument in each command flag's target. The rules for each flag are
 // checked and any errors are returned.
 //
+// Parse resets every flag to its default before reading any arguments, so
+// parsing the same tree twice yields the same result.
+//
 // The returned Invocation names this command, or one of its subcommands if
 // the arguments specified one.
 //
@@ -121,6 +124,9 @@ func (c *Command) String() string { return c.name }
 // caller to report the command's usage. See Command.Run.
 func (c *Command) Parse(args []string) (*Invocation, error) {
 	if err := c.validate(); err != nil {
+		return nil, err
+	}
+	if err := c.root().applyDefaults(); err != nil {
 		return nil, err
 	}
 	return newArgParser(c, args).Parse()
@@ -136,8 +142,9 @@ func (c *Command) root() *Command {
 	return root
 }
 
-// validate checks the whole command tree for configuration errors and
-// returns the first one found.
+// validate checks the whole command tree for configuration errors,
+// reporting every error found in one run -- a malformed tree surfaces its
+// errors in a batch at startup, not one per run.
 //
 // It always runs from the root, regardless of which command in the tree it
 // is called on, so that Parse on a subcommand still validates the whole
@@ -146,18 +153,19 @@ func (c *Command) validate() error {
 	return c.root().validateTree(nil)
 }
 
-// validateTree checks c and, recursively, each of its subcommands, returning
-// the first error found. claimed maps each option spelling declared by c's
+// validateTree checks c and, recursively, each of its subcommands, joining
+// every error found. claimed maps each option spelling declared by c's
 // ancestors to the command that declared it: a name may not repeat anywhere
 // along an ancestor-descendant chain, and the check runs here because a
 // command cannot know its ancestors until the whole tree is in view. See
 // docs/adr/path-scoped-flag-names.md.
 func (c *Command) validateTree(claimed map[string]*Command) error {
+	var errs []error
 	if err := c.validateSelf(claimed); err != nil {
-		return err
+		errs = append(errs, err)
 	}
 	if len(c.subcommands) == 0 {
-		return nil
+		return joinErrors(errs)
 	}
 	// Descendants see c's names claimed in a copy, so sibling subtrees may
 	// still reuse names freely.
@@ -177,10 +185,10 @@ func (c *Command) validateTree(claimed map[string]*Command) error {
 	}
 	for _, sub := range c.subcommands {
 		if err := sub.validateTree(claims); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return joinErrors(errs)
 }
 
 // validateSelf checks c's own flags for configuration errors: flag syntax,
@@ -188,19 +196,20 @@ func (c *Command) validateTree(claimed map[string]*Command) error {
 // passed in -- and positional/subcommand conflicts. It does not descend
 // into subcommands.
 func (c *Command) validateSelf(claimed map[string]*Command) error {
+	var errs []error
 	flagsByName := make(map[string]*Flag)
 	hasUnboundedPositional := false
 	for _, group := range c.flagGroups {
 		for _, flag := range group.flags {
 			if err := flag.check(); err != nil {
-				return err
+				errs = append(errs, err)
 			}
 			if flag.positional {
 				if len(c.subcommands) > 0 {
-					return newConfigErrorf(nil, c, flag, "cannot specify both subcommands and positional arguments")
+					errs = append(errs, newConfigErrorf(nil, c, flag, "cannot specify both subcommands and positional arguments"))
 				}
 				if hasUnboundedPositional {
-					return newConfigErrorf(nil, c, flag, "positional arguments cannot follow unbounded positional arguments")
+					errs = append(errs, newConfigErrorf(nil, c, flag, "positional arguments cannot follow unbounded positional arguments"))
 				}
 				if flag.maxCount == 0 {
 					hasUnboundedPositional = true
@@ -209,30 +218,30 @@ func (c *Command) validateSelf(claimed map[string]*Command) error {
 			if flag.name != "" {
 				key := "--" + flag.name
 				if _, ok := flagsByName[key]; ok {
-					return newConfigErrorf(nil, c, flag, "flag already declared: %s", key)
+					errs = append(errs, newConfigErrorf(nil, c, flag, "flag already declared: %s", key))
 				}
 				if ancestor, ok := claimed[key]; ok {
-					return newConfigErrorf(nil, c, flag,
+					errs = append(errs, newConfigErrorf(nil, c, flag,
 						"flag already declared by ancestor %q: %s",
-						ancestor.name, key)
+						ancestor.name, key))
 				}
 				flagsByName[key] = flag
 			}
 			if flag.shortName != "" {
 				key := "-" + flag.shortName
 				if _, ok := flagsByName[key]; ok {
-					return newConfigErrorf(nil, c, flag, "flag already declared: %s", key)
+					errs = append(errs, newConfigErrorf(nil, c, flag, "flag already declared: %s", key))
 				}
 				if ancestor, ok := claimed[key]; ok {
-					return newConfigErrorf(nil, c, flag,
+					errs = append(errs, newConfigErrorf(nil, c, flag,
 						"flag already declared by ancestor %q: %s",
-						ancestor.name, key)
+						ancestor.name, key))
 				}
 				flagsByName[key] = flag
 			}
 		}
 	}
-	return nil
+	return joinErrors(errs)
 }
 
 // findDescendantWithFlag returns the first descendant of c to declare the
@@ -256,6 +265,34 @@ func (c *Command) findDescendantWithFlag(key string) *Command {
 		}
 		if found := sub.findDescendantWithFlag(key); found != nil {
 			return found
+		}
+	}
+	return nil
+}
+
+// applyDefaults restores every flag in the tree to its default value; see
+// Parse, which runs it after validation. Values are set directly, bypassing
+// Flag.Set, so ValidateFuncs never run against defaults. Describe never
+// calls this: it is documented pure.
+func (c *Command) applyDefaults() error {
+	for _, group := range c.flagGroups {
+		for _, flag := range group.flags {
+			if r, ok := flag.value.(Resetter); ok {
+				r.Reset()
+				continue
+			}
+			if !flag.hasDefault {
+				continue
+			}
+			if err := flag.value.Set(flag.defValue); err != nil {
+				return newConfigErrorf(err, nil, flag,
+					"cannot restore default value: %v", err)
+			}
+		}
+	}
+	for _, sub := range c.subcommands {
+		if err := sub.applyDefaults(); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -411,7 +448,9 @@ func (c *Command) Dispatch(ctx context.Context, args []string) error {
 // handleErr reports err on the stderr of the command that produced it --
 // named by the error's Cmd field when it carries one, the receiver
 // otherwise -- and returns the exit code the program should terminate
-// with. An argument error is followed by that command's usage, so the
+// with. A joined error -- validation reports every configuration error in
+// one run -- prints one prefixed line per error, each on its own command's
+// stderr. An argument error is followed by that command's usage, so the
 // reader who mistyped sees what to type instead; a config error is not,
 // because a malformed tree cannot describe itself. See
 // docs/adr/argument-errors-print-usage.md.
@@ -420,36 +459,36 @@ func (c *Command) handleErr(err error) int {
 		return ExitCodeSuccess
 	}
 
-	errStr := humanMessage(err)
+	for _, e := range flattenErrors(err) {
+		errTypeName := "Error"
+		cmd := c
 
-	errTypeName := "Error"
-	cmd := c
+		var argErr *ArgumentError
+		var cfgErr *ConfigError
+		switch {
+		case errors.As(e, &argErr):
+			errTypeName = "Argument error"
+			if argErr.Cmd != nil {
+				cmd = argErr.Cmd
+			}
 
-	var argErr *ArgumentError
-	var cfgErr *ConfigError
-	switch {
-	case errors.As(err, &argErr):
-		errTypeName = "Argument error"
-		if argErr.Cmd != nil {
-			cmd = argErr.Cmd
+		case errors.As(e, &cfgErr):
+			// The tree is malformed, so the fault is the program's rather than
+			// the user's. Both exit 2, so the prefix is all that says which.
+			errTypeName = "Program error"
+			if cfgErr.Cmd != nil {
+				cmd = cfgErr.Cmd
+			}
 		}
 
-	case errors.As(err, &cfgErr):
-		// The tree is malformed, so the fault is the program's rather than
-		// the user's. Both exit 2, so the prefix is all that says which.
-		errTypeName = "Program error"
-		if cfgErr.Cmd != nil {
-			cmd = cfgErr.Cmd
+		stderr := cmd.getStderr()
+		if _, werr := fmt.Fprintf(stderr, "%s: %s\n", errTypeName, humanMessage(e)); werr != nil {
+			return fallbackToStderr(werr)
 		}
-	}
-
-	stderr := cmd.getStderr()
-	if _, err := fmt.Fprintf(stderr, "%s: %s\n", errTypeName, errStr); err != nil {
-		return fallbackToStderr(err)
-	}
-	if argErr != nil {
-		if err := cmd.WriteUsage(stderr); err != nil {
-			return fallbackToStderr(err)
+		if argErr != nil {
+			if werr := cmd.WriteUsage(stderr); werr != nil {
+				return fallbackToStderr(werr)
+			}
 		}
 	}
 	return ExitCode(err)

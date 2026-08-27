@@ -87,11 +87,13 @@ func assertFlagParses(t *testing.T, flag *Flag, args ...string) bool {
 	return true
 }
 
-func assertErrorAs(t *testing.T, err error, target any) bool {
-	if errors.As(err, &target) {
+func assertArgumentError(t *testing.T, err error) bool {
+	t.Helper()
+	var argErr *ArgumentError
+	if errors.As(err, &argErr) {
 		return true
 	}
-	t.Errorf("expected: %T, got: %T: %v", target, err, err)
+	t.Errorf("expected *ArgumentError, got: %T: %v", err, err)
 	return false
 }
 

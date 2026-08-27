@@ -97,7 +97,7 @@ func TestFunc(t *testing.T) {
 
 func TestFuncError(t *testing.T) {
 	fn := func(s string) error { return fmt.Errorf("nope: %s", s) }
-	assertErrorAs(t, parseFlag(Func("foo", "", fn), "--foo=bar"), &ArgumentError{})
+	assertArgumentError(t, parseFlag(Func("foo", "", fn), "--foo=bar"))
 }
 
 func TestFlagChoices(t *testing.T) {
@@ -105,9 +105,9 @@ func TestFlagChoices(t *testing.T) {
 	flag := String(&v, "foo", "", "").Choices("bar", "baz")
 	assertFlagParses(t, flag, "--foo=bar")
 	assertFlagParses(t, flag, "--foo=baz")
-	assertErrorAs(t, parseFlag(flag, "--foo=qux"), &ArgumentError{})
-	assertErrorAs(t, parseFlag(flag, "--foo=ba"), &ArgumentError{})
-	assertErrorAs(t, parseFlag(flag, "--foo=barr"), &ArgumentError{})
+	assertArgumentError(t, parseFlag(flag, "--foo=qux"))
+	assertArgumentError(t, parseFlag(flag, "--foo=ba"))
+	assertArgumentError(t, parseFlag(flag, "--foo=barr"))
 }
 
 func ExampleFlag_Validate() {
@@ -229,7 +229,8 @@ func TestDescribeFlag(t *testing.T) {
 		NArgs(1, 3).
 		Hidden().
 		ShowDefault().
-		Env("MY_ENV")
+		Env("MY_ENV").
+		Choices("red", "blue")
 	cmd := NewCommand("test", "").Flags(flg)
 
 	node, err := cmd.Describe()
@@ -273,6 +274,7 @@ func TestDescribeFlag(t *testing.T) {
 	if got, want := df.EnvVar, "MY_ENV"; got != want {
 		t.Errorf("EnvVar = %q, want %q", got, want)
 	}
+	assertStrings(t, []string{"red", "blue"}, df.Choices)
 }
 
 // TestDescribePositional asserts that Positional is described too, using a
