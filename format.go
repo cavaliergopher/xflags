@@ -114,19 +114,25 @@ func detailPositionals(w io.Writer, cmd *desc.Command) error {
 	if len(flags) == 0 {
 		return nil
 	}
-	fmt.Fprintf(w, "\nPositional arguments:\n")
-	w = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintf(w, "\nPositional arguments:\n"); err != nil {
+		return err
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, flag := range flags {
-		fmt.Fprintf(w, "  %s", strings.ToUpper(flag.Name))
+		var row strings.Builder
+		fmt.Fprintf(&row, "  %s", strings.ToUpper(flag.Name))
 		if flag.Usage != "" {
-			fmt.Fprintf(w, "\t%s", flag.Usage)
+			fmt.Fprintf(&row, "\t%s", flag.Usage)
 			if flag.ShowDefault {
-				fmt.Fprintf(w, " (default: %s)", flag.Default)
+				fmt.Fprintf(&row, " (default: %s)", flag.Default)
 			}
 		}
-		fmt.Fprintf(w, "\n")
+		row.WriteString("\n")
+		if _, err := io.WriteString(tw, row.String()); err != nil {
+			return err
+		}
 	}
-	return w.(*tabwriter.Writer).Flush()
+	return tw.Flush()
 }
 
 func filterOptions(flags []*desc.Flag) []*desc.Flag {
@@ -145,8 +151,10 @@ func detailFlagGroup(w io.Writer, group *desc.FlagGroup) error {
 	if len(flags) == 0 {
 		return nil
 	}
-	fmt.Fprintf(w, "\n%s:\n", group.Usage)
-	w = tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
+	if _, err := fmt.Fprintf(w, "\n%s:\n", group.Usage); err != nil {
+		return err
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
 	for _, flag := range flags {
 		var name, shortName string
 		if flag.Name != "" {
@@ -159,13 +167,17 @@ func detailFlagGroup(w io.Writer, group *desc.FlagGroup) error {
 				shortName = fmt.Sprintf("-%s", flag.ShortName)
 			}
 		}
-		fmt.Fprintf(w, "  %s\t%s\t %s", shortName, name, flag.Usage)
+		var row strings.Builder
+		fmt.Fprintf(&row, "  %s\t%s\t %s", shortName, name, flag.Usage)
 		if flag.ShowDefault {
-			fmt.Fprintf(w, " (default: %s)", flag.Default)
+			fmt.Fprintf(&row, " (default: %s)", flag.Default)
 		}
-		fmt.Fprintf(w, "\n")
+		row.WriteString("\n")
+		if _, err := io.WriteString(tw, row.String()); err != nil {
+			return err
+		}
 	}
-	return w.(*tabwriter.Writer).Flush()
+	return tw.Flush()
 }
 
 func getEnvVars(a []*desc.Flag, cmd *desc.Command) []*desc.Flag {
@@ -189,17 +201,22 @@ func detailEnvVars(w io.Writer, cmd *desc.Command) error {
 	if len(flags) == 0 {
 		return nil
 	}
-	fmt.Fprintf(w, "\nEnvironment variables:\n")
-	w = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintf(w, "\nEnvironment variables:\n"); err != nil {
+		return err
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, flag := range flags {
-		fmt.Fprintf(
-			w,
+		_, err := fmt.Fprintf(
+			tw,
 			"  %s\t%s\n",
 			strings.ToUpper(flag.EnvVar),
 			flag.Usage,
 		)
+		if err != nil {
+			return err
+		}
 	}
-	return w.(*tabwriter.Writer).Flush()
+	return tw.Flush()
 }
 
 func detailSubcommands(w io.Writer, subcommands []*desc.Command) error {
@@ -207,13 +224,17 @@ func detailSubcommands(w io.Writer, subcommands []*desc.Command) error {
 	if len(subcommands) == 0 {
 		return nil
 	}
-	fmt.Fprintf(w, "\nCommands:\n")
-	w = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintf(w, "\nCommands:\n"); err != nil {
+		return err
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, cmd := range subcommands {
 		if cmd.Hidden {
 			continue
 		}
-		fmt.Fprintf(w, "  %s\t%s\n", cmd.Name, cmd.Summary)
+		if _, err := fmt.Fprintf(tw, "  %s\t%s\n", cmd.Name, cmd.Summary); err != nil {
+			return err
+		}
 	}
-	return w.(*tabwriter.Writer).Flush()
+	return tw.Flush()
 }
