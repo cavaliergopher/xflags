@@ -81,8 +81,10 @@ and two mean the same thing.
 ```
 
 Two arguments are not flags at all. A bare `-` is an ordinary operand, left
-to the handler to interpret, and `--` ends option processing for commands
-that set `WithTerminator`.
+to the handler to interpret, and `--` ends option processing by default:
+every argument after it is an operand, however many dashes it starts with.
+A command that sets `ForwardArgs` hands everything after `--` to the
+handler unparsed instead, as `Invocation.Forwarded`.
 
 An argument beginning with `-` is never taken as a detached value, so
 `--count -5` is a missing value rather than negative five; write
@@ -99,9 +101,11 @@ Four departures from `getopt_long` are deliberate, and
 - **Long options may not be abbreviated.** `getopt_long` accepts any unique
   prefix, but a command tree makes "unique" a moving target: adding a flag
   to a subcommand can break a script that never changed.
-- **`--` is opt-in**, via `WithTerminator`, and what follows it reaches the
-  handler as `Invocation.Args` rather than binding to operand slots. POSIX
-  has no subcommands, so it has no case to forward arguments to.
+- **`ForwardArgs` is opt-in.** By default, everything after `--` binds to
+  positional flags like any other operand. A command that sets
+  `ForwardArgs` instead hands it to the handler unparsed, as
+  `Invocation.Forwarded`. POSIX has no subcommands, so it has no case to
+  forward arguments to.
 - **`-h` and `--help` are reserved** by the parser, which is GNU practice
   rather than POSIX.
 
