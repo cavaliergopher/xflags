@@ -137,6 +137,10 @@ func ExampleFlag_Validate() {
 	// Output:
 	// ping: 127.0.0.1
 	// Argument error: --ip: invalid IP: 256.0.0.1
+	// Usage: ping [OPTIONS]
+	//
+	// Options:
+	//    --ip  IP Address to ping
 }
 
 func ExampleBitField() {
@@ -191,6 +195,10 @@ func ExampleFunc() {
 	// Output:
 	// ping: 127.0.0.1
 	// Argument error: --ip: invalid IP: 256.0.0.1
+	// Usage: ping [OPTIONS]
+	//
+	// Options:
+	//    --ip  IP address to ping
 }
 
 func ExampleStrings() {

@@ -103,6 +103,18 @@ func (errWriter) Write(p []byte) (int, error) {
 	return 0, errors.New("write failed")
 }
 
+// failAfterWriter fails every write after the first n, standing in for
+// output that goes away partway through a report.
+type failAfterWriter struct{ n int }
+
+func (w *failAfterWriter) Write(p []byte) (int, error) {
+	if w.n == 0 {
+		return 0, errors.New("write failed")
+	}
+	w.n--
+	return len(p), nil
+}
+
 // runCaptured runs cmd with the given arguments, redirecting its output, and
 // returns the exit code alongside everything written to stdout and stderr.
 func runCaptured(cmd *Command, args ...string) (code int, stdout, stderr string) {

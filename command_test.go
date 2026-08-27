@@ -543,7 +543,7 @@ func TestValidateAncestorShadowing(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
-			if got, want := errorOrString(err), tt.want; got != want {
+			if got, want := humanMessage(err), tt.want; got != want {
 				t.Errorf("message = %q, want %q", got, want)
 			}
 		})
@@ -654,7 +654,7 @@ func TestArgumentErrorNamesTheFlag(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected error for %v, got nil", tt.args)
 			}
-			if got, want := errorOrString(err), tt.want; got != want {
+			if got, want := humanMessage(err), tt.want; got != want {
 				t.Errorf("message = %q, want %q", got, want)
 			}
 		})
@@ -672,7 +672,7 @@ func TestArgumentErrorNamesPositional(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if got, want := errorOrString(err), "missing required argument: FILE"; got != want {
+	if got, want := humanMessage(err), "missing required argument: FILE"; got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
 }
@@ -696,7 +696,7 @@ func TestValidateInvalidNArgs(t *testing.T) {
 			if err == nil {
 				t.Fatalf("NArgs(%d, %d): expected error, got nil", tt.min, tt.max)
 			}
-			if got, want := errorOrString(err), "--foo: "+tt.want; got != want {
+			if got, want := humanMessage(err), "--foo: "+tt.want; got != want {
 				t.Errorf("message = %q, want %q", got, want)
 			}
 		})
@@ -854,13 +854,13 @@ func TestRunExitCodes(t *testing.T) {
 			cmd:      handles(nil),
 			args:     []string{"--nope"},
 			wantCode: 2,
-			wantErr:  "Argument error: unrecognized option: --nope\n",
+			wantErr:  "Argument error: unrecognized option: --nope\nUsage: test\n",
 		},
 		{
 			name:     "NoHandler",
 			cmd:      NewCommand("test", ""),
 			wantCode: 2,
-			wantErr:  "Usage: test\n",
+			wantErr:  "Argument error: missing subcommand\nUsage: test\n",
 		},
 		{
 			name: "ConfigError",
@@ -934,9 +934,154 @@ func assertOutput(t *testing.T, name, got, want string) bool {
 	return true
 }
 
+// TestArgumentErrorsPrintUsage asserts that a wrong command line is
+// reported with the usage of the command that the error names, on the same
+// stderr stream, error line first. Help is not error reporting: it still
+// prints on stdout alone and exits 0. See
+// docs/adr/argument-errors-print-usage.md.
+func TestArgumentErrorsPrintUsage(t *testing.T) {
+	newCmd := func() *Command {
+		sub := NewCommand("sub", "").
+			HandleFunc(func(ctx context.Context, inv *Invocation) error {
+				return nil
+			})
+		return NewCommand("test", "").Subcommands(sub)
+	}
+	t.Run("BadFlag", func(t *testing.T) {
+		code, stdout, stderr := runCaptured(newCmd(), "sub", "--nope")
+		if got, want := code, 2; got != want {
+			t.Errorf("exit code = %d, want %d", got, want)
+		}
+		// The usage is the subcommand's, where the error happened, not the
+		// root's, where Run was called.
+		assertOutput(t, "stderr", stderr,
+			"Argument error: unrecognized option: --nope\nUsage: test sub\n")
+		assertOutput(t, "stdout", stdout, "")
+	})
+	t.Run("NoHandler", func(t *testing.T) {
+		code, stdout, stderr := runCaptured(newCmd())
+		if got, want := code, 2; got != want {
+			t.Errorf("exit code = %d, want %d", got, want)
+		}
+		assertOutput(t, "stderr", stderr,
+			"Argument error: missing subcommand\nUsage: test COMMAND\n")
+		assertOutput(t, "stdout", stdout, "")
+	})
+	t.Run("Help", func(t *testing.T) {
+		code, stdout, stderr := runCaptured(newCmd(), "--help")
+		if got, want := code, 0; got != want {
+			t.Errorf("exit code = %d, want %d", got, want)
+		}
+		assertOutput(t, "stdout", stdout, "Usage: test COMMAND\n")
+		assertOutput(t, "stderr", stderr, "")
+	})
+	// The other two error classes stay one line: a handler error means the
+	// command line was right, and a config error means the usage message
+	// cannot be trusted.
+	t.Run("HandlerError", func(t *testing.T) {
+		cmd := NewCommand("test", "").
+			HandleFunc(func(ctx context.Context, inv *Invocation) error {
+				return errors.New("boom")
+			})
+		code, _, stderr := runCaptured(cmd)
+		if got, want := code, 1; got != want {
+			t.Errorf("exit code = %d, want %d", got, want)
+		}
+		if got, want := stderr, "Error: boom\n"; got != want {
+			t.Errorf("stderr = %q, want %q", got, want)
+		}
+	})
+	t.Run("ConfigError", func(t *testing.T) {
+		cmd := NewCommand("test", "").Flags(
+			String(new(string), "foo", "", ""),
+			String(new(string), "foo", "", ""),
+		)
+		code, _, stderr := runCaptured(cmd)
+		if got, want := code, 2; got != want {
+			t.Errorf("exit code = %d, want %d", got, want)
+		}
+		want := "Program error: test: flag already declared: --foo\n"
+		if got := stderr; got != want {
+			t.Errorf("stderr = %q, want %q", got, want)
+		}
+	})
+}
+
+// TestDispatchReturnsRawError asserts Dispatch's half of the split from
+// Run: the error comes back raw, with its Cmd naming the command that
+// produced it, and no error text is printed. Help is the exception,
+// because it is not error reporting: usage goes to stdout and Dispatch
+// returns nil.
+func TestDispatchReturnsRawError(t *testing.T) {
+	newCmd := func() *Command {
+		sub := NewCommand("sub", "").
+			HandleFunc(func(ctx context.Context, inv *Invocation) error {
+				return nil
+			})
+		return NewCommand("test", "").Subcommands(sub)
+	}
+	// dispatchCaptured is runCaptured for Dispatch.
+	dispatchCaptured := func(cmd *Command, args ...string) (err error, stdout, stderr string) {
+		var out, errOut strings.Builder
+		cmd.Stdout(&out).Stderr(&errOut)
+		err = cmd.Dispatch(context.Background(), args)
+		return err, out.String(), errOut.String()
+	}
+	// asArgumentError asserts that err carries an *ArgumentError naming the
+	// command called wantCmd.
+	asArgumentError := func(t *testing.T, err error, wantCmd string) {
+		t.Helper()
+		var argErr *ArgumentError
+		if !errors.As(err, &argErr) {
+			t.Fatalf("err = %v, want *ArgumentError", err)
+		}
+		if argErr.Cmd == nil {
+			t.Fatal("err.Cmd = nil, want the command that produced it")
+		}
+		if got, want := argErr.Cmd.String(), wantCmd; got != want {
+			t.Errorf("err.Cmd = %q, want %q", got, want)
+		}
+	}
+	t.Run("BadFlag", func(t *testing.T) {
+		err, stdout, stderr := dispatchCaptured(newCmd(), "sub", "--nope")
+		asArgumentError(t, err, "sub")
+		assertOutput(t, "stdout", stdout, "")
+		assertOutput(t, "stderr", stderr, "")
+	})
+	t.Run("NoHandler", func(t *testing.T) {
+		err, stdout, stderr := dispatchCaptured(newCmd())
+		asArgumentError(t, err, "test")
+		assertOutput(t, "stdout", stdout, "")
+		assertOutput(t, "stderr", stderr, "")
+	})
+	t.Run("Help", func(t *testing.T) {
+		err, stdout, stderr := dispatchCaptured(newCmd(), "--help")
+		if err != nil {
+			t.Errorf("err = %v, want nil", err)
+		}
+		assertOutput(t, "stdout", stdout, "Usage: test COMMAND\n")
+		assertOutput(t, "stderr", stderr, "")
+	})
+	t.Run("HandlerError", func(t *testing.T) {
+		boom := errors.New("boom")
+		cmd := NewCommand("test", "").
+			HandleFunc(func(ctx context.Context, inv *Invocation) error {
+				return boom
+			})
+		err, stdout, stderr := dispatchCaptured(cmd)
+		if got, want := err, boom; got != want {
+			t.Errorf("err = %v, want %v", got, want)
+		}
+		assertOutput(t, "stdout", stdout, "")
+		assertOutput(t, "stderr", stderr, "")
+	})
+}
+
 // TestRunReportsOutputFailure asserts that a command whose own output cannot
 // be written to reports the failure on os.Stderr and exits non-zero, rather
-// than panicking. Both paths that write a help message are covered.
+// than panicking. Both streams a report can go to are covered: a help
+// message that cannot reach stdout, and an error line that cannot reach
+// stderr.
 func TestRunReportsOutputFailure(t *testing.T) {
 	tests := []struct {
 		name string
@@ -970,6 +1115,23 @@ func TestRunReportsOutputFailure(t *testing.T) {
 				t.Errorf("os.Stderr = %q, want %q", stderr, want)
 			}
 		})
+	}
+}
+
+// TestRunReportsUsageWriteFailure asserts that the usage message following
+// an argument error has the same fallback as the error line: a stderr that
+// goes away between the two is still reported on os.Stderr.
+func TestRunReportsUsageWriteFailure(t *testing.T) {
+	cmd := NewCommand("test", "").Stderr(&failAfterWriter{n: 1})
+	var code int
+	stderr := captureStderr(t, func() {
+		code = cmd.Run(context.Background(), nil)
+	})
+	if code == 0 {
+		t.Errorf("exit code = 0, want non-zero")
+	}
+	if want := "xflags: write failed\n"; stderr != want {
+		t.Errorf("os.Stderr = %q, want %q", stderr, want)
 	}
 }
 

@@ -249,7 +249,7 @@ func TestUnrecognizedOptionNamesSubtree(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
-			if got, want := errorOrString(err), tt.want; got != want {
+			if got, want := humanMessage(err), tt.want; got != want {
 				t.Errorf("message = %q, want %q", got, want)
 			}
 		})
@@ -272,7 +272,7 @@ func TestCheckNArgsSpansThePath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if got, want := errorOrString(err), "missing required argument: --name"; got != want {
+	if got, want := humanMessage(err), "missing required argument: --name"; got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
 
@@ -290,7 +290,7 @@ func TestCheckNArgsSpansThePath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if got, want := errorOrString(err), "argument specified too many times: --name"; got != want {
+	if got, want := humanMessage(err), "argument specified too many times: --name"; got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
 }

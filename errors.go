@@ -13,11 +13,12 @@ const (
 	ExitCodeUsage   = 2 // Nothing ran: the command line or tree was wrong, or no handler.
 )
 
-// errorOrString prefers a String() method over Error(). ConfigError and
-// ArgumentError give each a distinct purpose: String() is the plain
-// sentence Run prints for a human, and Error() is that sentence tagged
-// "xflags: ", for a Go caller that prints or logs the error itself.
-func errorOrString(err error) string {
+// humanMessage prefers a String() method over Error(). The two differ by
+// audience, not representation: on ConfigError and ArgumentError, String()
+// is the plain sentence Run prints for a human, and Error() is that
+// sentence tagged "xflags: ", for a Go caller that prints or logs the
+// error itself.
+func humanMessage(err error) string {
 	if s, ok := err.(fmt.Stringer); ok {
 		return s.String()
 	}

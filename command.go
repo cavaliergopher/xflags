@@ -361,61 +361,96 @@ func (c *Command) getStderr() io.Writer {
 // ExitCoder; see Exit and Exitf.
 //
 // If -h or --help are specified, usage information is printed to the
-// command's stdout. Errors, including a command invoked with no handler, are
-// reported on its stderr. The handler is given the same streams on its
-// Invocation. See Stdin, Stdout and Stderr.
+// command's stdout. Errors are reported on the stderr of the command the
+// error names, or of the command Run was called on when the error names
+// none, and an argument error -- a wrong command line, including a command
+// invoked with no handler -- is followed by that command's usage. The
+// handler is given the same streams on its Invocation. See Stdin, Stdout
+// and Stderr.
+//
+// Run is Dispatch plus this reporting; a program that wants to report
+// errors its own way calls Dispatch instead and keeps the raw error.
 //
 // ctx is passed to the handler unchanged. See NotifyContext for a context
 // that is canceled on SIGINT or SIGTERM.
 func (c *Command) Run(ctx context.Context, args []string) int {
+	return c.handleErr(c.Dispatch(ctx, args))
+}
+
+// Dispatch parses the given set of command line arguments and calls the
+// handler for the command or subcommand specified by the arguments. The
+// handler's error, or the error that stopped the command line from being
+// parsed, is returned raw: Dispatch prints no error text, so a program
+// that wants to report errors its own way calls Dispatch directly. Run is
+// Dispatch plus the reporting and the mapping to an exit code.
+//
+// If -h or --help are specified, no handler runs: usage information is
+// printed to the command's stdout and Dispatch returns nil, or the error
+// that kept the help message from being written. Help output is not error
+// reporting, and a caller who wants it formatted differently has
+// FormatFunc.
+//
+// A command invoked with no handler returns an *ArgumentError, as for any
+// other wrong command line.
+func (c *Command) Dispatch(ctx context.Context, args []string) error {
 	inv, err := c.Parse(args)
 	if err != nil {
-		return c.handleErr(err)
+		return err
 	}
 	if inv.HelpRequested {
-		if err := inv.Cmd.WriteUsage(inv.Stdout); err != nil {
-			return fallbackToStderr(err)
-		}
-		return ExitCodeSuccess // Help was requested, not an error.
+		return inv.Cmd.WriteUsage(inv.Stdout)
 	}
 	if inv.Cmd.handlerFunc == nil {
 		// The command exists only to group its subcommands, so naming it
-		// alone is a usage error rather than a request for help. Its usage
-		// goes to stderr, unlike the help path above, and the exit code
-		// says nothing ran.
-		if err := inv.Cmd.WriteUsage(inv.Stderr); err != nil {
-			return fallbackToStderr(err)
-		}
-		return ExitCodeUsage
+		// alone is a usage error rather than a request for help.
+		return newArgumentErrorf(nil, inv.Cmd, nil, "", "missing subcommand")
 	}
-	return inv.Cmd.handleErr(inv.Cmd.handlerFunc(ctx, inv))
+	return inv.Cmd.handlerFunc(ctx, inv)
 }
 
-// handleErr reports err on the appropriate output for the command that
-// produced it and returns the exit code the program should terminate with.
+// handleErr reports err on the stderr of the command that produced it --
+// named by the error's Cmd field when it carries one, the receiver
+// otherwise -- and returns the exit code the program should terminate
+// with. An argument error is followed by that command's usage, so the
+// reader who mistyped sees what to type instead; a config error is not,
+// because a malformed tree cannot describe itself. See
+// docs/adr/argument-errors-print-usage.md.
 func (c *Command) handleErr(err error) int {
 	if err == nil {
 		return ExitCodeSuccess
 	}
 
-	errStr := errorOrString(err)
+	errStr := humanMessage(err)
 
 	errTypeName := "Error"
+	cmd := c
 
 	var argErr *ArgumentError
 	var cfgErr *ConfigError
 	switch {
 	case errors.As(err, &argErr):
 		errTypeName = "Argument error"
+		if argErr.Cmd != nil {
+			cmd = argErr.Cmd
+		}
 
 	case errors.As(err, &cfgErr):
 		// The tree is malformed, so the fault is the program's rather than
 		// the user's. Both exit 2, so the prefix is all that says which.
 		errTypeName = "Program error"
+		if cfgErr.Cmd != nil {
+			cmd = cfgErr.Cmd
+		}
 	}
 
-	if _, err := fmt.Fprintf(c.getStderr(), "%s: %s\n", errTypeName, errStr); err != nil {
+	stderr := cmd.getStderr()
+	if _, err := fmt.Fprintf(stderr, "%s: %s\n", errTypeName, errStr); err != nil {
 		return fallbackToStderr(err)
+	}
+	if argErr != nil {
+		if err := cmd.WriteUsage(stderr); err != nil {
+			return fallbackToStderr(err)
+		}
 	}
 	return ExitCode(err)
 }
@@ -464,8 +499,8 @@ func (c *Command) Description(s string) *Command {
 }
 
 // HandleFunc registers the handler for the command. If no handler is
-// specified and the command is invoked, Run prints usage information to
-// stderr and exits with the usage error code.
+// specified and the command is invoked, Run reports an argument error
+// followed by the command's usage and exits with the usage error code.
 func (c *Command) HandleFunc(handler HandlerFunc) *Command {
 	c.handlerFunc = handler
 	return c
