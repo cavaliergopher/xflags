@@ -219,6 +219,41 @@ func ExampleStrings() {
 	// Output: Created new widgets: foo, bar
 }
 
+// TestFlagGroupStandalone asserts that a group built with NewFlagGroup and
+// mounted with Command.FlagGroups parses and describes exactly like one
+// declared inline with Command.FlagGroup.
+func TestFlagGroupStandalone(t *testing.T) {
+	var level, format string
+	group := NewFlagGroup(
+		"logging", "Logging options",
+		String(&level, "log-level", "info", "Set log verbosity"),
+	).Flags(
+		String(&format, "log-format", "text", "Log output format"),
+	)
+	cmd := NewCommand("test", "").FlagGroups(group)
+
+	if _, err := cmd.Parse([]string{"--log-level=debug", "--log-format=json"}); err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "debug", level)
+	assertString(t, "json", format)
+
+	node, err := cmd.Describe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The implicit "options" group is first; the mounted group follows.
+	if got, want := len(node.FlagGroups), 2; got != want {
+		t.Fatalf("len(FlagGroups) = %d, want %d", got, want)
+	}
+	if got, want := node.FlagGroups[1].Usage, "Logging options"; got != want {
+		t.Errorf("Usage = %q, want %q", got, want)
+	}
+	if got, want := len(node.FlagGroups[1].Flags), 2; got != want {
+		t.Errorf("len(Flags) = %d, want %d", got, want)
+	}
+}
+
 // TestDescribeFlag asserts that every field of a flag configured with the
 // chained setters is described on its desc.Flag counterpart, and that
 // behavior (the Value, the ValidateFunc) is dropped.

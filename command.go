@@ -3,15 +3,12 @@ package xflags
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/cavaliergopher/xflags/desc"
 )
-
-// TODO: Allow packages to declare global flags that are accessible on init.
 
 // An Invocation is the result of parsing a command line. It records which
 // command the arguments named, what was left for its handler, and the
@@ -82,6 +79,7 @@ type Command struct {
 	hidden      bool
 	forwardArgs bool
 	flagGroups  []*FlagGroup
+	groupSets   []*GroupSet
 	subcommands []*Command
 	formatFunc  FormatFunc
 	handlerFunc HandlerFunc
@@ -191,15 +189,44 @@ func (c *Command) validateTree(claimed map[string]*Command) error {
 	return joinErrors(errs)
 }
 
+// effectiveGroups returns the flag groups the command presents: its own,
+// followed by every group of every mounted GroupSet, in registration
+// order. Validation, parsing and Describe all read flags through this
+// helper, so a mounted flag behaves exactly like a declared one. The
+// result is assembled afresh on each call, never written back into
+// flagGroups: that is what keeps Describe pure and a repeated Parse from
+// mounting the same groups twice.
+func (c *Command) effectiveGroups() []*FlagGroup {
+	if len(c.groupSets) == 0 {
+		return c.flagGroups
+	}
+	groups := make([]*FlagGroup, len(c.flagGroups), len(c.flagGroups)+len(c.groupSets))
+	copy(groups, c.flagGroups)
+	for _, set := range c.groupSets {
+		groups = append(groups, set.groups...)
+	}
+	return groups
+}
+
 // validateSelf checks c's own flags for configuration errors: flag syntax,
 // names already declared -- within c, or by the ancestors whose claims are
-// passed in -- and positional/subcommand conflicts. It does not descend
-// into subcommands.
+// passed in -- positional/subcommand conflicts, and a subcommand that
+// belongs to some other command. It does not descend into subcommands.
 func (c *Command) validateSelf(claimed map[string]*Command) error {
 	var errs []error
+
+	// Subcommands leaves an already-parented command's parent alone rather
+	// than stealing it, so the mismatch is still visible here to report.
+	for _, sub := range c.subcommands {
+		if sub.parent != c {
+			errs = append(errs, newConfigErrorf(nil, c, nil,
+				"%q is already a subcommand of %q", sub.name, sub.parent.name))
+		}
+	}
+
 	flagsByName := make(map[string]*Flag)
 	hasUnboundedPositional := false
-	for _, group := range c.flagGroups {
+	for _, group := range c.effectiveGroups() {
 		for _, flag := range group.flags {
 			if err := flag.check(); err != nil {
 				errs = append(errs, err)
@@ -341,7 +368,7 @@ func (c *Command) describe(
 		ForwardArgs: c.forwardArgs,
 	}
 	nodeMap[c] = node
-	for _, group := range c.flagGroups {
+	for _, group := range c.effectiveGroups() {
 		node.FlagGroups = append(node.FlagGroups, group.describe())
 	}
 	for _, sub := range c.subcommands {
@@ -563,36 +590,41 @@ func (c *Command) Flags(flags ...*Flag) *Command {
 	return c
 }
 
-// FlagGroup adds a group of command line flags to this command and shows them
-// under a common heading in help messages.
-func (c *Command) FlagGroup(name, usage string, flags ...*Flag) *Command {
-	c.flagGroups = append(c.flagGroups, &FlagGroup{
-		name:  name,
-		usage: usage,
-		flags: flags,
-	})
+// FlagGroups adds groups of command line flags, built with NewFlagGroup or
+// FromFlagSet, to this command, showing each under its own heading in help
+// messages.
+func (c *Command) FlagGroups(groups ...*FlagGroup) *Command {
+	c.flagGroups = append(c.flagGroups, groups...)
 	return c
 }
 
-// FlagSet imports flags from a Flagset created using Go's flag package. All
-// parsing and error handling is still managed by this package.
+// GroupSets mounts every flag group registered in each of the given sets
+// on this command, in the order given, after the command's own groups.
+// Mount CommandLine to pick up everything the program's libraries
+// registered:
 //
-// To import any globally defined flags, import flag.CommandLine.
-func (c *Command) FlagSet(flagSet *flag.FlagSet) *Command {
-	flagSet.VisitAll(func(f *flag.Flag) {
-		flg := Var(f.Value, f.Name, f.Usage)
-		flg.defValue = f.DefValue
-		c.Flags(flg)
-	})
+//	var App = xflags.NewCommand("myapp", "").GroupSets(xflags.CommandLine)
+//
+// A set is read when the tree is parsed or described, not when GroupSets
+// is called, so a group registered afterwards is still seen. Mounted
+// flags validate, parse and print exactly like the command's own, each
+// group under its own heading in help messages.
+func (c *Command) GroupSets(sets ...*GroupSet) *Command {
+	c.groupSets = append(c.groupSets, sets...)
 	return c
 }
 
-// Subcommands adds subcommands to this command and sets their parent to this
-// command.
+// Subcommands adds subcommands to this command and sets their parent to
+// this command, unless a command given here already has one -- typically a
+// command already mounted elsewhere, such as xflags.CommandLine -- in
+// which case its existing parent is left alone and validation reports the
+// mismatch; see validateSelf.
 func (c *Command) Subcommands(cmds ...*Command) *Command {
 	c.subcommands = append(c.subcommands, cmds...)
 	for _, cmd := range cmds {
-		cmd.parent = c
+		if cmd.parent == nil {
+			cmd.parent = c
+		}
 	}
 	return c
 }

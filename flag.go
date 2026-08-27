@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"flag"
 	"fmt"
 	"slices"
 	"strings"
@@ -411,6 +412,49 @@ type FlagGroup struct {
 	name  string
 	usage string
 	flags []*Flag
+}
+
+// NewFlagGroup returns a new FlagGroup with the given name that shows its
+// flags under the common heading usage in help messages.
+//
+// A group built standalone is how a library contributes flags bound to
+// variables it owns: mount it on a command with Command.FlagGroups, or
+// register it with Register so every command that mounts CommandLine
+// picks it up.
+func NewFlagGroup(name, usage string, flags ...*Flag) *FlagGroup {
+	return &FlagGroup{
+		name:  name,
+		usage: usage,
+		flags: flags,
+	}
+}
+
+// Flags appends command line flags to the group.
+func (c *FlagGroup) Flags(flags ...*Flag) *FlagGroup {
+	c.flags = append(c.flags, flags...)
+	return c
+}
+
+// FromFlagSet returns a FlagGroup holding the flags declared on fs, a flag
+// set created with Go's flag package, so a program composed with xflags can
+// carry flags from stdlib-flavored libraries. Mount the group with
+// Command.FlagGroups, or register it with Register. To import the flags
+// declared on the flag package itself, pass flag.CommandLine. Parsing and
+// error handling are taken over by this package; boolean flags keep their
+// no-argument arity via the flag.Value IsBoolFlag convention.
+//
+// The flag set is snapshotted when FromFlagSet is called: each flag's
+// Value is bound directly, and its name, usage text and DefValue are
+// captured for help messages. A flag declared on fs afterwards is not
+// seen.
+func FromFlagSet(name, usage string, fs *flag.FlagSet) *FlagGroup {
+	group := NewFlagGroup(name, usage)
+	fs.VisitAll(func(f *flag.Flag) {
+		flg := Var(f.Value, f.Name, f.Usage)
+		flg.defValue = f.DefValue
+		group.Flags(flg)
+	})
+	return group
 }
 
 func (c *FlagGroup) describe() *desc.FlagGroup {

@@ -155,7 +155,7 @@ func TestPositionalFlags(t *testing.T) {
 	assertStrings(t, []string{"five", "six"}, qux)
 }
 
-func TestFlagSet(t *testing.T) {
+func TestFromFlagSet(t *testing.T) {
 	var foo, bar string
 	var baz, qux bool
 	flagSet := flag.NewFlagSet("native", flag.ContinueOnError)
@@ -166,7 +166,7 @@ func TestFlagSet(t *testing.T) {
 			String(&bar, "bar", "", ""),
 			Bool(&qux, "qux", false, ""),
 		).
-		FlagSet(flagSet)
+		FlagGroups(FromFlagSet("native", "Native options", flagSet))
 	_, err := c.Parse([]string{"--foo", "foo", "--bar", "bar", "--baz", "--qux"})
 	if err != nil {
 		t.Fatal(err)
@@ -188,7 +188,23 @@ func TestCommandLineage(t *testing.T) {
 	assertString(t, "b", a.subcommands[0].subcommands[0].parent.name)
 }
 
-func ExampleCommand_FlagGroup() {
+// TestSubcommandAlreadyParented asserts that Subcommands does not steal an
+// already-parented command -- such as a shared registry like
+// xflags.CommandLine -- and that the mismatch is reported as a
+// ConfigError rather than silently corrupting the original relationship.
+func TestSubcommandAlreadyParented(t *testing.T) {
+	a, b, shared := NewCommand("a", ""), NewCommand("b", ""), NewCommand("shared", "")
+	a.Subcommands(shared)
+	b.Subcommands(shared)
+
+	assertString(t, "a", shared.parent.name)
+	if _, err := a.Parse(nil); err != nil {
+		t.Errorf("a.Parse: expected nil error, got: %v", err)
+	}
+	assertConfigError(t, b, "a subcommand already parented elsewhere")
+}
+
+func ExampleCommand_FlagGroups() {
 	var n int
 	var rightToLeft bool
 	var endcoding string
@@ -197,13 +213,13 @@ func ExampleCommand_FlagGroup() {
 		// n flag defines how many times to print "Hello, World!".
 		Flags(Int(&n, "n", 1, "Print n times")).
 
-		// Create a flag group for language-related flags.
-		FlagGroup(
+		// Mount a flag group for language-related flags.
+		FlagGroups(NewFlagGroup(
 			"language",
 			"Language options",
 			String(&endcoding, "encoding", "utf-8", "Text encoding"),
 			Bool(&rightToLeft, "rtl", false, "Print right-to-left"),
-		)
+		))
 
 	// Print the help page
 	RunWithArgs(context.Background(), cmd, "--help")
@@ -218,14 +234,14 @@ func ExampleCommand_FlagGroup() {
 	//    --rtl       Print right-to-left
 }
 
-func ExampleCommand_FlagSet() {
+func ExampleFromFlagSet() {
 	// create a Go-native flag set
 	flagSet := flag.NewFlagSet("native", flag.ExitOnError)
 	message := flagSet.String("m", "Hello, World!", "Message to print")
 
-	// import the flagset into an xflags command
+	// import the flagset into an xflags command as a flag group
 	cmd := NewCommand("helloworld", "").
-		FlagSet(flagSet).
+		FlagGroups(FromFlagSet("native", "Native options", flagSet)).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Println(*message)
 			return nil
@@ -245,7 +261,7 @@ func ExampleCommand_FlagSet() {
 	// + helloworld --help
 	// Usage: helloworld [OPTIONS]
 	//
-	// Options:
+	// Native options:
 	//   -m   Message to print
 	//
 	// + helloworld

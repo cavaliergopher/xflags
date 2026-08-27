@@ -6,7 +6,7 @@ required arguments, validation, support for environment variables and others.
 Package xflags aims to make composing large, full-featured command line tools as simple and clean as
 possible. Chained setters are employed to configure commands and flags declaratively.
 
-For compatibility, flag.FlagSets may be imported with Command.FlagSet.
+For compatibility, a flag.FlagSet may be imported with FromFlagSet.
 
 # Usage
 
@@ -27,9 +27,10 @@ Every xflags program must define a top-level command using xflags.NewCommand:
 		os.Exit(xflags.Run(ctx, App))
 	}
 
-You can import all global flags defined using Go's flag library with Command.FlagSet.
+You can import all global flags defined using Go's flag library with FromFlagSet.
 
-	var App = xflags.NewCommand(os.Args[0], "").FlagSet(flag.CommandLine)
+	var App = xflags.NewCommand(os.Args[0], "").
+		FlagGroups(xflags.FromFlagSet("go", "Options", flag.CommandLine))
 
 You can bind a flag to a variable using the Var functions.
 

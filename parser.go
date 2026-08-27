@@ -39,7 +39,7 @@ func (c *argParser) setCommand(cmd *Command) {
 	c.cmd = cmd
 	c.cmds = append(c.cmds, cmd)
 	c.positionals = make([]*Flag, 0)
-	for _, group := range cmd.flagGroups {
+	for _, group := range cmd.effectiveGroups() {
 		for _, flag := range group.flags {
 			if flag.name != "" {
 				c.flagsByName["--"+flag.name] = flag
@@ -142,9 +142,10 @@ func (c *argParser) checkNArgs() error {
 	return nil
 }
 
-// checkCommandNArgs applies the count rules to cmd's own flags.
+// checkCommandNArgs applies the count rules to cmd's effective flags -- its
+// own groups and every group it mounts via a GroupSet.
 func (c *argParser) checkCommandNArgs(cmd *Command) error {
-	for _, group := range cmd.flagGroups {
+	for _, group := range cmd.effectiveGroups() {
 		for _, flag := range group.flags {
 			n := c.flagsSeen[flag.keyName()]
 			if flag.minCount > 0 && n < flag.minCount {
