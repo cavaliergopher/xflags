@@ -249,7 +249,10 @@ func (c *argParser) parseOperand(token string) error {
 
 	// handle subcommand
 	if len(c.cmd.subcommands) == 0 {
-		return newArgumentErrorf(nil, c.cmd, nil, token, "unexpected positional argument: %s", token)
+		// This isn't a lookup miss like the two "unrecognized" cases below:
+		// the operand is well understood, there is just no positional slot
+		// left to take it. See rm(1)'s "extra operand".
+		return newArgumentErrorf(nil, c.cmd, nil, token, "extra operand: %s", token)
 	}
 	cmd, ok := c.subcommandsByName[token]
 	if !ok {

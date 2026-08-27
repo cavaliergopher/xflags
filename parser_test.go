@@ -304,6 +304,35 @@ func TestUnrecognizedOptionSkipsHiddenSubtree(t *testing.T) {
 	})
 }
 
+// TestParseOperandNoSlot asserts the two ways an operand can go unbound.
+// A name that matches no subcommand is a lookup miss and stays
+// "unrecognized"; an operand arriving when no positional flag or
+// subcommand can take it at all is not a lookup miss, so it gets its own
+// wording, after coreutils' "extra operand".
+func TestParseOperandNoSlot(t *testing.T) {
+	t.Run("UnrecognizedSubcommand", func(t *testing.T) {
+		cmd := NewCommand("app", "").Subcommands(NewCommand("sub", ""))
+		_, err := cmd.Parse([]string{"nope"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if got, want := humanMessage(err), "unrecognized subcommand: nope"; got != want {
+			t.Errorf("message = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("ExtraOperand", func(t *testing.T) {
+		cmd := NewCommand("app", "")
+		_, err := cmd.Parse([]string{"nope"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if got, want := humanMessage(err), "extra operand: nope"; got != want {
+			t.Errorf("message = %q, want %q", got, want)
+		}
+	})
+}
+
 // TestValidateNArgsSpansThePath asserts that the count rules cover every
 // flag that became active along the descended path: an ancestor's
 // Required flag is still enforced when a subcommand is invoked, and its
