@@ -246,8 +246,8 @@ func TestFlagGroupStandalone(t *testing.T) {
 	if got, want := len(node.FlagGroups), 2; got != want {
 		t.Fatalf("len(FlagGroups) = %d, want %d", got, want)
 	}
-	if got, want := node.FlagGroups[1].Usage, "Logging options"; got != want {
-		t.Errorf("Usage = %q, want %q", got, want)
+	if got, want := node.FlagGroups[1].Title, "Logging options"; got != want {
+		t.Errorf("Title = %q, want %q", got, want)
 	}
 	if got, want := len(node.FlagGroups[1].Flags), 2; got != want {
 		t.Errorf("len(Flags) = %d, want %d", got, want)

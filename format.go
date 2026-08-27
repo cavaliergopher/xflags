@@ -151,7 +151,7 @@ func detailFlagGroup(w io.Writer, group *desc.FlagGroup) error {
 	if len(flags) == 0 {
 		return nil
 	}
-	if _, err := fmt.Fprintf(w, "\n%s:\n", group.Usage); err != nil {
+	if _, err := fmt.Fprintf(w, "\n%s:\n", group.Title); err != nil {
 		return err
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)

@@ -410,21 +410,21 @@ func (c *Flag) describe() *desc.Flag {
 // shown in help messages.
 type FlagGroup struct {
 	name  string
-	usage string
+	title string
 	flags []*Flag
 }
 
 // NewFlagGroup returns a new FlagGroup with the given name that shows its
-// flags under the common heading usage in help messages.
+// flags under the given title in help messages.
 //
 // A group built standalone is how a library contributes flags bound to
 // variables it owns: mount it on a command with Command.FlagGroups, or
 // register it with Register so every command that mounts CommandLine
 // picks it up.
-func NewFlagGroup(name, usage string, flags ...*Flag) *FlagGroup {
+func NewFlagGroup(name, title string, flags ...*Flag) *FlagGroup {
 	return &FlagGroup{
 		name:  name,
-		usage: usage,
+		title: title,
 		flags: flags,
 	}
 }
@@ -447,8 +447,8 @@ func (c *FlagGroup) Flags(flags ...*Flag) *FlagGroup {
 // Value is bound directly, and its name, usage text and DefValue are
 // captured for help messages. A flag declared on fs afterwards is not
 // seen.
-func FromFlagSet(name, usage string, fs *flag.FlagSet) *FlagGroup {
-	group := NewFlagGroup(name, usage)
+func FromFlagSet(name, title string, fs *flag.FlagSet) *FlagGroup {
+	group := NewFlagGroup(name, title)
 	fs.VisitAll(func(f *flag.Flag) {
 		flg := Var(f.Value, f.Name, f.Usage)
 		flg.defValue = f.DefValue
@@ -460,7 +460,7 @@ func FromFlagSet(name, usage string, fs *flag.FlagSet) *FlagGroup {
 func (c *FlagGroup) describe() *desc.FlagGroup {
 	group := &desc.FlagGroup{
 		Name:  c.name,
-		Usage: c.usage,
+		Title: c.title,
 	}
 	for _, flag := range c.flags {
 		group.Flags = append(group.Flags, flag.describe())

@@ -593,7 +593,7 @@ func (c *Command) Hidden() *Command {
 // every command carries from construction.
 func (c *Command) Flags(flags ...*Flag) *Command {
 	if c.defaultGroup == nil {
-		c.defaultGroup = &FlagGroup{name: "options", usage: "Options"}
+		c.defaultGroup = &FlagGroup{name: "options", title: "Options"}
 		c.flagGroups = append(c.flagGroups, c.defaultGroup)
 	}
 	c.defaultGroup.flags = append(c.defaultGroup.flags, flags...)

@@ -33,8 +33,11 @@ type Command struct {
 
 // FlagGroup is the compiled description of an xflags.FlagGroup.
 type FlagGroup struct {
-	Name  string
-	Usage string
+	Name string
+
+	// Title is the heading a formatter prints above the group's flags.
+	Title string
+
 	Flags []*Flag
 }
 
