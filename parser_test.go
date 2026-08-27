@@ -168,6 +168,133 @@ func TestAttachedValues(t *testing.T) {
 	}
 }
 
+// TestEmptyAttachedValue asserts that an attached "=" with nothing after
+// it sets the empty string by either spelling, as getopt_long reads
+// "--name=", and that a boolean rejects it identically by either spelling
+// -- a flag's two names must agree; see
+// docs/adr/posix-argument-conventions.md.
+func TestEmptyAttachedValue(t *testing.T) {
+	// A non-empty default proves the empty string was set rather than
+	// nothing at all.
+	parseName := func(arg string) string {
+		t.Helper()
+		var name string
+		cmd := NewCommand("test", "").Flags(
+			String(&name, "name", "unset", "").ShortName("n"),
+		)
+		if _, err := cmd.Parse([]string{arg}); err != nil {
+			t.Fatal(err)
+		}
+		return name
+	}
+	assertString(t, "", parseName("-n="))
+	assertString(t, "", parseName("--name="))
+
+	parseVerbose := func(arg string) error {
+		cmd := NewCommand("test", "").Flags(
+			Bool(new(bool), "verbose", false, "").ShortName("v"),
+		)
+		_, err := cmd.Parse([]string{arg})
+		return err
+	}
+	errShort, errLong := parseVerbose("-v="), parseVerbose("--verbose=")
+	if errShort == nil || errLong == nil {
+		t.Fatalf("expected errors, got %v and %v", errShort, errLong)
+	}
+	assertString(t, errLong.Error(), errShort.Error())
+}
+
+// TestUnrecognizedOptionNamesSubtree asserts that an unknown option
+// declared somewhere below the current command is reported with the
+// subcommand that declares it, since the name is legal only after that
+// command is named. The first declarer in depth-first declaration order
+// is named, by its own name rather than its path. See
+// docs/adr/path-scoped-flag-names.md.
+func TestUnrecognizedOptionNamesSubtree(t *testing.T) {
+	newApp := func() *Command {
+		del := NewCommand("delete", "").Flags(
+			Bool(new(bool), "force", false, "").ShortName("f"),
+			Bool(new(bool), "dry-run", false, ""),
+		)
+		add := NewCommand("add", "").Flags(
+			Bool(new(bool), "tags", false, "").ShortName("t"),
+			Bool(new(bool), "dry-run", false, ""),
+		)
+		remote := NewCommand("remote", "").Subcommands(add)
+		return NewCommand("app", "").Subcommands(del, remote)
+	}
+	for _, tt := range []struct {
+		args []string
+		want string
+	}{
+		// A direct child's declaration, by either spelling.
+		{[]string{"--force"}, `unrecognized option: --force (defined by subcommand "delete")`},
+		{[]string{"-f"}, `unrecognized option: -f (defined by subcommand "delete")`},
+
+		// A grandchild is named by its own name, not its path.
+		{[]string{"--tags"}, `unrecognized option: --tags (defined by subcommand "add")`},
+		{[]string{"-t"}, `unrecognized option: -t (defined by subcommand "add")`},
+
+		// The search starts from the current command, not the root.
+		{[]string{"remote", "--tags"}, `unrecognized option: --tags (defined by subcommand "add")`},
+
+		// Declaration order decides which declarer is named.
+		{[]string{"--dry-run"}, `unrecognized option: --dry-run (defined by subcommand "delete")`},
+
+		// A name nobody declares reads as before.
+		{[]string{"--nope"}, "unrecognized option: --nope"},
+	} {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			_, err := newApp().Parse(tt.args)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if got, want := errorOrString(err), tt.want; got != want {
+				t.Errorf("message = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// TestCheckNArgsSpansThePath asserts that the count rules cover every
+// flag that became active along the descended path: an ancestor's
+// Required flag is still enforced when a subcommand is invoked, and its
+// occurrences accumulate wherever they appear around the subcommand
+// token.
+func TestCheckNArgsSpansThePath(t *testing.T) {
+	newApp := func(name *string) *Command {
+		return NewCommand("app", "").
+			Flags(String(name, "name", "", "").Required()).
+			Subcommands(NewCommand("sub", ""))
+	}
+
+	_, err := newApp(new(string)).Parse([]string{"sub"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got, want := errorOrString(err), "missing required argument: --name"; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+
+	// A parent flag keeps working after the subcommand token, and giving
+	// it there satisfies the requirement.
+	var name string
+	if _, err := newApp(&name).Parse([]string{"sub", "--name=x"}); err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "x", name)
+
+	// Occurrences accumulate across the descent, so the ceiling holds
+	// over the whole path too.
+	_, err = newApp(new(string)).Parse([]string{"--name=x", "sub", "--name=y"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got, want := errorOrString(err), "argument specified too many times: --name"; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
 // TestTerminatorEndsOptions asserts the default reading of "--": it ends
 // option processing, so every argument after it is an operand however many
 // dashes it starts with. This is the escape hatch guideline 14 relies on

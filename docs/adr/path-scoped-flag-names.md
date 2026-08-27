@@ -1,6 +1,6 @@
 # Flag names are scoped to a command path
 
-Status: accepted, 2026-08-23. Not yet implemented.
+Status: accepted, 2026-08-23. Implemented 2026-08-26.
 
 ## Context
 

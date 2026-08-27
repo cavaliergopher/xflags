@@ -12,7 +12,7 @@ type argParser struct {
 	tokens            []string
 	args              []string
 	cmd               *Command
-	path              []string
+	cmds              []*Command
 	forwarding        bool
 	optionsEnded      bool
 	helpRequested     bool
@@ -37,7 +37,7 @@ func newArgParser(cmd *Command, tokens []string) *argParser {
 func (c *argParser) setCommand(cmd *Command) {
 	// accumulate flags
 	c.cmd = cmd
-	c.path = append(c.path, cmd.name)
+	c.cmds = append(c.cmds, cmd)
 	c.positionals = make([]*Flag, 0)
 	for _, group := range cmd.flagGroups {
 		for _, flag := range group.flags {
@@ -88,9 +88,13 @@ func (c *argParser) Parse() (*Invocation, error) {
 // invocation returns the Invocation describing the command line parsed so
 // far, naming the deepest command the parser descended into.
 func (c *argParser) invocation() *Invocation {
+	path := make([]string, len(c.cmds))
+	for i, cmd := range c.cmds {
+		path[i] = cmd.name
+	}
 	return &Invocation{
 		Cmd:           c.cmd,
-		Path:          c.path,
+		Path:          path,
 		Forwarded:     c.args,
 		HelpRequested: c.helpRequested,
 		Stdin:         c.cmd.getStdin(),
@@ -121,6 +125,8 @@ func (c *argParser) parseEnvVars() error {
 }
 
 // checkNArgs verifies each flag was given as many times as it requires.
+// Every flag that became active along the descended path is checked, so
+// an ancestor's Required flag still binds when a subcommand is invoked.
 //
 // The offending flag goes at the end of these messages, which is where
 // Go's flag package, argparse and getopt all put it when nothing follows
@@ -128,7 +134,17 @@ func (c *argParser) parseEnvVars() error {
 // "--ip: invalid IP: 256.0.0.1", where it scopes what comes after the
 // colon; see docs/adr/human-readable-errors.md.
 func (c *argParser) checkNArgs() error {
-	for _, group := range c.cmd.flagGroups {
+	for _, cmd := range c.cmds {
+		if err := c.checkCommandNArgs(cmd); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkCommandNArgs applies the count rules to cmd's own flags.
+func (c *argParser) checkCommandNArgs(cmd *Command) error {
+	for _, group := range cmd.flagGroups {
 		for _, flag := range group.flags {
 			n := c.flagsSeen[flag.keyName()]
 			if flag.minCount > 0 && n < flag.minCount {
@@ -258,7 +274,7 @@ func (c *argParser) parseLongOption(token string) error {
 	name, value, attached := splitLongOption(token)
 	flag := c.flagsByName[name]
 	if flag == nil {
-		return newArgumentErrorf(nil, c.cmd, nil, name, "unrecognized option: %s", name)
+		return c.unrecognizedOption(name)
 	}
 	c.observe(flag)
 
@@ -287,7 +303,7 @@ func (c *argParser) parseShortOptions(arg string) error {
 		name := "-" + string(r)
 		flag := c.flagsByName[name]
 		if flag == nil {
-			return newArgumentErrorf(nil, c.cmd, nil, name, "unrecognized option: %s", name)
+			return c.unrecognizedOption(name)
 		}
 		c.observe(flag)
 		rest := arg[i+utf8.RuneLen(r):]
@@ -319,6 +335,21 @@ func (c *argParser) parseShortOptions(arg string) error {
 		return c.setFlag(flag, rest)
 	}
 	return nil
+}
+
+// unrecognizedOption reports an option that resolved to nothing. A name
+// declared deeper in the tree becomes legal only after its own command is
+// named, so when a command below the current one declares it, the message
+// says which rather than leaving the user to guess; see
+// docs/adr/path-scoped-flag-names.md.
+func (c *argParser) unrecognizedOption(name string) error {
+	if sub := c.cmd.findDescendantWithFlag(name); sub != nil {
+		return newArgumentErrorf(nil, c.cmd, nil, name,
+			"unrecognized option: %s (defined by subcommand %q)",
+			name, sub.name)
+	}
+	return newArgumentErrorf(nil, c.cmd, nil, name,
+		"unrecognized option: %s", name)
 }
 
 // parseDetachedValue binds the next argument to flag as its value.

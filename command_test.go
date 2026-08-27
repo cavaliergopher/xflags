@@ -498,6 +498,92 @@ func TestValidateDuplicateShortName(t *testing.T) {
 	), "duplicate short name")
 }
 
+// TestValidateAncestorShadowing asserts the path-scoped naming rule: a
+// command may not redeclare a name an ancestor already claimed, by either
+// spelling, however far up the path the ancestor is. See
+// docs/adr/path-scoped-flag-names.md.
+func TestValidateAncestorShadowing(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		cmd  *Command
+		want string
+	}{
+		{
+			name: "LongName",
+			cmd: NewCommand("root", "").
+				Flags(Bool(new(bool), "force", false, "")).
+				Subcommands(NewCommand("sub", "").Flags(
+					Bool(new(bool), "force", false, ""),
+				)),
+			want: `sub: flag already declared by ancestor "root": --force`,
+		},
+		{
+			name: "ShortName",
+			cmd: NewCommand("root", "").
+				Flags(String(new(string), "file", "", "").ShortName("f")).
+				Subcommands(NewCommand("sub", "").Flags(
+					String(new(string), "output", "", "").ShortName("f"),
+				)),
+			want: `sub: flag already declared by ancestor "root": -f`,
+		},
+		{
+			name: "GrandparentClaim",
+			cmd: NewCommand("root", "").
+				Flags(Bool(new(bool), "force", false, "")).
+				Subcommands(NewCommand("mid", "").Subcommands(
+					NewCommand("leaf", "").Flags(
+						Bool(new(bool), "force", false, ""),
+					),
+				)),
+			want: `leaf: flag already declared by ancestor "root": --force`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.cmd.Parse(nil)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if got, want := errorOrString(err), tt.want; got != want {
+				t.Errorf("message = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// TestSiblingFlagReuse asserts the freedom the path-scoped rule buys:
+// commands in different subtrees may declare the same names, and each
+// spelling binds the variable of whichever sibling was invoked.
+func TestSiblingFlagReuse(t *testing.T) {
+	var deleteForce, pushForce bool
+	app := NewCommand("app", "").Subcommands(
+		NewCommand("delete", "").Flags(
+			Bool(&deleteForce, "force", false, "").ShortName("f"),
+		),
+		NewCommand("push", "").Flags(
+			Bool(&pushForce, "force", false, "").ShortName("f"),
+		),
+	)
+
+	inv, err := app.Parse([]string{"delete", "--force"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := inv.Cmd.name, "delete"; got != want {
+		t.Errorf("Cmd = %q, want %q", got, want)
+	}
+	assertBool(t, true, deleteForce)
+	assertBool(t, false, pushForce)
+
+	inv, err = app.Parse([]string{"push", "-f"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := inv.Cmd.name, "push"; got != want {
+		t.Errorf("Cmd = %q, want %q", got, want)
+	}
+	assertBool(t, true, pushForce)
+}
+
 func TestValidatePositionalWithSubcommands(t *testing.T) {
 	var a string
 	cmd := NewCommand("test", "").

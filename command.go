@@ -143,17 +143,40 @@ func (c *Command) root() *Command {
 // is called on, so that Parse on a subcommand still validates the whole
 // tree.
 func (c *Command) validate() error {
-	return c.root().validateTree()
+	return c.root().validateTree(nil)
 }
 
 // validateTree checks c and, recursively, each of its subcommands, returning
-// the first error found.
-func (c *Command) validateTree() error {
-	if err := c.validateSelf(); err != nil {
+// the first error found. claimed maps each option spelling declared by c's
+// ancestors to the command that declared it: a name may not repeat anywhere
+// along an ancestor-descendant chain, and the check runs here because a
+// command cannot know its ancestors until the whole tree is in view. See
+// docs/adr/path-scoped-flag-names.md.
+func (c *Command) validateTree(claimed map[string]*Command) error {
+	if err := c.validateSelf(claimed); err != nil {
 		return err
 	}
+	if len(c.subcommands) == 0 {
+		return nil
+	}
+	// Descendants see c's names claimed in a copy, so sibling subtrees may
+	// still reuse names freely.
+	claims := make(map[string]*Command, len(claimed))
+	for key, cmd := range claimed {
+		claims[key] = cmd
+	}
+	for _, group := range c.flagGroups {
+		for _, flag := range group.flags {
+			if flag.name != "" {
+				claims["--"+flag.name] = c
+			}
+			if flag.shortName != "" {
+				claims["-"+flag.shortName] = c
+			}
+		}
+	}
 	for _, sub := range c.subcommands {
-		if err := sub.validateTree(); err != nil {
+		if err := sub.validateTree(claims); err != nil {
 			return err
 		}
 	}
@@ -161,9 +184,10 @@ func (c *Command) validateTree() error {
 }
 
 // validateSelf checks c's own flags for configuration errors: flag syntax,
-// duplicate names, and positional/subcommand conflicts. It does not descend
+// names already declared -- within c, or by the ancestors whose claims are
+// passed in -- and positional/subcommand conflicts. It does not descend
 // into subcommands.
-func (c *Command) validateSelf() error {
+func (c *Command) validateSelf(claimed map[string]*Command) error {
 	flagsByName := make(map[string]*Flag)
 	hasUnboundedPositional := false
 	for _, group := range c.flagGroups {
@@ -187,6 +211,11 @@ func (c *Command) validateSelf() error {
 				if _, ok := flagsByName[key]; ok {
 					return newConfigErrorf(nil, c, flag, "flag already declared: %s", key)
 				}
+				if ancestor, ok := claimed[key]; ok {
+					return newConfigErrorf(nil, c, flag,
+						"flag already declared by ancestor %q: %s",
+						ancestor.name, key)
+				}
 				flagsByName[key] = flag
 			}
 			if flag.shortName != "" {
@@ -194,8 +223,39 @@ func (c *Command) validateSelf() error {
 				if _, ok := flagsByName[key]; ok {
 					return newConfigErrorf(nil, c, flag, "flag already declared: %s", key)
 				}
+				if ancestor, ok := claimed[key]; ok {
+					return newConfigErrorf(nil, c, flag,
+						"flag already declared by ancestor %q: %s",
+						ancestor.name, key)
+				}
 				flagsByName[key] = flag
 			}
+		}
+	}
+	return nil
+}
+
+// findDescendantWithFlag returns the first descendant of c to declare the
+// option spelled key -- a "--name" or "-s" -- searching depth first in
+// declaration order, or nil when none does. A name declared below the
+// current command is legal only once its own command is named, so
+// unrecognized-option errors use this to say where the name would work;
+// see docs/adr/path-scoped-flag-names.md.
+func (c *Command) findDescendantWithFlag(key string) *Command {
+	for _, sub := range c.subcommands {
+		for _, group := range sub.flagGroups {
+			for _, flag := range group.flags {
+				if flag.positional {
+					continue
+				}
+				if (flag.name != "" && key == "--"+flag.name) ||
+					(flag.shortName != "" && key == "-"+flag.shortName) {
+					return sub
+				}
+			}
+		}
+		if found := sub.findDescendantWithFlag(key); found != nil {
+			return found
 		}
 	}
 	return nil
@@ -219,7 +279,7 @@ func (c *Command) validateSelf() error {
 // and describes the tree afresh.
 func (c *Command) Describe() (*desc.Command, error) {
 	root := c.root()
-	if err := root.validateTree(); err != nil {
+	if err := root.validateTree(nil); err != nil {
 		return nil, err
 	}
 	nodeMap := make(map[*Command]*desc.Command)
