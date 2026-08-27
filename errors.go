@@ -153,7 +153,7 @@ func (e *ConfigError) Error() string { return "xflags: " + e.String() }
 func (e *ConfigError) String() string {
 	switch {
 	case e.Cmd != nil:
-		return e.Cmd.String() + ": " + e.Message
+		return e.Cmd.pathString() + ": " + e.Message
 	case e.Flag != nil:
 		return e.Flag.String() + ": " + e.Message
 	default:

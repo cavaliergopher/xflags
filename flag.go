@@ -25,6 +25,10 @@ const (
 // Flag describes a command line flag that may be specified on the command
 // line.
 //
+// The same type also describes a positional operand once marked with
+// Positional: every constructor and every chained modifier applies to
+// both, and Flag is simply named for the more common case.
+//
 // Programs should not create Flag directly and instead use one of the typed
 // constructors such as String, Int or Var to construct one.
 type Flag struct {

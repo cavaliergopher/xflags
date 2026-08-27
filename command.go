@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/cavaliergopher/xflags/desc"
 )
@@ -108,6 +110,19 @@ func NewCommand(name, summary string) *Command {
 }
 
 func (c *Command) String() string { return c.name }
+
+// pathString joins c's name with each ancestor's, from the root down, so a
+// deep subcommand reads as "app remote add" rather than the bare "add" that
+// String returns. See ConfigError.String, which is the one place a bare
+// name would leave no way to tell which "add" is misconfigured.
+func (c *Command) pathString() string {
+	names := []string{c.name}
+	for p := c.parent; p != nil; p = p.parent {
+		names = append(names, p.name)
+	}
+	slices.Reverse(names)
+	return strings.Join(names, " ")
+}
 
 // Parse parses the given set of command line arguments and stores the value of
 // each argument in each command flag's target. The rules for each flag are
@@ -247,30 +262,50 @@ func (c *Command) validateSelf(claimed map[string]*Command) error {
 			if flag.name != "" {
 				key := "--" + flag.name
 				if _, ok := flagsByName[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "flag already declared: %s", key))
+					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
+						alreadyDeclaredMessage(flag, key)))
 				}
 				if ancestor, ok := claimed[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag,
-						"flag already declared by ancestor %q: %s",
-						ancestor.name, key))
+					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
+						alreadyDeclaredByAncestorMessage(flag, key, ancestor.name)))
 				}
 				flagsByName[key] = flag
 			}
 			if flag.shortName != "" {
 				key := "-" + flag.shortName
 				if _, ok := flagsByName[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "flag already declared: %s", key))
+					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
+						alreadyDeclaredMessage(flag, key)))
 				}
 				if ancestor, ok := claimed[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag,
-						"flag already declared by ancestor %q: %s",
-						ancestor.name, key))
+					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
+						alreadyDeclaredByAncestorMessage(flag, key, ancestor.name)))
 				}
 				flagsByName[key] = flag
 			}
 		}
 	}
 	return joinErrors(errs)
+}
+
+// alreadyDeclaredMessage reports a name key colliding with one already
+// declared on the same command. A positional flag names itself, since key
+// is a synthetic "--"/"-" spelling it never appears with on the command
+// line; an option is named by that spelling.
+func alreadyDeclaredMessage(flag *Flag, key string) string {
+	if flag.positional {
+		return fmt.Sprintf("operand already declared: %s", flag)
+	}
+	return fmt.Sprintf("flag already declared: %s", key)
+}
+
+// alreadyDeclaredByAncestorMessage is alreadyDeclaredMessage's counterpart
+// for a name an ancestor, named by ancestor, already claimed.
+func alreadyDeclaredByAncestorMessage(flag *Flag, key, ancestor string) string {
+	if flag.positional {
+		return fmt.Sprintf("operand already declared by ancestor %q: %s", ancestor, flag)
+	}
+	return fmt.Sprintf("flag already declared by ancestor %q: %s", ancestor, key)
 }
 
 // findDescendantWithFlag returns the first descendant of c to declare the

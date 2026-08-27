@@ -514,10 +514,52 @@ func TestValidateDuplicateShortName(t *testing.T) {
 	), "duplicate short name")
 }
 
+// TestValidateDuplicatePositionalName asserts that a duplicate name
+// between two positional flags is reported as a duplicate operand, in
+// the vocabulary a user of the command line would recognize, rather than
+// the "flag" wording that fits an option.
+func TestValidateDuplicatePositionalName(t *testing.T) {
+	var a, b string
+	_, err := NewCommand("test", "").Flags(
+		String(&a, "file", "", "").Positional(),
+		String(&b, "file", "", "").Positional(),
+	).Parse(nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got, want := humanMessage(err), "test: operand already declared: FILE"; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
+// TestConfigErrorNamesGrandchildByPath asserts that a ConfigError on a
+// deep subcommand reports where it lives: the bare name "add" could be
+// any command called "add", but "app remote add" is not.
+func TestConfigErrorNamesGrandchildByPath(t *testing.T) {
+	var a, b string
+	add := NewCommand("add", "").Flags(
+		String(&a, "name", "", ""),
+		String(&b, "name", "", ""),
+	)
+	remote := NewCommand("remote", "").Subcommands(add)
+	app := NewCommand("app", "").Subcommands(remote)
+
+	_, err := app.Parse(nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	want := `app remote add: flag already declared: --name`
+	if got := humanMessage(err); got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
 // TestValidateAncestorShadowing asserts the path-scoped naming rule: a
 // command may not redeclare a name an ancestor already claimed, by either
 // spelling, however far up the path the ancestor is. See
-// docs/adr/path-scoped-flag-names.md.
+// docs/adr/path-scoped-flag-names.md. The offending command is named by
+// its full path, since a bare name would not say which "sub" or "leaf"
+// among possibly many.
 func TestValidateAncestorShadowing(t *testing.T) {
 	for _, tt := range []struct {
 		name string
@@ -531,7 +573,7 @@ func TestValidateAncestorShadowing(t *testing.T) {
 				Subcommands(NewCommand("sub", "").Flags(
 					Bool(new(bool), "force", false, ""),
 				)),
-			want: `sub: flag already declared by ancestor "root": --force`,
+			want: `root sub: flag already declared by ancestor "root": --force`,
 		},
 		{
 			name: "ShortName",
@@ -540,7 +582,7 @@ func TestValidateAncestorShadowing(t *testing.T) {
 				Subcommands(NewCommand("sub", "").Flags(
 					String(new(string), "output", "", "").ShortName("f"),
 				)),
-			want: `sub: flag already declared by ancestor "root": -f`,
+			want: `root sub: flag already declared by ancestor "root": -f`,
 		},
 		{
 			name: "GrandparentClaim",
@@ -551,7 +593,7 @@ func TestValidateAncestorShadowing(t *testing.T) {
 						Bool(new(bool), "force", false, ""),
 					),
 				)),
-			want: `leaf: flag already declared by ancestor "root": --force`,
+			want: `root mid leaf: flag already declared by ancestor "root": --force`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
