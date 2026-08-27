@@ -230,7 +230,7 @@ func (c *Command) validateSelf(claimed map[string]*Command) error {
 	hasUnboundedPositional := false
 	for _, group := range c.effectiveGroups() {
 		for _, flag := range group.flags {
-			if err := flag.check(); err != nil {
+			if err := flag.validate(); err != nil {
 				errs = append(errs, err)
 			}
 			if flag.positional {

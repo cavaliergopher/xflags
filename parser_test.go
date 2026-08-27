@@ -304,12 +304,12 @@ func TestUnrecognizedOptionSkipsHiddenSubtree(t *testing.T) {
 	})
 }
 
-// TestCheckNArgsSpansThePath asserts that the count rules cover every
+// TestValidateNArgsSpansThePath asserts that the count rules cover every
 // flag that became active along the descended path: an ancestor's
 // Required flag is still enforced when a subcommand is invoked, and its
 // occurrences accumulate wherever they appear around the subcommand
 // token.
-func TestCheckNArgsSpansThePath(t *testing.T) {
+func TestValidateNArgsSpansThePath(t *testing.T) {
 	newApp := func(name *string) *Command {
 		return NewCommand("app", "").
 			Flags(String(name, "name", "", "").Required()).

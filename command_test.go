@@ -620,8 +620,9 @@ func TestValidatePositionalAfterUnbounded(t *testing.T) {
 // provoke names the flag it is about. The flag is carried on the error either
 // way, but a human reading stderr only sees Message.
 func TestArgumentErrorNamesTheFlag(t *testing.T) {
-	// Each case builds its own command, since checkNArgs reports the first
-	// unsatisfied flag and a shared one would let cases mask each other.
+	// Each case builds its own command, since validateNArgs reports the
+	// first unsatisfied flag and a shared one would let cases mask each
+	// other.
 	for _, tt := range []struct {
 		name string
 		flag *Flag

@@ -38,15 +38,15 @@ type Flag struct {
 	// flags imported from a flag.FlagSet, whose defValue is display-only.
 	hasDefault bool
 
-	showDefault bool
-	positional  bool
-	minCount    int
-	maxCount    int
-	hidden      bool
-	envVar      string
-	choices     []string
-	validate    ValidateFunc
-	value       Value
+	showDefault  bool
+	positional   bool
+	minCount     int
+	maxCount     int
+	hidden       bool
+	envVar       string
+	choices      []string
+	validateFunc ValidateFunc
+	value        Value
 }
 
 // Var returns a Flag that can be used to define a command line flag with
@@ -229,8 +229,8 @@ func (c *Flag) keyName() string {
 
 // Set sets the value of the command-line flag.
 func (c *Flag) Set(s string) error {
-	if c.validate != nil {
-		if err := c.validate(s); err != nil {
+	if c.validateFunc != nil {
+		if err := c.validateFunc(s); err != nil {
 			return err
 		}
 	}
@@ -305,7 +305,7 @@ func (c *Flag) Env(name string) *Flag {
 // it is parsed. If the function returns an error, parsing will fail with the
 // same error.
 func (c *Flag) Validate(f ValidateFunc) *Flag {
-	c.validate = f
+	c.validateFunc = f
 	return c
 }
 
@@ -328,9 +328,9 @@ func (c *Flag) Choices(elems ...string) *Flag {
 	)
 }
 
-// check verifies that the flag is configured correctly, independent of the
-// command it belongs to, reporting every rule it breaks.
-func (c *Flag) check() error {
+// validate verifies that the flag is configured correctly, independent of
+// the command it belongs to, reporting every rule it breaks.
+func (c *Flag) validate() error {
 	var errs []error
 	fail := func(format string, a ...any) {
 		errs = append(errs, newConfigErrorf(nil, nil, c, format, a...))

@@ -79,7 +79,7 @@ func (c *argParser) Parse() (*Invocation, error) {
 	if err := c.parseEnvVars(); err != nil {
 		return nil, err
 	}
-	if err := c.checkNArgs(); err != nil {
+	if err := c.validateNArgs(); err != nil {
 		return nil, err
 	}
 	return c.invocation(), nil
@@ -124,7 +124,7 @@ func (c *argParser) parseEnvVars() error {
 	return nil
 }
 
-// checkNArgs verifies each flag was given as many times as it requires.
+// validateNArgs verifies each flag was given as many times as it requires.
 // Every flag that became active along the descended path is checked, so
 // an ancestor's Required flag still binds when a subcommand is invoked.
 //
@@ -133,18 +133,18 @@ func (c *argParser) parseEnvVars() error {
 // it. A flag leads the message only when a wrapped error follows, as in
 // "--ip: invalid IP: 256.0.0.1", where it scopes what comes after the
 // colon; see docs/adr/human-readable-errors.md.
-func (c *argParser) checkNArgs() error {
+func (c *argParser) validateNArgs() error {
 	for _, cmd := range c.cmds {
-		if err := c.checkCommandNArgs(cmd); err != nil {
+		if err := c.validateCommandNArgs(cmd); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// checkCommandNArgs applies the count rules to cmd's effective flags -- its
-// own groups and every group it mounts via a GroupSet.
-func (c *argParser) checkCommandNArgs(cmd *Command) error {
+// validateCommandNArgs applies the count rules to cmd's effective flags --
+// its own groups and every group it mounts via a GroupSet.
+func (c *argParser) validateCommandNArgs(cmd *Command) error {
 	for _, group := range cmd.effectiveGroups() {
 		for _, flag := range group.flags {
 			n := c.flagsSeen[flag.keyName()]
