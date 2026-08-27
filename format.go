@@ -15,31 +15,34 @@ type FormatFunc func(w io.Writer, cmd *desc.Command) error
 
 // Format is the default FormatFunc to print help messages for a commands.
 func Format(w io.Writer, cmd *desc.Command) error {
-	aw := newAggregatedWriter(w)
-	if err := printUsage(aw, cmd); err != nil {
+	if err := printUsage(w, cmd); err != nil {
 		return err
 	}
 	if cmd.Summary != "" {
-		fmt.Fprintf(aw, "\n%s\n", cmd.Summary)
-	}
-	if err := detailPositionals(aw, cmd); err != nil {
-		return err
-	}
-	for _, group := range cmd.FlagGroups {
-		if err := detailFlagGroup(aw, group); err != nil {
+		if _, err := fmt.Fprintf(w, "\n%s\n", cmd.Summary); err != nil {
 			return err
 		}
 	}
-	if err := detailSubcommands(aw, cmd.Subcommands); err != nil {
+	if err := detailPositionals(w, cmd); err != nil {
 		return err
 	}
-	if err := detailEnvVars(aw, cmd); err != nil {
+	for _, group := range cmd.FlagGroups {
+		if err := detailFlagGroup(w, group); err != nil {
+			return err
+		}
+	}
+	if err := detailSubcommands(w, cmd.Subcommands); err != nil {
+		return err
+	}
+	if err := detailEnvVars(w, cmd); err != nil {
 		return err
 	}
 	if cmd.Description != "" {
-		fmt.Fprintf(aw, "\n%s\n", cmd.Description)
+		if _, err := fmt.Fprintf(w, "\n%s\n", cmd.Description); err != nil {
+			return err
+		}
 	}
-	return aw.Err()
+	return nil
 }
 
 func getPositionals(cmd *desc.Command) []*desc.Flag {
@@ -70,36 +73,40 @@ func hasOptions(cmd *desc.Command) bool {
 	return hasOptions(cmd.Parent)
 }
 
+// printUsage writes the usage line, which it assembles in full before
+// writing so the whole line is one write with one error to report.
 func printUsage(w io.Writer, cmd *desc.Command) error {
 	fullName := cmd.Name
 	for p := cmd.Parent; p != nil; p = p.Parent {
 		fullName = fmt.Sprintf("%s %s", p.Name, fullName)
 	}
-	fmt.Fprintf(w, "Usage: %s", fullName)
+	var b strings.Builder
+	fmt.Fprintf(&b, "Usage: %s", fullName)
 	if hasOptions(cmd) {
-		fmt.Fprintf(w, " [OPTIONS]")
+		b.WriteString(" [OPTIONS]")
 	}
 	if len(cmd.Subcommands) > 0 {
-		fmt.Fprintf(w, " COMMAND")
+		b.WriteString(" COMMAND")
 	}
 	for _, flag := range getPositionals(cmd) {
 		name := strings.ToUpper(flag.Name)
 		if flag.MinCount == 0 {
 			if flag.MaxCount == 1 {
-				fmt.Fprintf(w, " [%s]", name)
+				fmt.Fprintf(&b, " [%s]", name)
 			} else {
-				fmt.Fprintf(w, " [%s...]", name)
+				fmt.Fprintf(&b, " [%s...]", name)
 			}
 		} else {
 			if flag.MinCount == 1 && flag.MaxCount == 1 {
-				fmt.Fprintf(w, " %s", name)
+				fmt.Fprintf(&b, " %s", name)
 			} else {
-				fmt.Fprintf(w, " %s...", name)
+				fmt.Fprintf(&b, " %s...", name)
 			}
 		}
 	}
-	fmt.Fprintf(w, "\n")
-	return nil
+	b.WriteString("\n")
+	_, err := io.WriteString(w, b.String())
+	return err
 }
 
 func detailPositionals(w io.Writer, cmd *desc.Command) error {
