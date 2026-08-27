@@ -87,8 +87,10 @@ type Command struct {
 	stdout      io.Writer
 	stderr      io.Writer
 
-	// defaultGroup is the implicit "options" flag group appended to by
-	// Flags, created lazily on first use so an unused group never appears.
+	// defaultGroup is the implicit "options" flag group that Flags appends
+	// to. NewCommand creates it eagerly, so every command carries one from
+	// construction; it stays out of help output regardless, since Format
+	// skips a group with no flags in it.
 	defaultGroup *FlagGroup
 }
 
@@ -579,8 +581,8 @@ func (c *Command) Hidden() *Command {
 	return c
 }
 
-// Flags appends command line flags to the implicit "options" flag group for
-// this command, creating the group on its first use.
+// Flags appends command line flags to the implicit "options" flag group
+// every command carries from construction.
 func (c *Command) Flags(flags ...*Flag) *Command {
 	if c.defaultGroup == nil {
 		c.defaultGroup = &FlagGroup{name: "options", usage: "Options"}
