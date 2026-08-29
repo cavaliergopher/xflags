@@ -499,3 +499,27 @@ func TestTerminator(t *testing.T) {
 	assertBool(t, true, bar)
 	assertStrings(t, tailArgs, inv.Forwarded)
 }
+
+// TestUnrecognizedOptionNamesMountedFlags asserts that the hint reaches a
+// flag a subcommand takes from a mounted GroupSet, not just one it
+// declares itself. Compiling flattens a command's own groups and its
+// mounted ones into one list, so where the flag came from stops mattering
+// to the search -- and the hint is right either way, since a mounted flag
+// is just as unusable until its own command is named.
+func TestUnrecognizedOptionNamesMountedFlags(t *testing.T) {
+	set := new(GroupSet)
+	set.FlagGroup(NewFlagGroup("shared", "Shared options",
+		Bool(new(bool), "force", false, ""),
+	))
+	sub := NewCommand("delete", "").GroupSets(set)
+	app := NewCommand("app", "").Subcommands(sub)
+
+	_, err := app.Parse([]string{"--force"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got, want := humanMessage(err),
+		`unrecognized option: --force (defined by subcommand "delete")`; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
