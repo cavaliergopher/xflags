@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/cavaliergopher/xflags/ir"
 )
 
 // TestRegister asserts that Register returns its argument, so registration
@@ -58,8 +60,8 @@ func TestGroupSetsAreNotWrittenBack(t *testing.T) {
 		if _, err := cmd.Parse([]string{"--name=x"}); err != nil {
 			t.Fatalf("parse %d: %v", i, err)
 		}
-		if _, err := cmd.Describe(); err != nil {
-			t.Fatalf("describe %d: %v", i, err)
+		if _, err := cmd.Compile(); err != nil {
+			t.Fatalf("compile %d: %v", i, err)
 		}
 	}
 }
@@ -73,7 +75,7 @@ func assertConfigError(t *testing.T, cmd *Command, reason string) bool {
 		t.Errorf("expected error for %s, got nil", reason)
 		return false
 	}
-	var cfgErr *ConfigError
+	var cfgErr *ir.ConfigError
 	if !errors.As(err, &cfgErr) {
 		t.Errorf("expected ConfigError for %s, got %T: %v", reason, err, err)
 		return false
@@ -140,4 +142,24 @@ func TestWriteUsageGroupSets(t *testing.T) {
 	if got := buf.String(); got != want {
 		t.Errorf("WriteUsage = %q, want %q", got, want)
 	}
+}
+
+// TestGroupSetsMountedTwiceInOnePath asserts that a subcommand may mount
+// the same set as an ancestor. A command is often mounted somewhere its
+// author did not choose, so two teams both reaching CommandLine is
+// ordinary rather than a name conflict; only a command's own declarations
+// claim a name against its descendants.
+func TestGroupSetsMountedTwiceInOnePath(t *testing.T) {
+	var level string
+	set := new(GroupSet)
+	set.FlagGroup(NewFlagGroup("telemetry", "Telemetry options",
+		String(&level, "log-level", "info", ""),
+	))
+	sub := NewCommand("sub", "").GroupSets(set)
+	cmd := NewCommand("test", "").GroupSets(set).Subcommands(sub)
+
+	if _, err := cmd.Parse([]string{"sub", "--log-level=debug"}); err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "debug", level)
 }

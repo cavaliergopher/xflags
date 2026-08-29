@@ -109,12 +109,15 @@ Four departures from `getopt_long` are deliberate, and
 - **`-h` and `--help` are reserved** by the parser, which is GNU practice
   rather than POSIX.
 
-## Describing a command
+## Compiling a command
 
-`Command.Describe` compiles a command tree into the plain data types in the
-[desc](https://pkg.go.dev/github.com/cavaliergopher/xflags/desc) package: every
-command, flag group and flag, with behavior dropped and ancestry resolved. The
-default help formatter walks it, and so can your own tooling.
+`Command.Compile` lowers a command tree into the implementation types in the
+[ir](https://pkg.go.dev/github.com/cavaliergopher/xflags/ir) package: every
+command, flag group and flag, with ancestry resolved and exported fields
+holding everything that marshals. The default help formatter walks it, and
+so can your own tooling. Most programs never need to call Compile
+themselves, or import ir at all -- it is what Parse, Run and WriteUsage use
+internally.
 
 See [the docs](https://pkg.go.dev/github.com/cavaliergopher/xflags) for
 comprehensive examples.

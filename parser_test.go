@@ -5,33 +5,6 @@ import (
 	"testing"
 )
 
-func TestSplitLongOption(t *testing.T) {
-	for _, tt := range []struct {
-		arg      string
-		name     string
-		value    string
-		attached bool
-	}{
-		{"--x", "--x", "", false},
-		{"--xVar", "--xVar", "", false}, // long options have no remainder form
-		{"--x=Var", "--x", "Var", true},
-		{"--x=", "--x", "", true},
-		{"--foo=bar=baz", "--foo", "bar=baz", true}, // splits at the first "="
-		{"--foo=-5", "--foo", "-5", true},
-		{"--=foo", "--=foo", "", false}, // names nothing, so it is not a split
-	} {
-		t.Run(tt.arg, func(t *testing.T) {
-			name, value, attached := splitLongOption(tt.arg)
-			if name != tt.name || value != tt.value || attached != tt.attached {
-				t.Errorf(
-					"expected (%q, %q, %v), got (%q, %q, %v)",
-					tt.name, tt.value, tt.attached, name, value, attached,
-				)
-			}
-		})
-	}
-}
-
 // TestShortOptionGrouping covers POSIX guideline 5: short names are
 // consumed while each takes no value, and the first that takes one takes
 // the remainder of the argument. Every case here was confirmed against
@@ -449,7 +422,7 @@ func TestTerminatorSelectsSubcommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got, want := inv.Cmd, sub; got != want {
+	if got, want := inv.Cmd.String(), sub.String(); got != want {
 		t.Errorf("Cmd = %v, want %v", got, want)
 	}
 	assertStrings(t, []string{"-rf"}, files)

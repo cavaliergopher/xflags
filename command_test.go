@@ -2,6 +2,7 @@ package xflags
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/cavaliergopher/xflags/ir"
 )
 
 func TestSubcommands(t *testing.T) {
@@ -57,12 +60,7 @@ func TestSubcommands(t *testing.T) {
 		}
 
 		// invoke the subcommand handler
-		inv, err := cmd.Parse(args)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if err := inv.Cmd.handlerFunc(context.Background(), inv); err != nil {
+		if err := cmd.Dispatch(context.Background(), args); err != nil {
 			t.Error(err)
 			return
 		}
@@ -369,13 +367,13 @@ func ExampleCommand_ForwardArgs() {
 	// Hello, World!
 }
 
-func TestDescribeRoot(t *testing.T) {
+func TestCompileRoot(t *testing.T) {
 	sub := NewCommand("sub", "Sub command summary")
 	root := NewCommand("root", "Root command summary").
 		Description("Root description").
 		Subcommands(sub)
 
-	node, err := root.Describe()
+	node, err := root.Compile()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -402,12 +400,12 @@ func TestDescribeRoot(t *testing.T) {
 	}
 }
 
-func TestDescribeSubcommand(t *testing.T) {
+func TestCompileSubcommand(t *testing.T) {
 	foo := NewCommand("foo", "Foo summary")
 	bar := NewCommand("bar", "Bar summary")
 	NewCommand("root", "Root summary").Subcommands(foo, bar)
 
-	node, err := foo.Describe()
+	node, err := foo.Compile()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -430,33 +428,33 @@ func TestDescribeSubcommand(t *testing.T) {
 	assertStrings(t, []string{"foo", "bar"}, names)
 }
 
-// TestDescribeValidationError asserts that Describe returns the same
+// TestCompileValidationError asserts that Compile returns the same
 // configuration error that Parse would for a misconfigured tree.
-func TestDescribeValidationError(t *testing.T) {
+func TestCompileValidationError(t *testing.T) {
 	var a, b string
 	cmd := NewCommand("test", "").Flags(
 		String(&a, "foo", "", ""),
 		String(&b, "foo", "", ""), // duplicate name: invalid
 	)
 
-	_, describeErr := cmd.Describe()
-	if describeErr == nil {
-		t.Fatal("expected error from Describe for duplicate flag name, got nil")
+	_, compileErr := cmd.Compile()
+	if compileErr == nil {
+		t.Fatal("expected error from Compile for duplicate flag name, got nil")
 	}
 
 	_, parseErr := cmd.Parse(nil)
 	if parseErr == nil {
 		t.Fatal("expected error from Parse for duplicate flag name, got nil")
 	}
-	if got, want := describeErr.Error(), parseErr.Error(); got != want {
-		t.Errorf("Describe error %q, want the Parse error %q", got, want)
+	if got, want := compileErr.Error(), parseErr.Error(); got != want {
+		t.Errorf("Compile error %q, want the Parse error %q", got, want)
 	}
 }
 
-// TestDescribeIsPure asserts that Describe does not mutate the command tree
+// TestCompileIsPure asserts that Compile does not mutate the command tree
 // or the variables flags are bound to: it must reflect neither a Parse that
 // ran before it, nor any bookkeeping of its own.
-func TestDescribeIsPure(t *testing.T) {
+func TestCompileIsPure(t *testing.T) {
 	var s string
 	cmd := NewCommand("test", "").Flags(
 		String(&s, "name", "default-value", "").NArgs(0, 1),
@@ -469,15 +467,15 @@ func TestDescribeIsPure(t *testing.T) {
 		t.Fatalf("s = %q, want %q after Parse", got, want)
 	}
 
-	node, err := cmd.Describe()
+	node, err := cmd.Compile()
 	if err != nil {
-		t.Fatalf("unexpected error from Describe: %v", err)
+		t.Fatalf("unexpected error from Compile: %v", err)
 	}
 
-	// The bound variable must still hold the parsed value: Describe must
+	// The bound variable must still hold the parsed value: Compile must
 	// not have written back to it.
 	if got, want := s, "parsed-value"; got != want {
-		t.Errorf("s = %q, want %q after Describe", got, want)
+		t.Errorf("s = %q, want %q after Compile", got, want)
 	}
 	// The projected default must still show the value captured at
 	// construction, not the live/parsed value.
@@ -626,7 +624,7 @@ func TestSiblingFlagReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := inv.Cmd.name, "delete"; got != want {
+	if got, want := inv.Cmd.Name, "delete"; got != want {
 		t.Errorf("Cmd = %q, want %q", got, want)
 	}
 	assertBool(t, true, deleteForce)
@@ -636,7 +634,7 @@ func TestSiblingFlagReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := inv.Cmd.name, "push"; got != want {
+	if got, want := inv.Cmd.Name, "push"; got != want {
 		t.Errorf("Cmd = %q, want %q", got, want)
 	}
 	assertBool(t, true, pushForce)
@@ -820,7 +818,7 @@ func TestValidateCollectsAllErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	var cfgErr *ConfigError
+	var cfgErr *ir.ConfigError
 	if !errors.As(err, &cfgErr) {
 		t.Fatalf("expected a *ConfigError in %v", err)
 	}
@@ -1005,7 +1003,7 @@ func TestInvocationPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertStrings(t, []string{"root", "branch", "leaf"}, inv.Path)
-	if got, want := inv.Cmd, leaf; got != want {
+	if got, want := inv.Cmd.String(), leaf.String(); got != want {
 		t.Errorf("Cmd = %v, want %v", got, want)
 	}
 }
@@ -1297,7 +1295,7 @@ func TestDispatchReturnsRawError(t *testing.T) {
 	// command called wantCmd.
 	asArgumentError := func(t *testing.T, err error, wantCmd string) {
 		t.Helper()
-		var argErr *ArgumentError
+		var argErr *ir.ArgumentError
 		if !errors.As(err, &argErr) {
 			t.Fatalf("err = %v, want *ArgumentError", err)
 		}
@@ -1424,7 +1422,7 @@ func TestHandlerReceivesInvocation(t *testing.T) {
 	}
 	assertStrings(t, []string{"myapp", "remote", "add"}, got.Path)
 	assertStrings(t, []string{"origin"}, got.Forwarded)
-	if want := add; got.Cmd != want {
+	if want := add.String(); got.Cmd.String() != want {
 		t.Errorf("Cmd = %v, want %v", got.Cmd, want)
 	}
 }
@@ -1444,7 +1442,7 @@ func TestParseReportsHelpRequested(t *testing.T) {
 	if !inv.HelpRequested {
 		t.Error("HelpRequested = false, want true")
 	}
-	if want := add; inv.Cmd != want {
+	if want := add.String(); inv.Cmd.String() != want {
 		t.Errorf("Cmd = %v, want %v", inv.Cmd, want)
 	}
 }
@@ -1540,6 +1538,101 @@ func TestStreamsDefaultToProcess(t *testing.T) {
 	}
 	if got.Stderr != os.Stderr {
 		t.Errorf("Stderr = %v, want os.Stderr", got.Stderr)
+	}
+}
+
+// TestMarshalOmitsBehavior guards the json:"-" tags on ir.Command's and
+// ir.Flag's behavior fields. It compiles a tree exercising every one of
+// them -- a handler, a custom FormatFunc, all three stream overrides, a
+// bound Value, a ValidateFunc, a Choices list, a subcommand and a
+// positional -- and marshals it, so a behavior field added later without
+// its tag fails here, in a test, rather than leaking into a program's
+// machine-readable output.
+// TestParseFromSubcommandResetsTheTree asserts that Parse resets every
+// flag in the tree it is called on, not merely the subtree below the
+// command it was called on: a value an earlier parse left on an ancestor
+// would otherwise survive into the next one.
+func TestParseFromSubcommandResetsTheTree(t *testing.T) {
+	var level string
+	sub := NewCommand("sub", "")
+	root := NewCommand("app", "").
+		Flags(String(&level, "level", "info", "")).
+		Subcommands(sub)
+
+	if _, err := root.Parse([]string{"--level=debug", "sub"}); err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "debug", level)
+
+	if _, err := sub.Parse(nil); err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "info", level)
+}
+
+func TestMarshalOmitsBehavior(t *testing.T) {
+	var name, arg string
+	sub := NewCommand("sub", "Sub summary").
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+			return nil
+		}).
+		Flags(
+			String(&name, "name", "", "usage").
+				Validate(func(s string) error { return nil }).
+				Choices("a", "b"),
+			String(&arg, "ARG", "", "positional usage").Positional(),
+		)
+	root := NewCommand("root", "Root summary").
+		FormatFunc(func(w io.Writer, cmd *ir.Command) error { return nil }).
+		Stdin(strings.NewReader("")).
+		Stdout(&strings.Builder{}).
+		Stderr(&strings.Builder{}).
+		Subcommands(sub)
+
+	node, err := root.Compile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := json.Marshal(node)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	assertNoBehaviorKeys(t, m)
+}
+
+// behaviorKeys names every field ir.Command and ir.Flag tag json:"-".
+var behaviorKeys = []string{
+	"Handler", "FormatFunc", "Stdin", "Stdout", "Stderr",
+	"Value", "ValidateFunc",
+}
+
+// assertNoBehaviorKeys walks a value decoded from JSON -- maps and slices,
+// since a compiled tree nests flags inside groups and subcommands inside
+// subcommands -- and fails t if any behaviorKeys entry appears as a key
+// anywhere in it.
+func assertNoBehaviorKeys(t *testing.T, v any) {
+	t.Helper()
+	switch val := v.(type) {
+	case map[string]any:
+		for _, key := range behaviorKeys {
+			if _, ok := val[key]; ok {
+				t.Errorf("marshaled JSON contains behavior field %q", key)
+			}
+		}
+		for _, child := range val {
+			assertNoBehaviorKeys(t, child)
+		}
+	case []any:
+		for _, child := range val {
+			assertNoBehaviorKeys(t, child)
+		}
 	}
 }
 

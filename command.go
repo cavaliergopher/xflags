@@ -6,48 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
-	"strings"
 
-	"github.com/cavaliergopher/xflags/desc"
+	"github.com/cavaliergopher/xflags/ir"
 )
 
 // An Invocation is the result of parsing a command line. It records which
 // command the arguments named, what was left for its handler, and the
 // streams the handler should read and write.
-type Invocation struct {
-	// Cmd is the command the arguments named.
-	Cmd *Command
-
-	// Path names each command, starting from the one that was parsed --
-	// conventionally the program itself, named for os.Args[0] -- and ending
-	// with the command that was invoked.
-	Path []string
-
-	// Forwarded holds the arguments that followed a "--" terminator, which
-	// the parser did not interpret. It is empty unless the command opted in
-	// with Command.ForwardArgs.
-	//
-	// This is not the command's operands, which bind to positional flags as
-	// usual. These are the arguments the command means to hand on to
-	// something else.
-	Forwarded []string
-
-	// HelpRequested reports that -h or --help was given, in which case Cmd is
-	// the command whose usage was asked for and no handler should run. The
-	// rest of the command line is not parsed and the flag rules are not
-	// checked, so help works even on an otherwise incomplete command line.
-	HelpRequested bool
-
-	// Stdin, Stdout and Stderr are the streams the handler should use in
-	// place of the process streams, so that whoever composes the binary decides
-	// where its input and output go. Each is resolved independently from the
-	// invoked command and its ancestors, defaulting to the matching process
-	// stream; see Command.Stdin, Command.Stdout and Command.Stderr.
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-}
+type Invocation = ir.Invocation
 
 // A HandlerFunc handles the invocation of a command specified by command
 // line arguments.
@@ -67,7 +33,7 @@ type Invocation struct {
 // Returning nil exits with code 0 and returning an error exits with code 1,
 // unless the error implements ExitCoder, in which case it names its own
 // code. See Command.Run for the whole contract.
-type HandlerFunc func(ctx context.Context, inv *Invocation) error
+type HandlerFunc = ir.HandlerFunc
 
 // Command configures a command that users may invoke from the command line.
 //
@@ -83,7 +49,7 @@ type Command struct {
 	flagGroups  []*FlagGroup
 	groupSets   []*GroupSet
 	subcommands []*Command
-	formatFunc  FormatFunc
+	formatFunc  ir.FormatFunc
 	handlerFunc HandlerFunc
 	stdin       io.Reader
 	stdout      io.Writer
@@ -111,22 +77,20 @@ func NewCommand(name, summary string) *Command {
 
 func (c *Command) String() string { return c.name }
 
-// pathString joins c's name with each ancestor's, from the root down, so a
-// deep subcommand reads as "app remote add" rather than the bare "add" that
-// String returns. See ConfigError.String, which is the one place a bare
-// name would leave no way to tell which "add" is misconfigured.
-func (c *Command) pathString() string {
-	names := []string{c.name}
-	for p := c.parent; p != nil; p = p.parent {
-		names = append(names, p.name)
+// root returns the root of the command tree c belongs to, which is c itself
+// if it has no parent.
+func (c *Command) root() *Command {
+	root := c
+	for root.parent != nil {
+		root = root.parent
 	}
-	slices.Reverse(names)
-	return strings.Join(names, " ")
+	return root
 }
 
-// Parse parses the given set of command line arguments and stores the value of
-// each argument in each command flag's target. The rules for each flag are
-// checked and any errors are returned.
+// Parse compiles the whole command tree c belongs to (see Compile) and
+// parses the given set of command line arguments against it, storing the
+// value of each argument in each command flag's target. The rules for each
+// flag are checked and any errors are returned.
 //
 // Parse resets every flag to its default before reading any arguments, so
 // parsing the same tree twice yields the same result.
@@ -138,80 +102,26 @@ func (c *Command) pathString() string {
 // Invocation has HelpRequested set. That is not an error: it is for the
 // caller to report the command's usage. See Command.Run.
 func (c *Command) Parse(args []string) (*Invocation, error) {
-	if err := c.validate(); err != nil {
+	node, err := c.Compile()
+	if err != nil {
 		return nil, err
 	}
-	if err := c.root().applyDefaults(); err != nil {
-		return nil, err
-	}
-	return newArgParser(c, args).Parse()
+	return node.Parse(args)
 }
 
-// root returns the root of the command tree c belongs to, which is c itself
-// if it has no parent.
-func (c *Command) root() *Command {
-	root := c
-	for root.parent != nil {
-		root = root.parent
-	}
-	return root
-}
-
-// validate checks the whole command tree for configuration errors,
-// reporting every error found in one run -- a malformed tree surfaces its
-// errors in a batch at startup, not one per run.
-//
-// It always runs from the root, regardless of which command in the tree it
-// is called on, so that Parse on a subcommand still validates the whole
-// tree.
+// validate compiles the whole command tree c belongs to and reports only
+// whether it is valid, discarding the compiled tree. See Compile.
 func (c *Command) validate() error {
-	return c.root().validateTree(nil)
-}
-
-// validateTree checks c and, recursively, each of its subcommands, joining
-// every error found. claimed maps each option spelling declared by c's
-// ancestors to the command that declared it: a name may not repeat anywhere
-// along an ancestor-descendant chain, and the check runs here because a
-// command cannot know its ancestors until the whole tree is in view. See
-// docs/adr/path-scoped-flag-names.md.
-func (c *Command) validateTree(claimed map[string]*Command) error {
-	var errs []error
-	if err := c.validateSelf(claimed); err != nil {
-		errs = append(errs, err)
-	}
-	if len(c.subcommands) == 0 {
-		return joinErrors(errs)
-	}
-	// Descendants see c's names claimed in a copy, so sibling subtrees may
-	// still reuse names freely.
-	claims := make(map[string]*Command, len(claimed))
-	for key, cmd := range claimed {
-		claims[key] = cmd
-	}
-	for _, group := range c.flagGroups {
-		for _, flag := range group.flags {
-			if flag.name != "" {
-				claims["--"+flag.name] = c
-			}
-			if flag.shortName != "" {
-				claims["-"+flag.shortName] = c
-			}
-		}
-	}
-	for _, sub := range c.subcommands {
-		if err := sub.validateTree(claims); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return joinErrors(errs)
+	_, err := c.Compile()
+	return err
 }
 
 // effectiveGroups returns the flag groups the command presents: its own,
 // followed by every group of every mounted GroupSet, in registration
-// order. Validation, parsing and Describe all read flags through this
+// order. Validation, parsing and Compile all read flags through this
 // helper, so a mounted flag behaves exactly like a declared one. The
 // result is assembled afresh on each call, never written back into
-// flagGroups: that is what keeps Describe pure and a repeated Parse from
+// flagGroups: that is what keeps Compile pure and a repeated Parse from
 // mounting the same groups twice.
 func (c *Command) effectiveGroups() []*FlagGroup {
 	if len(c.groupSets) == 0 {
@@ -225,199 +135,98 @@ func (c *Command) effectiveGroups() []*FlagGroup {
 	return groups
 }
 
-// validateSelf checks c's own flags for configuration errors: flag syntax,
-// names already declared -- within c, or by the ancestors whose claims are
-// passed in -- positional/subcommand conflicts, and a subcommand that
-// belongs to some other command. It does not descend into subcommands.
-func (c *Command) validateSelf(claimed map[string]*Command) error {
-	var errs []error
-
-	// Subcommands leaves an already-parented command's parent alone rather
-	// than stealing it, so the mismatch is still visible here to report.
-	for _, sub := range c.subcommands {
-		if sub.parent != c {
-			errs = append(errs, newConfigErrorf(nil, c, nil,
-				"%q is already a subcommand of %q", sub.name, sub.parent.name))
-		}
-	}
-
-	flagsByName := make(map[string]*Flag)
-	hasUnboundedPositional := false
-	for _, group := range c.effectiveGroups() {
-		for _, flag := range group.flags {
-			if err := flag.validate(); err != nil {
-				errs = append(errs, err)
-			}
-			if flag.positional {
-				if len(c.subcommands) > 0 {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "cannot specify both subcommands and positional arguments"))
-				}
-				if hasUnboundedPositional {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "positional arguments cannot follow unbounded positional arguments"))
-				}
-				if flag.maxCount == 0 {
-					hasUnboundedPositional = true
-				}
-			}
-			if flag.name != "" {
-				key := "--" + flag.name
-				if _, ok := flagsByName[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
-						alreadyDeclaredMessage(flag, key)))
-				}
-				if ancestor, ok := claimed[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
-						alreadyDeclaredByAncestorMessage(flag, key, ancestor.name)))
-				}
-				flagsByName[key] = flag
-			}
-			if flag.shortName != "" {
-				key := "-" + flag.shortName
-				if _, ok := flagsByName[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
-						alreadyDeclaredMessage(flag, key)))
-				}
-				if ancestor, ok := claimed[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
-						alreadyDeclaredByAncestorMessage(flag, key, ancestor.name)))
-				}
-				flagsByName[key] = flag
-			}
-		}
-	}
-	return joinErrors(errs)
-}
-
-// alreadyDeclaredMessage reports a name key colliding with one already
-// declared on the same command. A positional flag names itself, since key
-// is a synthetic "--"/"-" spelling it never appears with on the command
-// line; an option is named by that spelling.
-func alreadyDeclaredMessage(flag *Flag, key string) string {
-	if flag.positional {
-		return fmt.Sprintf("operand already declared: %s", flag)
-	}
-	return fmt.Sprintf("flag already declared: %s", key)
-}
-
-// alreadyDeclaredByAncestorMessage is alreadyDeclaredMessage's counterpart
-// for a name an ancestor, named by ancestor, already claimed.
-func alreadyDeclaredByAncestorMessage(flag *Flag, key, ancestor string) string {
-	if flag.positional {
-		return fmt.Sprintf("operand already declared by ancestor %q: %s", ancestor, flag)
-	}
-	return fmt.Sprintf("flag already declared by ancestor %q: %s", ancestor, key)
-}
-
-// findDescendantWithFlag returns the first descendant of c to declare the
-// option spelled key -- a "--name" or "-s" -- searching depth first in
-// declaration order, or nil when none does. A name declared below the
-// current command is legal only once its own command is named, so
-// unrecognized-option errors use this to say where the name would work;
-// see docs/adr/path-scoped-flag-names.md.
-//
-// A hidden command, and its whole subtree, is skipped: it is deliberately
-// unadvertised, so the hint must not name it either. The flag stays
-// usable; the error just falls back to the plain "unrecognized option"
-// message.
-func (c *Command) findDescendantWithFlag(key string) *Command {
-	for _, sub := range c.subcommands {
-		if sub.hidden {
-			continue
-		}
-		for _, group := range sub.flagGroups {
-			for _, flag := range group.flags {
-				if flag.positional {
-					continue
-				}
-				if (flag.name != "" && key == "--"+flag.name) ||
-					(flag.shortName != "" && key == "-"+flag.shortName) {
-					return sub
-				}
-			}
-		}
-		if found := sub.findDescendantWithFlag(key); found != nil {
-			return found
-		}
-	}
-	return nil
-}
-
-// applyDefaults restores every flag in the tree to its default value; see
-// Parse, which runs it after validation. Values are set directly, bypassing
-// Flag.Set, so ValidateFuncs never run against defaults. Describe never
-// calls this: it is documented pure.
-func (c *Command) applyDefaults() error {
-	for _, group := range c.flagGroups {
-		for _, flag := range group.flags {
-			if r, ok := flag.value.(Resetter); ok {
-				r.Reset()
-				continue
-			}
-			if !flag.hasDefault {
-				continue
-			}
-			if err := flag.value.Set(flag.defValue); err != nil {
-				return newConfigErrorf(err, nil, flag,
-					"cannot restore default value: %v", err)
-			}
-		}
-	}
-	for _, sub := range c.subcommands {
-		if err := sub.applyDefaults(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Describe describes the whole command tree that c belongs to and returns
-// the description of c's position within it. It is not limited to c: the
-// tree is found by walking to its root, so the returned node carries
-// complete ancestry via desc.Command.Parent as well as its own subcommands,
-// and configuration errors anywhere in the tree are reported -- including
-// in commands unrelated to c. This is what makes a description correct: a
+// Compile lowers the whole command tree that c belongs to into its
+// compiled ir.Command form and returns the node corresponding to c's
+// position within it. It is not limited to c: the tree is found by walking
+// to its root, so the returned node carries complete ancestry via
+// ir.Command.Parent as well as its own subcommands, and configuration
+// errors anywhere in the tree are reported -- including in commands
+// unrelated to c. This is what makes a compiled command correct: a
 // subcommand's usage line, inherited flags and environment variables are
 // all meaningless without its ancestors.
 //
 // The errors returned are the same configuration errors Parse returns,
-// which likewise validates from the root wherever it is called.
+// which likewise compiles from the root wherever it is called.
 //
-// Describe is pure: it does not mutate the command tree or the variables
+// Compile is pure: it does not mutate the command tree or the variables
 // flags are bound to, so it is safe to call at any time, including while
-// parsed values are live. There is no caching, so every call revalidates
-// and describes the tree afresh.
-func (c *Command) Describe() (*desc.Command, error) {
+// parsed values are live. There is no caching, so every call lowers,
+// validates and returns the tree afresh.
+func (c *Command) Compile() (*ir.Command, error) {
 	root := c.root()
-	if err := root.validateTree(nil); err != nil {
+	nodeMap := make(map[*Command]*ir.Command)
+	var errs []error
+	rootNode := root.lower(nil, nodeMap, &errs)
+	if err := rootNode.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := ir.JoinErrors(errs); err != nil {
 		return nil, err
 	}
-	nodeMap := make(map[*Command]*desc.Command)
-	root.describe(nil, nodeMap)
 	return nodeMap[c], nil
 }
 
-// describe recursively describes the command tree rooted at c, setting
-// parent as the Parent of the resulting node, and recording every node in
-// nodeMap so callers can look up the node for any source *Command after
-// describing from the root.
-func (c *Command) describe(
-	parent *desc.Command,
-	nodeMap map[*Command]*desc.Command,
-) *desc.Command {
-	node := &desc.Command{
-		Parent:      parent,
+// lower builds the compiled ir.Command for c and, recursively, each of its
+// subcommands, setting parent as its Parent and copying across every
+// field the ir type keeps, including the three resolved here so nothing
+// about the compiled tree has to walk itself again: FullName, computed
+// from parent's own FullName plus c's name, and the three streams, read
+// once through getStdin/getStdout/getStderr. It records the node for c in
+// nodeMap so Compile can look up the node for any source *Command after
+// lowering from the root.
+//
+// It also collects into errs the one configuration check that cannot move
+// onto the compiled tree, because it depends on the source tree's own
+// bookkeeping rather than anything a lowered node carries: whether a
+// subcommand's parent actually names the command about to claim it as a
+// child. See Subcommands for why -- a shared command such as
+// xflags.CommandLine may be mounted under more than one parent, and only
+// the source *Command remembers which one Subcommands actually accepted.
+func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, errs *[]error) *ir.Command {
+	fullName := c.name
+	if parent != nil {
+		fullName = parent.FullName + " " + c.name
+	}
+	node := &ir.Command{
 		Name:        c.name,
 		Summary:     c.summary,
 		Description: c.description,
 		Hidden:      c.hidden,
 		ForwardArgs: c.forwardArgs,
+		FullName:    fullName,
+		Parent:      parent,
+		Handler:     c.handlerFunc,
+		FormatFunc:  c.formatFunc,
+		Stdin:       c.getStdin(),
+		Stdout:      c.getStdout(),
+		Stderr:      c.getStderr(),
+	}
+	node.Root = node
+	if parent != nil {
+		node.Root = parent.Root
 	}
 	nodeMap[c] = node
-	for _, group := range c.effectiveGroups() {
-		node.FlagGroups = append(node.FlagGroups, group.describe())
+
+	// Own groups first, then every mounted set, matching the order
+	// effectiveGroups reports and marking which is which -- validation
+	// needs to tell a declared flag from a mounted one.
+	for _, group := range c.flagGroups {
+		node.FlagGroups = append(node.FlagGroups, group.lower(false))
+	}
+	for _, set := range c.groupSets {
+		for _, group := range set.groups {
+			node.FlagGroups = append(node.FlagGroups, group.lower(true))
+		}
 	}
 	for _, sub := range c.subcommands {
-		node.Subcommands = append(node.Subcommands, sub.describe(node, nodeMap))
+		// Subcommands leaves an already-parented command's parent alone
+		// rather than stealing it, so the mismatch is still visible here
+		// to report.
+		if sub.parent != c {
+			*errs = append(*errs, ir.NewConfigErrorf(nil, node, nil,
+				"%q is already a subcommand of %q", sub.name, sub.parent.name))
+		}
+		node.Subcommands = append(node.Subcommands, sub.lower(node, nodeMap, errs))
 	}
 	return node
 }
@@ -486,7 +295,8 @@ func (c *Command) Run(ctx context.Context, args []string) int {
 	return c.handleErr(c.Dispatch(ctx, args))
 }
 
-// Dispatch parses the given set of command line arguments and calls the
+// Dispatch compiles the whole command tree c belongs to (see Compile),
+// parses the given set of command line arguments against it, and calls the
 // handler for the command or subcommand specified by the arguments. The
 // handler's error, or the error that stopped the command line from being
 // parsed, is returned raw: Dispatch prints no error text, so a program
@@ -499,22 +309,28 @@ func (c *Command) Run(ctx context.Context, args []string) int {
 // reporting, and a caller who wants it formatted differently has
 // FormatFunc.
 //
-// A command invoked with no handler returns an *ArgumentError, as for any
-// other wrong command line.
+// A command invoked with no handler returns an *ir.ArgumentError, as for
+// any other wrong command line.
 func (c *Command) Dispatch(ctx context.Context, args []string) error {
-	inv, err := c.Parse(args)
+	node, err := c.Compile()
 	if err != nil {
 		return err
 	}
-	if inv.HelpRequested {
-		return inv.Cmd.WriteUsage(inv.Stdout)
+	return node.Dispatch(ctx, args)
+}
+
+// WriteUsage prints a help message to the given Writer using the configured
+// Formatter.
+//
+// WriteUsage compiles the command (see Compile) and hands the result to
+// the resolved FormatFunc, so it returns the same configuration errors
+// Parse would if the tree is misconfigured.
+func (c *Command) WriteUsage(w io.Writer) error {
+	node, err := c.Compile()
+	if err != nil {
+		return err
 	}
-	if inv.Cmd.handlerFunc == nil {
-		// The command exists only to group its subcommands, so naming it
-		// alone is a usage error rather than a request for help.
-		return newArgumentErrorf(nil, inv.Cmd, nil, "", "missing subcommand")
-	}
-	return inv.Cmd.handlerFunc(ctx, inv)
+	return node.WriteUsage(w)
 }
 
 // handleErr reports err on the stderr of the command that produced it --
@@ -531,17 +347,19 @@ func (c *Command) handleErr(err error) int {
 		return ExitCodeSuccess
 	}
 
-	for _, e := range flattenErrors(err) {
+	for _, e := range ir.FlattenErrors(err) {
 		errTypeName := "Error"
-		cmd := c
+		stderr := c.getStderr()
+		writeUsage := c.WriteUsage
 
-		var argErr *ArgumentError
-		var cfgErr *ConfigError
+		var argErr *ir.ArgumentError
+		var cfgErr *ir.ConfigError
 		switch {
 		case errors.As(e, &argErr):
 			errTypeName = "Argument error"
 			if argErr.Cmd != nil {
-				cmd = argErr.Cmd
+				stderr = argErr.Cmd.Stderr
+				writeUsage = argErr.Cmd.WriteUsage
 			}
 
 		case errors.As(e, &cfgErr):
@@ -549,16 +367,15 @@ func (c *Command) handleErr(err error) int {
 			// the user's. Both exit 2, so the prefix is all that says which.
 			errTypeName = "Program error"
 			if cfgErr.Cmd != nil {
-				cmd = cfgErr.Cmd
+				stderr = cfgErr.Cmd.Stderr
 			}
 		}
 
-		stderr := cmd.getStderr()
 		if _, werr := fmt.Fprintf(stderr, "%s: %s\n", errTypeName, humanMessage(e)); werr != nil {
 			return fallbackToStderr(werr)
 		}
 		if argErr != nil {
-			if werr := cmd.WriteUsage(stderr); werr != nil {
+			if werr := writeUsage(stderr); werr != nil {
 				return fallbackToStderr(werr)
 			}
 		}
@@ -576,29 +393,6 @@ func (c *Command) handleErr(err error) int {
 func fallbackToStderr(err error) int {
 	fmt.Fprintf(os.Stderr, "xflags: %s\n", err)
 	return ExitCodeFailure
-}
-
-// WriteUsage prints a help message to the given Writer using the configured
-// Formatter.
-//
-// WriteUsage describes the command (see Describe) and hands the result to
-// the resolved FormatFunc, so it returns the same configuration errors
-// Parse would if the tree is misconfigured.
-func (c *Command) WriteUsage(w io.Writer) error {
-	// TODO: Usage formatting is a function of the chosen argv vocabulary
-	// (POSIX/GNU, Go, Windows, etc.) so we'll need to break this API.
-	node, err := c.Describe()
-	if err != nil {
-		return err
-	}
-	f := c.formatFunc
-	for p := c; f == nil && p != nil; p = p.parent {
-		f = p.formatFunc
-	}
-	if f == nil {
-		f = Format
-	}
-	return f(w, node)
 }
 
 // Description specifies the prose printed at the end of this command's help
@@ -650,7 +444,7 @@ func (c *Command) FlagGroups(groups ...*FlagGroup) *Command {
 //
 //	var App = xflags.NewCommand("myapp", "").GroupSets(xflags.CommandLine)
 //
-// A set is read when the tree is parsed or described, not when GroupSets
+// A set is read when the tree is parsed or compiled, not when GroupSets
 // is called, so a group registered afterwards is still seen. Mounted
 // flags validate, parse and print exactly like the command's own, each
 // group under its own heading in help messages.
@@ -663,7 +457,7 @@ func (c *Command) GroupSets(sets ...*GroupSet) *Command {
 // this command, unless a command given here already has one -- typically a
 // command already mounted elsewhere, such as xflags.CommandLine -- in
 // which case its existing parent is left alone and validation reports the
-// mismatch; see validateSelf.
+// mismatch; see lower.
 func (c *Command) Subcommands(cmds ...*Command) *Command {
 	c.subcommands = append(c.subcommands, cmds...)
 	for _, cmd := range cmds {
@@ -676,7 +470,7 @@ func (c *Command) Subcommands(cmds ...*Command) *Command {
 
 // FormatFunc specifies a custom FormatFunc for formatting help messages for
 // this command.
-func (c *Command) FormatFunc(fn FormatFunc) *Command {
+func (c *Command) FormatFunc(fn ir.FormatFunc) *Command {
 	c.formatFunc = fn
 	return c
 }

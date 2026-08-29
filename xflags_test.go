@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cavaliergopher/xflags/ir"
 )
 
 func assertBool(t *testing.T, expect, actual bool) bool {
@@ -89,7 +91,7 @@ func assertFlagParses(t *testing.T, flag *Flag, args ...string) bool {
 
 func assertArgumentError(t *testing.T, err error) bool {
 	t.Helper()
-	var argErr *ArgumentError
+	var argErr *ir.ArgumentError
 	if errors.As(err, &argErr) {
 		return true
 	}

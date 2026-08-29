@@ -43,8 +43,8 @@ You can bind a flag to a variable using the Var functions.
 			),
 		)
 
-Or you can create custom flags that satisfy the Value interface (with pointer receivers) and couple
-them to a flag parsing by
+Or you can create custom flags that satisfy the ir.Value interface (with pointer receivers) and
+couple them to a flag parsing by
 
 	xflags.Var(&flagVal, "name", "help message for flagname")
 

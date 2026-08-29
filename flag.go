@@ -6,10 +6,8 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
-	"github.com/cavaliergopher/xflags/desc"
+	"github.com/cavaliergopher/xflags/ir"
 )
 
 const (
@@ -49,8 +47,8 @@ type Flag struct {
 	hidden       bool
 	envVar       string
 	choices      []string
-	validateFunc ValidateFunc
-	value        Value
+	validateFunc ir.ValidateFunc
+	value        ir.Value
 }
 
 // Var returns a Flag that can be used to define a command line flag with
@@ -60,7 +58,7 @@ type Flag struct {
 // Var(v, "n", usage) declares "-n" and not "--n". Every constructor in this
 // package is built on Var and shares the rule. Declare both spellings by
 // giving the long one here and the short one to Flag.ShortName.
-func Var(value Value, name, usage string) *Flag {
+func Var(value ir.Value, name, usage string) *Flag {
 	c := &Flag{
 		name:     name,
 		usage:    usage,
@@ -78,7 +76,7 @@ func Var(value Value, name, usage string) *Flag {
 
 // stringifyDefault returns the string form of a flag's default value, using
 // its Value's String method if it implements fmt.Stringer.
-func stringifyDefault(v Value) string {
+func stringifyDefault(v ir.Value) string {
 	if s, ok := v.(fmt.Stringer); ok {
 		return s.String()
 	}
@@ -231,16 +229,6 @@ func (c *Flag) keyName() string {
 	return c.shortName
 }
 
-// Set sets the value of the command-line flag.
-func (c *Flag) Set(s string) error {
-	if c.validateFunc != nil {
-		if err := c.validateFunc(s); err != nil {
-			return err
-		}
-	}
-	return c.value.Set(s)
-}
-
 // ShowDefault specifies that the default value of this flag should be shown
 // in the help message.
 func (c *Flag) ShowDefault() *Flag {
@@ -308,7 +296,7 @@ func (c *Flag) Env(name string) *Flag {
 // Validate specifies a function to validate an argument for this flag before
 // it is parsed. If the function returns an error, parsing will fail with the
 // same error.
-func (c *Flag) Validate(f ValidateFunc) *Flag {
+func (c *Flag) Validate(f ir.ValidateFunc) *Flag {
 	c.validateFunc = f
 	return c
 }
@@ -324,89 +312,34 @@ func (c *Flag) Choices(elems ...string) *Flag {
 					return nil
 				}
 			}
-			return newArgumentErrorf(nil, nil, c, arg,
-				"expected one of: %s",
-				strings.Join(c.choices, ", "),
-			)
+			return fmt.Errorf("expected one of: %s", strings.Join(c.choices, ", "))
 		},
 	)
 }
 
-// validate verifies that the flag is configured correctly, independent of
-// the command it belongs to, reporting every rule it breaks.
-func (c *Flag) validate() error {
-	var errs []error
-	fail := func(format string, a ...any) {
-		errs = append(errs, newConfigErrorf(nil, nil, c, format, a...))
-	}
-	if strings.HasPrefix(c.name, "-") {
-		fail("flag name must not start with '-'")
-	}
-	// "=" reads as the delimiter of an attached value and whitespace as an
-	// argument break, so a name containing either can never be matched.
-	if strings.ContainsRune(c.name, '=') {
-		fail("flag name must not contain '='")
-	}
-	if strings.ContainsFunc(c.name, unicode.IsSpace) {
-		fail("flag name must not contain whitespace")
-	}
-	// The parser matches -h and --help before the flag table, so a flag
-	// claiming either spelling would silently never fire.
-	if c.name == "help" {
-		fail("flag name is reserved for help: --help")
-	}
-	if c.value == nil {
-		fail("flag must be bound to a value")
-	}
-	if c.shortName != "" && !isShortName(c.shortName) {
-		fail("short name must be one character from [A-Za-z0-9]: %q", c.shortName)
-	}
-	if c.shortName == "h" {
-		fail("short name is reserved for help: -h")
-	}
-	if c.minCount < 0 {
-		fail("minimum count must not be negative: %d", c.minCount)
-	}
-	if c.maxCount < 0 {
-		fail("maximum count must not be negative: %d", c.maxCount)
-	}
-	// A max of 0 is unbounded, so it is never exceeded by the min.
-	if c.maxCount > 0 && c.minCount > c.maxCount {
-		fail("minimum count %d exceeds maximum count %d", c.minCount, c.maxCount)
-	}
-	return joinErrors(errs)
-}
-
-// isShortName reports whether s is a legal short name. POSIX guideline 3
-// confines one to a single character from the portable character set, and
-// the parser leans on that: reading "=" as a delimiter after a boolean
-// short flag costs no ambiguity only because "=" can never be a name.
-//
-// Measured in characters rather than bytes, so a multi-byte rune is
-// rejected for falling outside the set rather than for its length.
-func isShortName(s string) bool {
-	r, size := utf8.DecodeRuneInString(s)
-	if size != len(s) {
-		return false
-	}
-	return ('a' <= r && r <= 'z') ||
-		('A' <= r && r <= 'Z') ||
-		('0' <= r && r <= '9')
-}
-
-func (c *Flag) describe() *desc.Flag {
-	return &desc.Flag{
-		Name:        c.name,
-		ShortName:   c.shortName,
-		Usage:       c.usage,
-		Default:     c.defValue,
-		ShowDefault: c.showDefault,
-		Positional:  c.positional,
-		Hidden:      c.hidden,
-		MinCount:    c.minCount,
-		MaxCount:    c.maxCount,
-		EnvVar:      c.envVar,
-		Choices:     slices.Clone(c.choices),
+// lower returns the compiled ir.Flag for c: its data fields copied across,
+// with TakesValue derived from whether its Value is a BoolValue, and its
+// behavior -- the Value and the ValidateFunc -- copied into the fields
+// only Compile has any business setting. Flag configuration is not
+// checked here; see ir.Flag's own validation, which Compile runs over the
+// whole lowered tree.
+func (c *Flag) lower() *ir.Flag {
+	return &ir.Flag{
+		Name:         c.name,
+		ShortName:    c.shortName,
+		Usage:        c.usage,
+		Default:      c.defValue,
+		ShowDefault:  c.showDefault,
+		Positional:   c.positional,
+		Hidden:       c.hidden,
+		MinCount:     c.minCount,
+		MaxCount:     c.maxCount,
+		EnvVar:       c.envVar,
+		Choices:      slices.Clone(c.choices),
+		TakesValue:   c.positional || !isBoolValue(c.value),
+		HasDefault:   c.hasDefault,
+		Value:        c.value,
+		ValidateFunc: c.validateFunc,
 	}
 }
 
@@ -461,13 +394,15 @@ func FromFlagSet(name, title string, fs *flag.FlagSet) *FlagGroup {
 	return group
 }
 
-func (c *FlagGroup) describe() *desc.FlagGroup {
-	group := &desc.FlagGroup{
-		Name:  c.name,
-		Title: c.title,
+// lower returns the compiled ir.FlagGroup for c.
+func (c *FlagGroup) lower(mounted bool) *ir.FlagGroup {
+	group := &ir.FlagGroup{
+		Name:    c.name,
+		Title:   c.title,
+		Mounted: mounted,
 	}
 	for _, flag := range c.flags {
-		group.Flags = append(group.Flags, flag.describe())
+		group.Flags = append(group.Flags, flag.lower())
 	}
 	return group
 }

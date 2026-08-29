@@ -238,7 +238,7 @@ func TestFlagGroupStandalone(t *testing.T) {
 	assertString(t, "debug", level)
 	assertString(t, "json", format)
 
-	node, err := cmd.Describe()
+	node, err := cmd.Compile()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,10 +254,10 @@ func TestFlagGroupStandalone(t *testing.T) {
 	}
 }
 
-// TestDescribeFlag asserts that every field of a flag configured with the
-// chained setters is described on its desc.Flag counterpart, and that
+// TestCompileFlag asserts that every field of a flag configured with the
+// chained setters is described on its ir.Flag counterpart, and that
 // behavior (the Value, the ValidateFunc) is dropped.
-func TestDescribeFlag(t *testing.T) {
+func TestCompileFlag(t *testing.T) {
 	var s string
 	flg := String(&s, "name", "default-value", "flag usage").
 		ShortName("n").
@@ -268,7 +268,7 @@ func TestDescribeFlag(t *testing.T) {
 		Choices("red", "blue")
 	cmd := NewCommand("test", "").Flags(flg)
 
-	node, err := cmd.Describe()
+	node, err := cmd.Compile()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -312,16 +312,39 @@ func TestDescribeFlag(t *testing.T) {
 	assertStrings(t, []string{"red", "blue"}, df.Choices)
 }
 
-// TestDescribePositional asserts that Positional is described too, using a
+// TestCompileTakesValue asserts that a flag's TakesValue is derived from
+// whether its Value is a BoolValue: a bool flag stands alone on the command
+// line, everything else needs an argument.
+func TestCompileTakesValue(t *testing.T) {
+	var s string
+	var b bool
+	cmd := NewCommand("test", "").Flags(
+		String(&s, "name", "", ""),
+		Bool(&b, "verbose", false, ""),
+	)
+	node, err := cmd.Compile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	flags := node.FlagGroups[0].Flags
+	if got, want := flags[0].TakesValue, true; got != want {
+		t.Errorf("String: TakesValue = %v, want %v", got, want)
+	}
+	if got, want := flags[1].TakesValue, false; got != want {
+		t.Errorf("Bool: TakesValue = %v, want %v", got, want)
+	}
+}
+
+// TestCompilePositional asserts that Positional is described too, using a
 // separate command since a single command cannot mix positional flags with
 // the option above without also adding subcommands (which is itself
 // disallowed alongside positionals).
-func TestDescribePositional(t *testing.T) {
+func TestCompilePositional(t *testing.T) {
 	var s string
 	flg := String(&s, "ARG", "", "positional usage").Positional()
 	cmd := NewCommand("test", "").Flags(flg)
 
-	node, err := cmd.Describe()
+	node, err := cmd.Compile()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

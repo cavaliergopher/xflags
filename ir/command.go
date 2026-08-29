@@ -153,3 +153,38 @@ func (c *Command) Validate() error {
 func (c *Command) WriteUsage(w io.Writer) error {
 	return writeUsage(c, w)
 }
+
+// Parse parses the given set of command line arguments and stores the
+// value of each argument in each flag's target. The rules for each flag
+// are checked and any errors are returned.
+//
+// Parse resets every flag reachable from c to its default before reading
+// any arguments, so parsing the same tree twice yields the same result.
+// It does not validate the tree; a Command produced by
+// (*xflags.Command).Compile is already validated, and one built by hand
+// should be validated with Validate first.
+//
+// The returned Invocation names this command, or one of its subcommands if
+// the arguments specified one.
+//
+// If -h or --help are specified, parsing stops there and the returned
+// Invocation has HelpRequested set. That is not an error: it is for the
+// caller to report the command's usage.
+func (c *Command) Parse(args []string) (*Invocation, error) {
+	return parse(c, args)
+}
+
+// Dispatch parses the given set of command line arguments and calls the
+// handler for the command or subcommand specified by the arguments. The
+// handler's error, or the error that stopped the command line from being
+// parsed, is returned raw: Dispatch prints no error text.
+//
+// If -h or --help are specified, no handler runs: usage information is
+// printed to the command's stdout and Dispatch returns nil, or the error
+// that kept the usage message from being written.
+//
+// A command invoked with no handler returns an *ArgumentError, as for any
+// other wrong command line.
+func (c *Command) Dispatch(ctx context.Context, args []string) error {
+	return dispatch(ctx, c, args)
+}

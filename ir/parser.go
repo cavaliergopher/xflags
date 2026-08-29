@@ -1,13 +1,50 @@
-package xflags
+package ir
 
 import (
+	"context"
 	"os"
 	"unicode/utf8"
 )
 
-// argument to terminate parsing of all remaining arguments
+// terminator ends option processing by default, or, on a command that opted
+// in with ForwardArgs, marks where forwarding begins.
 const terminator = "--"
 
+// applyDefaults restores every flag reachable from c, and from every
+// descendant of c, to its default value. parse calls it on Root, so a
+// parse governs the whole tree however deep it was called. parse calls
+// this before parsing, which is what keeps repeat parses idempotent:
+// Compile lowers a tree fresh on every call but never mutates it, so
+// restoring defaults is the only step that does, and it runs anew each
+// time parse does.
+//
+// Values are set directly, bypassing Flag.Set, so a ValidateFunc never
+// runs against a default.
+func applyDefaults(c *Command) error {
+	for _, group := range c.FlagGroups {
+		for _, f := range group.Flags {
+			if r, ok := f.Value.(Resetter); ok {
+				r.Reset()
+				continue
+			}
+			if !f.HasDefault {
+				continue
+			}
+			if err := f.Value.Set(f.Default); err != nil {
+				return newConfigErrorf(err, nil, f, "cannot restore default value: %v", err)
+			}
+		}
+	}
+	for _, sub := range c.Subcommands {
+		if err := applyDefaults(sub); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// argParser is the single-pass parser: it walks argv once, resolving each
+// token against the compiled tree and applying it as it goes.
 type argParser struct {
 	tokens            []string
 	args              []string
@@ -16,17 +53,17 @@ type argParser struct {
 	forwarding        bool
 	optionsEnded      bool
 	helpRequested     bool
-	flagsByName       map[string]*Flag
+	optionsByKey      map[string]*Flag
 	subcommandsByName map[string]*Command
-	flagsSeen         map[string]int
+	flagsSeen         map[*Flag]int
 	positionals       []*Flag
 }
 
 func newArgParser(cmd *Command, tokens []string) *argParser {
 	c := &argParser{
 		tokens:            tokens,
-		flagsByName:       make(map[string]*Flag),
-		flagsSeen:         make(map[string]int),
+		optionsByKey:      make(map[string]*Flag),
+		flagsSeen:         make(map[*Flag]int),
 		subcommandsByName: make(map[string]*Command),
 	}
 	c.setCommand(cmd)
@@ -39,15 +76,15 @@ func (c *argParser) setCommand(cmd *Command) {
 	c.cmd = cmd
 	c.cmds = append(c.cmds, cmd)
 	c.positionals = make([]*Flag, 0)
-	for _, group := range cmd.effectiveGroups() {
-		for _, flag := range group.flags {
-			if flag.name != "" {
-				c.flagsByName["--"+flag.name] = flag
+	for _, group := range cmd.FlagGroups {
+		for _, flag := range group.Flags {
+			if flag.Name != "" {
+				c.optionsByKey["--"+flag.Name] = flag
 			}
-			if flag.shortName != "" {
-				c.flagsByName["-"+flag.shortName] = flag
+			if flag.ShortName != "" {
+				c.optionsByKey["-"+flag.ShortName] = flag
 			}
-			if flag.positional {
+			if flag.Positional {
 				c.positionals = append(c.positionals, flag)
 			}
 		}
@@ -55,8 +92,8 @@ func (c *argParser) setCommand(cmd *Command) {
 
 	// reset subcommands
 	c.subcommandsByName = make(map[string]*Command)
-	for _, cmd := range cmd.subcommands {
-		c.subcommandsByName[cmd.name] = cmd
+	for _, sub := range cmd.Subcommands {
+		c.subcommandsByName[sub.Name] = sub
 	}
 }
 
@@ -90,29 +127,29 @@ func (c *argParser) Parse() (*Invocation, error) {
 func (c *argParser) invocation() *Invocation {
 	path := make([]string, len(c.cmds))
 	for i, cmd := range c.cmds {
-		path[i] = cmd.name
+		path[i] = cmd.Name
 	}
 	return &Invocation{
 		Cmd:           c.cmd,
 		Path:          path,
 		Forwarded:     c.args,
 		HelpRequested: c.helpRequested,
-		Stdin:         c.cmd.getStdin(),
-		Stdout:        c.cmd.getStdout(),
-		Stderr:        c.cmd.getStderr(),
+		Stdin:         c.cmd.Stdin,
+		Stdout:        c.cmd.Stdout,
+		Stderr:        c.cmd.Stderr,
 	}
 }
 
 func (c *argParser) parseEnvVars() error {
-	for _, flag := range c.flagsByName {
-		if flag.envVar == "" {
+	for _, flag := range c.optionsByKey {
+		if flag.EnvVar == "" {
 			continue
 		}
-		n := c.flagsSeen[flag.keyName()]
+		n := c.flagsSeen[flag]
 		if n > 0 {
 			continue
 		}
-		s, ok := os.LookupEnv(flag.envVar)
+		s, ok := os.LookupEnv(flag.EnvVar)
 		if !ok {
 			continue
 		}
@@ -142,28 +179,29 @@ func (c *argParser) validateNArgs() error {
 	return nil
 }
 
-// validateCommandNArgs applies the count rules to cmd's effective flags --
-// its own groups and every group it mounts via a GroupSet.
+// validateCommandNArgs applies the count rules to cmd's flags, which
+// already include every group mounted on it via a GroupSet: lowering
+// flattens a command's own groups and its mounted ones into one list.
 func (c *argParser) validateCommandNArgs(cmd *Command) error {
-	for _, group := range cmd.effectiveGroups() {
-		for _, flag := range group.flags {
-			n := c.flagsSeen[flag.keyName()]
-			if flag.minCount > 0 && n < flag.minCount {
+	for _, group := range cmd.FlagGroups {
+		for _, flag := range group.Flags {
+			n := c.flagsSeen[flag]
+			if flag.MinCount > 0 && n < flag.MinCount {
 				switch {
-				case flag.minCount == 1:
+				case flag.MinCount == 1:
 					return newArgumentErrorf(nil, c.cmd, flag, "",
 						"missing required argument: %s", flag)
-				case flag.minCount == flag.maxCount:
+				case flag.MinCount == flag.MaxCount:
 					return newArgumentErrorf(nil, c.cmd, flag, "",
 						"expected %d arguments, got %d: %s",
-						flag.minCount, n, flag)
+						flag.MinCount, n, flag)
 				default:
 					return newArgumentErrorf(nil, c.cmd, flag, "",
 						"expected at least %d arguments, got %d: %s",
-						flag.minCount, n, flag)
+						flag.MinCount, n, flag)
 				}
 			}
-			if flag.maxCount > 0 && n > flag.maxCount {
+			if flag.MaxCount > 0 && n > flag.MaxCount {
 				return newArgumentErrorf(nil, c.cmd, flag, "",
 					"argument specified too many times: %s", flag)
 			}
@@ -190,8 +228,8 @@ func (c *argParser) next() (token string, ok bool) {
 }
 
 func (c *argParser) observe(flag *Flag) int {
-	c.flagsSeen[flag.keyName()] += 1
-	return c.flagsSeen[flag.keyName()]
+	c.flagsSeen[flag] += 1
+	return c.flagsSeen[flag]
 }
 
 // parseOne parses one token from the command line: an argument being
@@ -216,7 +254,7 @@ func (c *argParser) parseOne(token string) error {
 	}
 	if !c.optionsEnded {
 		if token == terminator {
-			if c.cmd.forwardArgs {
+			if c.cmd.ForwardArgs {
 				c.forwarding = true
 			} else {
 				c.optionsEnded = true
@@ -240,7 +278,7 @@ func (c *argParser) parseOperand(token string) error {
 	if len(c.positionals) > 0 {
 		flag := c.positionals[0]
 		n := c.observe(flag)
-		if flag.maxCount > 0 && n == flag.maxCount {
+		if flag.MaxCount > 0 && n == flag.MaxCount {
 			// all done with this positional flag
 			c.positionals = c.positionals[1:]
 		}
@@ -248,7 +286,7 @@ func (c *argParser) parseOperand(token string) error {
 	}
 
 	// handle subcommand
-	if len(c.cmd.subcommands) == 0 {
+	if len(c.cmd.Subcommands) == 0 {
 		// This isn't a lookup miss like the two "unrecognized" cases below:
 		// the operand is well understood, there is just no positional slot
 		// left to take it. See rm(1)'s "extra operand".
@@ -276,7 +314,7 @@ func (c *argParser) parseOption(token string) error {
 // an implicit "true" for a boolean.
 func (c *argParser) parseLongOption(token string) error {
 	name, value, attached := splitLongOption(token)
-	flag := c.flagsByName[name]
+	flag := c.optionsByKey[name]
 	if flag == nil {
 		return c.unrecognizedOption(name)
 	}
@@ -288,7 +326,7 @@ func (c *argParser) parseLongOption(token string) error {
 	if attached {
 		return c.setFlag(flag, value)
 	}
-	if isBoolValue(flag.value) {
+	if !flag.TakesValue {
 		return c.setFlag(flag, "true")
 	}
 	return c.parseDetachedValue(flag, name)
@@ -305,14 +343,14 @@ func (c *argParser) parseShortOptions(arg string) error {
 			continue // the delimiter
 		}
 		name := "-" + string(r)
-		flag := c.flagsByName[name]
+		flag := c.optionsByKey[name]
 		if flag == nil {
 			return c.unrecognizedOption(name)
 		}
 		c.observe(flag)
 		rest := arg[i+utf8.RuneLen(r):]
 
-		if isBoolValue(flag.value) {
+		if !flag.TakesValue {
 			// Guideline 5 spends the whole remainder on further names,
 			// which would leave a boolean no short spelling for false. A
 			// short name can never be "=", so reading one as a delimiter
@@ -347,10 +385,10 @@ func (c *argParser) parseShortOptions(arg string) error {
 // says which rather than leaving the user to guess; see
 // docs/adr/path-scoped-flag-names.md.
 func (c *argParser) unrecognizedOption(name string) error {
-	if sub := c.cmd.findDescendantWithFlag(name); sub != nil {
+	if sub := findDescendantWithFlag(c.cmd, name); sub != nil {
 		return newArgumentErrorf(nil, c.cmd, nil, name,
 			"unrecognized option: %s (defined by subcommand %q)",
-			name, sub.name)
+			name, sub.Name)
 	}
 	return newArgumentErrorf(nil, c.cmd, nil, name,
 		"unrecognized option: %s", name)
@@ -370,10 +408,44 @@ func (c *argParser) parseDetachedValue(flag *Flag, name string) error {
 	return c.setFlag(flag, next)
 }
 
-// Set the value of flag, return any validation error.
+// setFlag sets the value of flag, returning any validation error.
 func (c *argParser) setFlag(flag *Flag, token string) error {
 	if err := flag.Set(token); err != nil {
 		return newArgumentErrorf(err, c.cmd, flag, token, "%s", flag)
+	}
+	return nil
+}
+
+// findDescendantWithFlag returns the first descendant of cmd to declare
+// the option spelled key -- a "--name" or "-s" -- searching depth first in
+// declaration order, or nil when none does. A name declared below the
+// current command is legal only once its own command is named, so
+// unrecognizedOption uses this to say where the name would work; see
+// docs/adr/path-scoped-flag-names.md.
+//
+// A hidden command, and its whole subtree, is skipped: it is deliberately
+// unadvertised, so the hint must not name it either. The flag stays
+// usable; the error just falls back to the plain "unrecognized option"
+// message.
+func findDescendantWithFlag(cmd *Command, key string) *Command {
+	for _, sub := range cmd.Subcommands {
+		if sub.Hidden {
+			continue
+		}
+		for _, group := range sub.FlagGroups {
+			for _, flag := range group.Flags {
+				if flag.Positional {
+					continue
+				}
+				if (flag.Name != "" && key == "--"+flag.Name) ||
+					(flag.ShortName != "" && key == "-"+flag.ShortName) {
+					return sub
+				}
+			}
+		}
+		if found := findDescendantWithFlag(sub, key); found != nil {
+			return found
+		}
 	}
 	return nil
 }
@@ -414,4 +486,29 @@ func splitLongOption(arg string) (name, value string, attached bool) {
 		}
 	}
 	return arg, "", false
+}
+
+// parse implements (*Command).Parse.
+func parse(c *Command, args []string) (*Invocation, error) {
+	if err := applyDefaults(c.rootOrSelf()); err != nil {
+		return nil, err
+	}
+	return newArgParser(c, args).Parse()
+}
+
+// dispatch implements (*Command).Dispatch.
+func dispatch(ctx context.Context, c *Command, args []string) error {
+	inv, err := parse(c, args)
+	if err != nil {
+		return err
+	}
+	if inv.HelpRequested {
+		return inv.Cmd.WriteUsage(inv.Stdout)
+	}
+	if inv.Cmd.Handler == nil {
+		// The command exists only to group its subcommands, so naming it
+		// alone is a usage error rather than a request for help.
+		return newArgumentErrorf(nil, inv.Cmd, nil, "", "missing subcommand")
+	}
+	return inv.Cmd.Handler(ctx, inv)
 }
