@@ -1658,3 +1658,50 @@ func ExampleInvocation() {
 	// Error: no remote named: try "myapp remote add --help"
 	// exit code: 2
 }
+
+// TestValidateDefaultNotAmongChoices asserts that a default outside the
+// declared choices is a configuration error. Defaults bypass Set, so such
+// a default would survive parsing and be advertised by help as a value the
+// same program rejects on the command line.
+func TestValidateDefaultNotAmongChoices(t *testing.T) {
+	var env string
+	cmd := NewCommand("test", "").Flags(
+		String(&env, "env", "bogus", "").Choices("staging", "production"),
+	)
+	_, err := cmd.Parse(nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got, want := humanMessage(err),
+		`--env: default "bogus" is not one of: staging, production`; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
+// TestValidateEmptyDefaultWithChoices asserts that an empty default is not
+// held to the choices: it is how a flag says it has no default, and it is
+// what every Required choice flag declares.
+func TestValidateEmptyDefaultWithChoices(t *testing.T) {
+	var env string
+	cmd := NewCommand("test", "").Flags(
+		String(&env, "env", "", "").Choices("staging", "production").Required(),
+	)
+	if _, err := cmd.Parse([]string{"--env=staging"}); err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "staging", env)
+}
+
+// TestValidateRepeatableDefaultWithChoices asserts that a repeatable flag
+// escapes the default-among-choices rule: it accumulates, so its default
+// renders as the whole collection rather than as a value any one choice
+// could match.
+func TestValidateRepeatableDefaultWithChoices(t *testing.T) {
+	var tags []string
+	cmd := NewCommand("test", "").Flags(
+		Strings(&tags, "tag", nil, "").Choices("red", "blue"),
+	)
+	if _, err := cmd.Parse([]string{"--tag=red", "--tag=blue"}); err != nil {
+		t.Fatal(err)
+	}
+}

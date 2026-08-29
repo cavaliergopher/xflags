@@ -2,6 +2,7 @@ package ir
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -170,6 +171,20 @@ func validateFlag(f *Flag) error {
 	// A max of 0 is unbounded, so it is never exceeded by the min.
 	if f.MaxCount > 0 && f.MinCount > f.MaxCount {
 		fail("minimum count %d exceeds maximum count %d", f.MinCount, f.MaxCount)
+	}
+	// Defaults are applied without going through Set, so a default outside
+	// the choices is never rejected at parse time: the flag would hold, and
+	// help would advertise, a value the same program refuses to accept on
+	// the command line.
+	//
+	// Only a flag that takes one value is checked. A repeatable flag
+	// accumulates, so its default renders as the whole collection -- "[]"
+	// for an empty one -- which is not a value any single choice could
+	// match. An empty default is left alone either way: it is how a flag
+	// says it has no default.
+	if len(f.Choices) > 0 && f.MaxCount == 1 && f.Default != "" &&
+		!slices.Contains(f.Choices, f.Default) {
+		fail("default %q is not one of: %s", f.Default, strings.Join(f.Choices, ", "))
 	}
 	return JoinErrors(errs)
 }
