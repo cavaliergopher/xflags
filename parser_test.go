@@ -428,6 +428,47 @@ func TestTerminatorSelectsSubcommand(t *testing.T) {
 	assertStrings(t, []string{"-rf"}, files)
 }
 
+// TestHelpWinsOverAnEarlierArgumentError asserts that a --help anywhere on
+// the command line is honored even when an earlier argument was wrong: help
+// no longer depends on position, so "app --bogus --help" prints help
+// instead of reporting --bogus. Before the lexer split this reported the
+// unrecognized option, since parsing stopped at the first error and never
+// reached --help; see wip/lexer.md and wip/batch-2026-08-27.md.
+func TestHelpWinsOverAnEarlierArgumentError(t *testing.T) {
+	cmd := NewCommand("test", "").Flags(String(new(string), "name", "", ""))
+	inv, err := cmd.Parse([]string{"--bogus", "--help"})
+	if err != nil {
+		t.Fatalf("Parse() = %v, want no error", err)
+	}
+	if !inv.HelpRequested {
+		t.Error("HelpRequested = false, want true")
+	}
+}
+
+// TestPositionalIsNotAnOption asserts that a positional flag's name no
+// longer enters the option table: "--src=x" for a flag declared
+// Positional() is an unrecognized option rather than a way to set it. This
+// closes item 33 in wip/TODO.md, found while implementing an earlier
+// branch and fixed as a consequence of the lexer split, which never adds a
+// positional's name to the table it matches options against.
+func TestPositionalIsNotAnOption(t *testing.T) {
+	var src string
+	cmd := NewCommand("test", "").Flags(
+		String(&src, "src", "", "").Positional(),
+	)
+	_, err := cmd.Parse([]string{"--src=x"})
+	if got, want := humanMessage(err), "unrecognized option: --src"; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+	assertString(t, "", src)
+
+	// The operand form still binds it.
+	if _, err := cmd.Parse([]string{"x"}); err != nil {
+		t.Fatal(err)
+	}
+	assertString(t, "x", src)
+}
+
 // FuzzParse asserts the parser's contract over arbitrary command lines:
 // Parse never panics, and it returns an Invocation or an error, never
 // both and never neither. The tree is rebuilt inside the fuzz body

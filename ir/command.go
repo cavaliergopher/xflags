@@ -171,7 +171,10 @@ func (c *Command) WriteUsage(w io.Writer) error {
 // Invocation has HelpRequested set. That is not an error: it is for the
 // caller to report the command's usage.
 func (c *Command) Parse(args []string) (*Invocation, error) {
-	return parse(c, args)
+	if err := applyDefaults(c.rootOrSelf()); err != nil {
+		return nil, err
+	}
+	return apply(c, lex(c, args))
 }
 
 // Dispatch parses the given set of command line arguments and calls the
@@ -186,5 +189,17 @@ func (c *Command) Parse(args []string) (*Invocation, error) {
 // A command invoked with no handler returns an *ArgumentError, as for any
 // other wrong command line.
 func (c *Command) Dispatch(ctx context.Context, args []string) error {
-	return dispatch(ctx, c, args)
+	inv, err := c.Parse(args)
+	if err != nil {
+		return err
+	}
+	if inv.HelpRequested {
+		return inv.Cmd.WriteUsage(inv.Stdout)
+	}
+	if inv.Cmd.Handler == nil {
+		// The command exists only to group its subcommands, so naming it
+		// alone is a usage error rather than a request for help.
+		return newArgumentErrorf(nil, inv.Cmd, nil, "", "missing subcommand")
+	}
+	return inv.Cmd.Handler(ctx, inv)
 }
