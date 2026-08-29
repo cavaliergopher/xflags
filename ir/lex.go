@@ -38,13 +38,28 @@ type instruction struct {
 }
 
 // lexResult is what lex returns: the instructions and errors it found,
-// plus the command active at the end of argv and the positional flag, if
-// any, still open to receive a value there.
+// plus enough of where it stopped for a completion engine to resume from --
+// the command active at the end of argv, the positional flag still open to
+// receive a value there, whether a final detached option is still waiting
+// on a value that argv never supplied, and whether option processing had
+// already ended.
 type lexResult struct {
 	instructions   []instruction
 	errs           []error
 	active         *Command
 	openPositional *Flag
+
+	// awaitingValue is set when the last token in argv was an option that
+	// takes a value and no value followed -- "option requires an argument"
+	// at the end of the line specifically, not a mid-line miss such as
+	// --foxtrot followed by another option, which stays a plain error with
+	// nothing for completion to resume from.
+	awaitingValue *Flag
+
+	// optionsEnded reports whether the first "--" terminator, if any, had
+	// already been seen by the end of argv -- see lexOne's doc comment on
+	// what a command line does after seeing it.
+	optionsEnded bool
 }
 
 // lex resolves argv against root -- the command Parse was called on -- into
@@ -80,6 +95,8 @@ func lex(root *Command, argv []string) lexResult {
 		errs:           lx.errs,
 		active:         lx.cmd,
 		openPositional: openPositional,
+		awaitingValue:  lx.awaitingValue,
+		optionsEnded:   lx.optionsEnded,
 	}
 }
 
@@ -102,6 +119,11 @@ type lexer struct {
 	posCount          int // set instructions already queued for positionals[0]
 
 	optionsEnded bool
+
+	// awaitingValue mirrors lexResult's field of the same name; see there.
+	// It can be set at most once: reaching the end of argv is what sets
+	// it, and reaching the end of argv is also what ends lex's loop.
+	awaitingValue *Flag
 
 	instructions []instruction
 	errs         []error
@@ -322,9 +344,14 @@ func (lx *lexer) unrecognizedOption(name string) {
 //
 // A missing or malformed detached value is itself a malformed token, so it
 // consumes nothing further: the argument that would have been the value,
-// if there is one, is left for lex to resolve on its own next.
+// if there is one, is left for lex to resolve on its own next. Only the
+// end-of-argv case records awaitingValue -- a completion engine can resume
+// there, offering f's value for the word under the cursor, but a mid-line
+// miss has a further token lex will still resolve on its own, so there is
+// nothing for completion to wait on.
 func (lx *lexer) lexDetachedValue(f *Flag, name string, idx int) {
 	if lx.pos >= len(lx.argv) {
+		lx.awaitingValue = f
 		lx.errs = append(lx.errs, newArgumentErrorf(nil, lx.cmd, f, name,
 			"option requires an argument: %s", name))
 		return

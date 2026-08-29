@@ -55,6 +55,11 @@ type Command struct {
 	stdout      io.Writer
 	stderr      io.Writer
 
+	// completionEnabled records that EnableCompletion was called on this
+	// command, so Run consults the shell completion environment variable
+	// before doing anything else. See EnableCompletion.
+	completionEnabled bool
+
 	// defaultGroup is the implicit "options" flag group that Flags appends
 	// to. NewCommand creates it eagerly, so every command carries one from
 	// construction; it stays out of help output regardless, since Format
@@ -289,9 +294,19 @@ func (c *Command) getStderr() io.Writer {
 // Run is Dispatch plus this reporting; a program that wants to report
 // errors its own way calls Dispatch instead and keeps the raw error.
 //
+// If EnableCompletion was called, Run first checks the shell completion
+// environment variable it names and, when it carries a value Run
+// recognizes, answers it directly instead of parsing args at all; see
+// EnableCompletion. RunWithArgs shares this behavior, being built on Run.
+//
 // ctx is passed to the handler unchanged. See NotifyContext for a context
 // that is canceled on SIGINT or SIGTERM.
 func (c *Command) Run(ctx context.Context, args []string) int {
+	if c.completionEnabled {
+		if code, handled := completionHook(c); handled {
+			return code
+		}
+	}
 	return c.handleErr(c.Dispatch(ctx, args))
 }
 
@@ -331,6 +346,23 @@ func (c *Command) WriteUsage(w io.Writer) error {
 		return err
 	}
 	return node.WriteUsage(w)
+}
+
+// Complete resolves shell completion candidates for a command line that is
+// still being typed. args is the command line so far, excluding the
+// program name and the word currently under the cursor; word is that
+// fragment, possibly empty.
+//
+// Complete compiles the command (see Compile) and delegates to the
+// compiled tree. On a configuration error it returns no candidates and
+// ir.CompNoFileComp, the same best-effort contract as a broken command
+// line: a misconfigured tree cannot say what would complete it.
+func (c *Command) Complete(args []string, word string) ([]string, ir.CompDirective) {
+	node, err := c.Compile()
+	if err != nil {
+		return nil, ir.CompNoFileComp
+	}
+	return node.Complete(args, word)
 }
 
 // handleErr reports err on the stderr of the command that produced it --
@@ -472,6 +504,24 @@ func (c *Command) Subcommands(cmds ...*Command) *Command {
 // this command.
 func (c *Command) FormatFunc(fn ir.FormatFunc) *Command {
 	c.formatFunc = fn
+	return c
+}
+
+// EnableCompletion opts this command into shell completion. Call it on the
+// command Run or RunWithArgs will be called on -- typically the root --
+// since that is where the environment variable it enables is named from.
+//
+// Without EnableCompletion, Run's behavior is unchanged. With it, Run
+// checks one environment variable before doing anything else: the
+// command's own name, uppercased, with every rune that is not a letter or
+// digit replaced by "_", followed by "_COMPLETE" -- "myapp" becomes
+// MYAPP_COMPLETE, "my-app" becomes MY_APP_COMPLETE. A recognized value
+// answers a shell's request directly: printing a completion script, or a
+// completion reply, without invoking any handler or examining args. Any
+// other value, including the variable being unset, leaves Run's behavior
+// exactly as if EnableCompletion had not been called.
+func (c *Command) EnableCompletion() *Command {
+	c.completionEnabled = true
 	return c
 }
 

@@ -146,5 +146,39 @@ An attached value is taken literally, so it may look like a flag: --flag=-5
 is negative five, where --flag -5 is a missing value. See
 docs/adr/posix-argument-conventions.md for the dialect in full, and for the
 two places it departs from getopt.
+
+# Shell completion
+
+Command.EnableCompletion opts a command into shell completion:
+
+	var App = xflags.NewCommand(os.Args[0], "My application").
+		EnableCompletion()
+
+Once enabled, Run and RunWithArgs check one environment variable before
+doing anything else -- the command's name, uppercased, with every
+non-alphanumeric rune mapped to "_", and "_COMPLETE" appended, so "myapp"
+answers to MYAPP_COMPLETE. A recognized value there makes Run print a
+completion script or a completion reply and return, without invoking any
+handler; any other value, including the variable being unset, leaves Run's
+behavior exactly as if EnableCompletion had not been called.
+
+A user enables completion in their shell with a one-liner naming that
+variable:
+
+	source <(MYAPP_COMPLETE=bash_source myapp 2>/dev/null)
+	source <(MYAPP_COMPLETE=zsh_source myapp 2>/dev/null)
+
+That prints a small script, generated for the shell asked for, which
+re-invokes the binary as the user types to ask what completes the word
+under the cursor. Flags declare what completes their value with Choices,
+for a fixed list, or Flag.Complete, for a callback computing candidates
+from the Invocation parsed so far -- what completes one flag's value often
+depends on another already given, as the ref argument to `git checkout`
+depends on which repository is checked out.
+
+Command.Complete is the engine behind the reply, and answers the same
+question programmatically: given the command line so far and the word
+being completed, which candidates apply. It is exported so it can be
+tested and driven directly, without a shell in the loop.
 */
 package xflags

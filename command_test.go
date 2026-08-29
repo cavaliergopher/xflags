@@ -1579,7 +1579,10 @@ func TestMarshalOmitsBehavior(t *testing.T) {
 		Flags(
 			String(&name, "name", "", "usage").
 				Validate(func(s string) error { return nil }).
-				Choices("a", "b"),
+				Choices("a", "b").
+				Complete(func(inv *Invocation, word string) ([]string, ir.CompDirective) {
+					return nil, ir.CompDefault
+				}),
 			String(&arg, "ARG", "", "positional usage").Positional(),
 		)
 	root := NewCommand("root", "Root summary").
@@ -1610,7 +1613,7 @@ func TestMarshalOmitsBehavior(t *testing.T) {
 // behaviorKeys names every field ir.Command and ir.Flag tag json:"-".
 var behaviorKeys = []string{
 	"Handler", "FormatFunc", "Stdin", "Stdout", "Stderr",
-	"Value", "ValidateFunc",
+	"Value", "ValidateFunc", "CompleteFunc",
 }
 
 // assertNoBehaviorKeys walks a value decoded from JSON -- maps and slices,

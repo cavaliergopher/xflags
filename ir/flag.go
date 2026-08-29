@@ -6,11 +6,12 @@ import "strings"
 // positional argument, produced by lowering a configuration tree with
 // (*xflags.Command).Compile.
 //
-// Every field marshals except Value and ValidateFunc, tagged json:"-":
-// they are behavior a formatter or any other marshaler has no use for, so
-// they are excluded by tag rather than by staying unexported. See the
-// package doc for the two-type model this is one half of, and
-// TestMarshalOmitsBehavior for what enforces the tags.
+// Every field marshals except Value, ValidateFunc and CompleteFunc,
+// tagged json:"-": they are behavior a formatter, a completion engine or
+// any other marshaler has no use for, so they are excluded by tag rather
+// than by staying unexported. See the package doc for the two-type model
+// this is one half of, and TestMarshalOmitsBehavior for what enforces the
+// tags.
 type Flag struct {
 	Name        string
 	ShortName   string
@@ -45,6 +46,10 @@ type Flag struct {
 	// ValidateFunc, if set, validates an argument before Set writes it to
 	// Value.
 	ValidateFunc ValidateFunc `json:"-"`
+
+	// CompleteFunc, if set, completes the flag's value for a shell. See
+	// Complete.
+	CompleteFunc CompleteFunc `json:"-"`
 }
 
 // String returns the flag's canonical spelling on the command line: its

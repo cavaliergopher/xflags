@@ -48,6 +48,7 @@ type Flag struct {
 	envVar       string
 	choices      []string
 	validateFunc ir.ValidateFunc
+	completeFunc ir.CompleteFunc
 	value        ir.Value
 }
 
@@ -317,12 +318,21 @@ func (c *Flag) Choices(elems ...string) *Flag {
 	)
 }
 
+// Complete registers fn to complete this flag's value for a shell, whether
+// the flag is an option or a positional argument. It is consulted only
+// when Choices is not declared; Choices, being the enumerable case, always
+// wins.
+func (c *Flag) Complete(fn ir.CompleteFunc) *Flag {
+	c.completeFunc = fn
+	return c
+}
+
 // lower returns the compiled ir.Flag for c: its data fields copied across,
 // with TakesValue derived from whether its Value is a BoolValue, and its
-// behavior -- the Value and the ValidateFunc -- copied into the fields
-// only Compile has any business setting. Flag configuration is not
-// checked here; see ir.Flag's own validation, which Compile runs over the
-// whole lowered tree.
+// behavior -- the Value, the ValidateFunc and the CompleteFunc -- copied
+// into the fields only Compile has any business setting. Flag
+// configuration is not checked here; see ir.Flag's own validation, which
+// Compile runs over the whole lowered tree.
 func (c *Flag) lower() *ir.Flag {
 	return &ir.Flag{
 		Name:         c.name,
@@ -340,6 +350,7 @@ func (c *Flag) lower() *ir.Flag {
 		HasDefault:   c.hasDefault,
 		Value:        c.value,
 		ValidateFunc: c.validateFunc,
+		CompleteFunc: c.completeFunc,
 	}
 }
 

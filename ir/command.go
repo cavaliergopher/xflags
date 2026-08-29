@@ -203,3 +203,19 @@ func (c *Command) Dispatch(ctx context.Context, args []string) error {
 	}
 	return inv.Cmd.Handler(ctx, inv)
 }
+
+// Complete resolves shell completion candidates for a command line that is
+// still being typed. args is the command line so far, excluding the
+// program name and the word currently under the cursor; word is that
+// fragment, possibly empty.
+//
+// Complete is best-effort: a broken or half-typed command line still
+// yields whatever can be offered for the position the cursor is in --
+// required flags need not be present, and an unrecognized token earlier on
+// the line does not stop completion at the position after it. It calls
+// Set on every flag named earlier in args, since a value's CompleteFunc
+// may need to see them, so it must run in a throwaway process built for
+// completion and never beside a program's live state.
+func (c *Command) Complete(args []string, word string) ([]string, CompDirective) {
+	return complete(c, args, word)
+}
