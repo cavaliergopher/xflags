@@ -1,0 +1,192 @@
+package ir
+
+import (
+	"fmt"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
+
+// validateTree implements (*Command).Validate: it checks c and,
+// recursively, each of its subcommands, joining every error found. claimed
+// maps each option spelling declared by c's ancestors to the command that
+// declared it: a name may not repeat anywhere along an ancestor-descendant
+// chain, and the check runs here because a command cannot know its
+// ancestors until the whole tree is in view. See
+// docs/adr/path-scoped-flag-names.md.
+func validateTree(c *Command, claimed map[string]*Command) error {
+	var errs []error
+	if err := validateSelf(c, claimed); err != nil {
+		errs = append(errs, err)
+	}
+	if len(c.Subcommands) == 0 {
+		return JoinErrors(errs)
+	}
+	// Descendants see c's names claimed in a copy, so sibling subtrees may
+	// still reuse names freely.
+	claims := make(map[string]*Command, len(claimed))
+	for key, cmd := range claimed {
+		claims[key] = cmd
+	}
+	for _, group := range c.FlagGroups {
+		if group.Mounted {
+			// A mounted group's flags are the registering library's, not
+			// this command's, and a command is often mounted somewhere its
+			// author did not choose. Claiming them would make a subcommand
+			// that mounts the same set as an ancestor -- the ordinary way
+			// two teams both reach CommandLine -- a configuration error.
+			continue
+		}
+		for _, flag := range group.Flags {
+			if flag.Name != "" {
+				claims["--"+flag.Name] = c
+			}
+			if flag.ShortName != "" {
+				claims["-"+flag.ShortName] = c
+			}
+		}
+	}
+	for _, sub := range c.Subcommands {
+		if err := validateTree(sub, claims); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return JoinErrors(errs)
+}
+
+// validateSelf checks c's own flags for configuration errors: flag syntax,
+// names already declared -- within c, or by the ancestors whose claims are
+// passed in -- and positional/subcommand conflicts. It does not descend
+// into subcommands.
+func validateSelf(c *Command, claimed map[string]*Command) error {
+	var errs []error
+
+	flagsByName := make(map[string]*Flag)
+	hasUnboundedPositional := false
+	for _, group := range c.FlagGroups {
+		for _, flag := range group.Flags {
+			if err := validateFlag(flag); err != nil {
+				errs = append(errs, err)
+			}
+			if flag.Positional {
+				if len(c.Subcommands) > 0 {
+					errs = append(errs, newConfigErrorf(nil, c, flag, "cannot specify both subcommands and positional arguments"))
+				}
+				if hasUnboundedPositional {
+					errs = append(errs, newConfigErrorf(nil, c, flag, "positional arguments cannot follow unbounded positional arguments"))
+				}
+				if flag.MaxCount == 0 {
+					hasUnboundedPositional = true
+				}
+			}
+			if flag.Name != "" {
+				key := "--" + flag.Name
+				if _, ok := flagsByName[key]; ok {
+					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
+						alreadyDeclaredMessage(flag, key)))
+				}
+				if ancestor, ok := claimed[key]; ok {
+					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
+						alreadyDeclaredByAncestorMessage(flag, key, ancestor.Name)))
+				}
+				flagsByName[key] = flag
+			}
+			if flag.ShortName != "" {
+				key := "-" + flag.ShortName
+				if _, ok := flagsByName[key]; ok {
+					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
+						alreadyDeclaredMessage(flag, key)))
+				}
+				if ancestor, ok := claimed[key]; ok {
+					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
+						alreadyDeclaredByAncestorMessage(flag, key, ancestor.Name)))
+				}
+				flagsByName[key] = flag
+			}
+		}
+	}
+	return JoinErrors(errs)
+}
+
+// alreadyDeclaredMessage reports a name key colliding with one already
+// declared on the same command. A positional flag names itself, since key
+// is a synthetic "--"/"-" spelling it never appears with on the command
+// line; an option is named by that spelling.
+func alreadyDeclaredMessage(flag *Flag, key string) string {
+	if flag.Positional {
+		return fmt.Sprintf("operand already declared: %s", flag)
+	}
+	return fmt.Sprintf("flag already declared: %s", key)
+}
+
+// alreadyDeclaredByAncestorMessage is alreadyDeclaredMessage's counterpart
+// for a name an ancestor, named by ancestor, already claimed.
+func alreadyDeclaredByAncestorMessage(flag *Flag, key, ancestor string) string {
+	if flag.Positional {
+		return fmt.Sprintf("operand already declared by ancestor %q: %s", ancestor, flag)
+	}
+	return fmt.Sprintf("flag already declared by ancestor %q: %s", ancestor, key)
+}
+
+// validateFlag implements the flag half of (*Command).Validate: it verifies
+// that f is configured correctly, independent of the command it belongs
+// to, reporting every rule it breaks.
+func validateFlag(f *Flag) error {
+	var errs []error
+	fail := func(format string, a ...any) {
+		errs = append(errs, newConfigErrorf(nil, nil, f, format, a...))
+	}
+	if strings.HasPrefix(f.Name, "-") {
+		fail("flag name must not start with '-'")
+	}
+	// "=" reads as the delimiter of an attached value and whitespace as an
+	// argument break, so a name containing either can never be matched.
+	if strings.ContainsRune(f.Name, '=') {
+		fail("flag name must not contain '='")
+	}
+	if strings.ContainsFunc(f.Name, unicode.IsSpace) {
+		fail("flag name must not contain whitespace")
+	}
+	// The parser matches -h and --help before the flag table, so a flag
+	// claiming either spelling would silently never fire.
+	if f.Name == "help" {
+		fail("flag name is reserved for help: --help")
+	}
+	if f.Value == nil {
+		fail("flag must be bound to a value")
+	}
+	if f.ShortName != "" && !isShortName(f.ShortName) {
+		fail("short name must be one character from [A-Za-z0-9]: %q", f.ShortName)
+	}
+	if f.ShortName == "h" {
+		fail("short name is reserved for help: -h")
+	}
+	if f.MinCount < 0 {
+		fail("minimum count must not be negative: %d", f.MinCount)
+	}
+	if f.MaxCount < 0 {
+		fail("maximum count must not be negative: %d", f.MaxCount)
+	}
+	// A max of 0 is unbounded, so it is never exceeded by the min.
+	if f.MaxCount > 0 && f.MinCount > f.MaxCount {
+		fail("minimum count %d exceeds maximum count %d", f.MinCount, f.MaxCount)
+	}
+	return JoinErrors(errs)
+}
+
+// isShortName reports whether s is a legal short name. POSIX guideline 3
+// confines one to a single character from the portable character set, and
+// the parser leans on that: reading "=" as a delimiter after a boolean
+// short flag costs no ambiguity only because "=" can never be a name.
+//
+// Measured in characters rather than bytes, so a multi-byte rune is
+// rejected for falling outside the set rather than for its length.
+func isShortName(s string) bool {
+	r, size := utf8.DecodeRuneInString(s)
+	if size != len(s) {
+		return false
+	}
+	return ('a' <= r && r <= 'z') ||
+		('A' <= r && r <= 'Z') ||
+		('0' <= r && r <= '9')
+}
