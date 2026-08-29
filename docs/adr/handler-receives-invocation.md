@@ -116,6 +116,11 @@ Consequences, beyond those above:
   and its resolver to `Invocation.Stdout`. That is worth more than matching
   `flag.FlagSet.SetOutput`, which has a single output stream and so never
   had to name a second one.
-- `Parse` reads `os.Stdin`, `os.Stdout` and `os.Stderr` to build the
-  invocation, so the streams are the process streams as they stood when
-  argv was parsed. `Describe` remains the entry point that touches nothing.
+- `Compile` resolves `Stdin`, `Stdout` and `Stderr` while lowering the
+  tree, falling back to `os.Stdin`, `os.Stdout` and `os.Stderr` for
+  whichever the command and its ancestors left unset. `Parse` compiles a
+  fresh tree on every call, so the streams it hands the invocation are
+  still the process streams as they stood when `Parse` was called; only a
+  caller that holds a compiled tree across a later reassignment of
+  `os.Stdout` would see the difference, since that tree keeps the stream
+  it compiled with.

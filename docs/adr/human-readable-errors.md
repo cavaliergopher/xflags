@@ -1,13 +1,6 @@
 # String() is for humans, Error() is for Go, agents get JSON
 
 Status: accepted, 2026-08-25. JSON error output not yet implemented.
-Amended 2026-08-26: `Run`'s prefix names who caused the failure, which adds
-`Program error:` for `ConfigError` and drops the rule that a handler's own
-`*ArgumentError` prints as `Error:`.
-Amended 2026-08-27: `ConfigError.String()` prefixes `Cmd.pathString()`, not
-`Cmd.String()`, so a deep subcommand reads as `app remote add: ...` and not
-the ambiguous bare `add: ...`. `Flag.check()` below is also renamed to
-`Flag.validate()`.
 
 ## Context
 
@@ -52,7 +45,7 @@ Call sites fold the specifics into `Message` itself, e.g.
 `unrecognized argument: --nope`, or use the flag's own `String()` —
 `--ip` — as the message when wrapping a validation error, so it reads
 `--ip: invalid IP: 256.0.0.1`. `ConfigError.String()` prefixes
-`Cmd.pathString()` when the error has a command, falls back to
+`Cmd.FullName` when the error has a command, falls back to
 `Flag.String()` when it doesn't (a flag can fail its own `validate()`
 before it's attached to any command), and has no prefix at all if it has
 neither. `Run` prints
@@ -92,7 +85,7 @@ mode where an error is reported as JSON instead of `String()`'s sentence —
 carrying `Cmd`, `Flag`, `Arg`, `Message` and the wrapped error as data, not
 prose. Exit codes are unchanged; only the message format on the same
 stream changes. `Cmd` and `Flag` detail should project through the
-existing `desc.Command`/`desc.Flag` types `Describe()` already produces,
+existing `ir.Command`/`ir.Flag` types `Compile()` already produces,
 rather than a second schema for describing a command or flag. Left open,
 tracked as `wip/TODO.md` item 28: the flag's exact name and scope — which
 overlaps item 18's still-undecided `--xflags-describe`-style flag and is
