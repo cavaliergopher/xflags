@@ -66,8 +66,8 @@ type HandlerFunc func(ctx context.Context, inv *Invocation) error
 // invoke from the command line, produced by lowering a configuration tree
 // with (*xflags.Command).Compile.
 //
-// Every field marshals except those tagged json:"-". Parent and Root are
-// derivable from the tree's shape and would make it self-referential;
+// Every field marshals except those tagged json:"-". Ancestry and Root
+// are derivable from the tree's shape and would make it self-referential;
 // Handler, UsageFunc and the three streams are behavior a formatter, a
 // completion engine or any other marshaler has no use for, so they are
 // excluded by tag rather than by staying unexported. See the package doc
@@ -89,11 +89,6 @@ type Command struct {
 	FlagGroups  []*FlagGroup
 	Subcommands []*Command
 
-	// Parent is the command that Subcommands names this command under, or
-	// nil at the root. It is not marshaled: a parent is derivable from a
-	// tree's shape, and including it would make the tree self-referential.
-	Parent *Command `json:"-"`
-
 	// Ancestry is every command from the root of the tree down to and
 	// including this one, which is the commands whose flags are in scope
 	// here: a flag is usable from the point its own command is named
@@ -101,15 +96,16 @@ type Command struct {
 	// docs/adr/path-scoped-flag-names.md.
 	//
 	// Compile builds it top down while lowering, so nothing reading a
-	// compiled tree has to walk back up to reconstruct it. Like Parent,
-	// it is derivable from the tree's shape and is not marshaled.
+	// compiled tree has to walk back up to reconstruct it. It is
+	// derivable from the tree's shape and is not marshaled; the command
+	// that mounted this one is Ancestry's second to last entry.
 	Ancestry []*Command `json:"-"`
 
 	// Root is the command at the top of the tree this command belongs to,
 	// and is the command itself at the root. Whole-tree work -- validation,
 	// and restoring defaults before a parse -- starts here, so that calling
 	// Parse on a subcommand still governs the tree it belongs to, and is
-	// what requires it to be set. Like Parent, it is derivable from the
+	// what requires it to be set. Like Ancestry, it is derivable from the
 	// tree's shape and is not marshaled.
 	Root *Command `json:"-"`
 

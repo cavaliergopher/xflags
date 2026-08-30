@@ -7,7 +7,7 @@
 // fields a formatter or a parser cannot reach. Compiling a configuration
 // tree with (*xflags.Command).Compile lowers it to the type declared
 // here, the implementation type: the same information, plus resolution --
-// ancestry via Parent, a full name and resolved streams computed once
+// ancestry via Ancestry, a full name and resolved streams computed once
 // while lowering, a flag's default rendered as a string -- with every
 // field public, which is what lets a formatter, a marshaler and the
 // machine that reads a command line all walk one tree.

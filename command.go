@@ -157,7 +157,7 @@ func (c *Command) effectiveGroups() []*FlagGroup {
 // compiled ir.Command form and returns the node corresponding to c's
 // position within it. It is not limited to c: the tree is found by walking
 // to its root, so the returned node carries complete ancestry via
-// ir.Command.Parent as well as its own subcommands, and configuration
+// ir.Command.Ancestry as well as its own subcommands, and configuration
 // errors anywhere in the tree are reported -- including in commands
 // unrelated to c. This is what makes a compiled command correct: a
 // subcommand's usage line, inherited flags and environment variables are
@@ -198,7 +198,7 @@ func (c *Command) Compile() (*ir.Command, error) {
 }
 
 // lower builds the compiled ir.Command for c and, recursively, each of its
-// subcommands, setting parent as its Parent and copying across every
+// subcommands, copying across every
 // field the ir type keeps, including those inherited from an ancestor so
 // nothing about the compiled tree has to walk itself again: FullName,
 // computed from parent's own FullName plus c's name, and the three
@@ -239,7 +239,6 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 		Hidden:      c.hidden,
 		ForwardArgs: c.forwardArgs,
 		FullName:    fullName,
-		Parent:      parent,
 		Handler:     c.handlerFunc,
 		UsageFunc:   c.usageFunc,
 		Stdin:       os.Stdin,

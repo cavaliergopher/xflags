@@ -175,7 +175,6 @@ func lexSubTree() *ir.Command {
 		}},
 		Subcommands: []*ir.Command{sub},
 	}
-	sub.Parent = root
 	return root
 }
 
@@ -189,7 +188,6 @@ func lexHintTree() *ir.Command {
 		}},
 	}
 	root := &ir.Command{Name: "app", Subcommands: []*ir.Command{add}}
-	add.Parent = root
 	return root
 }
 

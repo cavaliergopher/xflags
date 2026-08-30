@@ -72,7 +72,7 @@ behavior field and asserts none of them survive a round trip through
 there, not silently in a program's machine-readable output.
 
 `ir` is also the fully resolved form of a tree, not just the public one.
-Compiling walks ancestry into `Parent`, renders a flag's default into a
+Compiling walks ancestry into `Ancestry`, renders a flag's default into a
 string, and flattens a command's own flag groups with every mounted
 group into one list -- and now, while lowering, computes each command's
 full name and resolves its input and output streams too, so nothing about

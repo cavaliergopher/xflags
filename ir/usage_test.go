@@ -31,22 +31,19 @@ func (w *blipWriter) Write(p []byte) (int, error) {
 // one form per positional arity.
 // compiled finishes a hand-built command the way Compile would, setting
 // the fields derived from the tree's shape: the ancestry from the root
-// down, and the root and parent it implies. A Command literal is not a
-// compiled node until these are set, and everything that reads a compiled
-// tree is entitled to assume they are.
+// down, and the root it begins with. A Command literal is not a compiled
+// node until these are set, and everything that reads a compiled tree is
+// entitled to assume they are.
 func compiled(c *Command, ancestors ...*Command) *Command {
 	c.Ancestry = append(append([]*Command{}, ancestors...), c)
 	c.Root = c.Ancestry[0]
-	if len(ancestors) > 0 {
-		c.Parent = ancestors[len(ancestors)-1]
-	}
 	return c
 }
 
 func TestPrintUsage(t *testing.T) {
 	// leaf inherits [OPTIONS] from its parent; FullName is set the way
 	// Compile would compute it, parent's FullName plus its own name, since
-	// printUsage now reads the field rather than walking Parent itself.
+	// printUsage reads the field rather than assembling it from ancestry.
 	leaf := &Command{Name: "leaf", FullName: "root leaf"}
 	root := compiled(&Command{
 		Name:        "root",

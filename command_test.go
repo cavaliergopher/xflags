@@ -463,8 +463,8 @@ func TestCompileRoot(t *testing.T) {
 	if got, want := node.Description, "Root description"; got != want {
 		t.Errorf("Description = %q, want %q", got, want)
 	}
-	if node.Parent != nil {
-		t.Errorf("Parent = %v, want nil", node.Parent)
+	if got, want := len(node.Ancestry), 1; got != want {
+		t.Errorf("len(Ancestry) = %d, want %d for a root", got, want)
 	}
 	if got, want := len(node.Subcommands), 1; got != want {
 		t.Fatalf("len(Subcommands) = %d, want %d", got, want)
@@ -472,8 +472,9 @@ func TestCompileRoot(t *testing.T) {
 	if got, want := node.Subcommands[0].Name, "sub"; got != want {
 		t.Errorf("Subcommands[0].Name = %q, want %q", got, want)
 	}
-	if got, want := node.Subcommands[0].Parent, node; got != want {
-		t.Errorf("Subcommands[0].Parent = %v, want %v", got, want)
+	subNode := node.Subcommands[0]
+	if got, want := subNode.Ancestry, []*ir.Command{node, subNode}; !slices.Equal(got, want) {
+		t.Errorf("Subcommands[0].Ancestry = %v, want %v", got, want)
 	}
 }
 
@@ -489,17 +490,18 @@ func TestCompileSubcommand(t *testing.T) {
 	if got, want := node.Name, "foo"; got != want {
 		t.Errorf("Name = %q, want %q", got, want)
 	}
-	if node.Parent == nil {
-		t.Fatal("Parent = nil, want root")
+	if got, want := len(node.Ancestry), 2; got != want {
+		t.Fatalf("len(Ancestry) = %d, want %d", got, want)
 	}
-	if got, want := node.Parent.Name, "root"; got != want {
-		t.Errorf("Parent.Name = %q, want %q", got, want)
+	root := node.Ancestry[0]
+	if got, want := root.Name, "root"; got != want {
+		t.Errorf("Ancestry[0].Name = %q, want %q", got, want)
 	}
-	if node.Parent.Parent != nil {
-		t.Errorf("Parent.Parent = %v, want nil", node.Parent.Parent)
+	if got, want := root, node.Root; got != want {
+		t.Errorf("Ancestry[0] = %v, want it to be Root %v", got, want)
 	}
 	var names []string
-	for _, c := range node.Parent.Subcommands {
+	for _, c := range root.Subcommands {
 		names = append(names, c.Name)
 	}
 	assertStrings(t, []string{"foo", "bar"}, names)
