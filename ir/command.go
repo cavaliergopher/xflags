@@ -8,14 +8,13 @@ import (
 // An Invocation is the result of parsing a command line. It records which
 // command the arguments named, what was left for its handler, and the
 // streams the handler should read and write.
+//
+// Where the invoked command sits in the program is Cmd's to answer:
+// Cmd.FullName names it from the root down, and Cmd.Ancestry is the
+// commands themselves.
 type Invocation struct {
 	// Cmd is the command the arguments named.
 	Cmd *Command
-
-	// Path names each command, starting from the one that was parsed --
-	// conventionally the program itself, named for os.Args[0] -- and ending
-	// with the command that was invoked.
-	Path []string
 
 	// Forwarded holds the arguments that followed a "--" terminator, which
 	// the parser did not interpret. It is empty unless the command opted in

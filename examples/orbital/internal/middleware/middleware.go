@@ -9,7 +9,6 @@ package middleware
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cavaliergopher/xflags"
@@ -28,7 +27,7 @@ func withAudit(actor *string, next xflags.HandlerFunc) xflags.HandlerFunc {
 		if *actor == "anonymous" {
 			return fmt.Errorf(
 				"%s: refusing to run as %q; pass --actor or set ORBITAL_ACTOR",
-				strings.Join(inv.Path, " "), *actor,
+				inv.Cmd.FullName, *actor,
 			)
 		}
 		return next(ctx, inv)
@@ -44,7 +43,7 @@ func withTiming(next xflags.HandlerFunc) xflags.HandlerFunc {
 		err := next(ctx, inv)
 		if telemetry.Flags.Trace {
 			fmt.Fprintf(inv.Stderr, "trace: %s took %s\n",
-				strings.Join(inv.Path, " "), time.Since(start))
+				inv.Cmd.FullName, time.Since(start))
 		}
 		return err
 	}

@@ -1162,7 +1162,7 @@ func TestInvocationPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertStrings(t, []string{"root", "branch", "leaf"}, inv.Path)
+	assertString(t, "root branch leaf", inv.Cmd.FullName)
 	if got, want := inv.Cmd.String(), leaf.String(); got != want {
 		t.Errorf("Cmd = %v, want %v", got, want)
 	}
@@ -1606,7 +1606,7 @@ func TestHandlerReceivesInvocation(t *testing.T) {
 	if got == nil {
 		t.Fatal("handler was not called")
 	}
-	assertStrings(t, []string{"myapp", "remote", "add"}, got.Path)
+	assertString(t, "myapp remote add", got.Cmd.FullName)
 	assertStrings(t, []string{"origin"}, got.Forwarded)
 	if want := add.String(); got.Cmd.String() != want {
 		t.Errorf("Cmd = %v, want %v", got.Cmd, want)
@@ -1861,7 +1861,7 @@ func ExampleInvocation() {
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			return Exitf(ExitCodeUsage,
 				"no remote named: try \"%s --help\"",
-				strings.Join(inv.Path, " "),
+				inv.Cmd.FullName,
 			)
 		})
 

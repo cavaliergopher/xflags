@@ -98,7 +98,7 @@ func apply(root *ir.Command, res lexResult) (*ir.Invocation, error) {
 	}
 
 	active := root
-	path := []*ir.Command{root}
+	scope := []*ir.Command{root}
 	counts := make(map[*ir.Flag]int)
 	var forwarded []string
 	for _, instr := range res.instructions[:limit] {
@@ -110,22 +110,22 @@ func apply(root *ir.Command, res lexResult) (*ir.Invocation, error) {
 			counts[instr.flag]++
 		case instDispatch:
 			active = instr.cmd
-			path = append(path, active)
+			scope = append(scope, active)
 		case instForward:
 			forwarded = instr.forwarded
 		}
 	}
 
 	if helpAt != -1 {
-		return invocationFor(active, path, forwarded, true), nil
+		return invocationFor(active, forwarded, true), nil
 	}
-	if err := applyEnvVars(path, counts); err != nil {
+	if err := applyEnvVars(scope, counts); err != nil {
 		return nil, err
 	}
-	if err := validateNArgs(active, path, counts); err != nil {
+	if err := validateNArgs(active, scope, counts); err != nil {
 		return nil, err
 	}
-	return invocationFor(active, path, forwarded, false), nil
+	return invocationFor(active, forwarded, false), nil
 }
 
 // setFlag sets f's value to token, wrapping a failure the same way it
@@ -139,14 +139,17 @@ func setFlag(active *ir.Command, f *ir.Flag, token string) error {
 	return nil
 }
 
-// applyEnvVars fills every flag along path from its environment variable,
+// applyEnvVars fills every flag in scope from its environment variable,
 // for whatever counts has no occurrence of yet, then counts it as seen so
 // validateNArgs sees it satisfied.
 //
-// path order, then group order, then declaration order within each command:
+// scope is the commands dispatched through, beginning at the one Parse was
+// called on rather than at the root: a flag an ancestor of that command
+// declares was never matchable, so it is not checked here either. Scope
+// order, then group order, then declaration order within each command:
 // this is deterministic.
-func applyEnvVars(path []*ir.Command, counts map[*ir.Flag]int) error {
-	for _, cmd := range path {
+func applyEnvVars(scope []*ir.Command, counts map[*ir.Flag]int) error {
+	for _, cmd := range scope {
 		for _, group := range cmd.FlagGroups {
 			for _, f := range group.Flags {
 				if f.EnvVar == "" || counts[f] > 0 {
@@ -166,13 +169,12 @@ func applyEnvVars(path []*ir.Command, counts map[*ir.Flag]int) error {
 	return nil
 }
 
-// validateNArgs verifies each flag along path was given as many times as it
-// requires. Every flag that became active along the descended path is
-// checked, so an ancestor's Required flag still binds when a subcommand is
-// invoked.
+// validateNArgs verifies each flag in scope was given as many times as it
+// requires. Every flag that became active along the descent is checked, so
+// an ancestor's Required flag still binds when a subcommand is invoked.
 //
 // active, the deepest command reached, is what every error here is
-// reported against, whichever command in path actually declared the
+// reported against, whichever command in scope actually declared the
 // offending flag -- the same command instructions were applied against
 // throughout, since checking counts is the last of the work apply does.
 //
@@ -181,8 +183,8 @@ func applyEnvVars(path []*ir.Command, counts map[*ir.Flag]int) error {
 // it. A flag leads the message only when a wrapped error follows, as in
 // "--ip: invalid IP: 256.0.0.1", where it scopes what comes after the
 // colon; see docs/adr/human-readable-errors.md.
-func validateNArgs(active *ir.Command, path []*ir.Command, counts map[*ir.Flag]int) error {
-	for _, cmd := range path {
+func validateNArgs(active *ir.Command, scope []*ir.Command, counts map[*ir.Flag]int) error {
+	for _, cmd := range scope {
 		for _, group := range cmd.FlagGroups {
 			for _, f := range group.Flags {
 				n := counts[f]
@@ -214,14 +216,9 @@ func validateNArgs(active *ir.Command, path []*ir.Command, counts map[*ir.Flag]i
 // invocationFor returns the Invocation apply reports for cmd having become
 // active, naming every command in path from the one Parse was called on to
 // cmd itself.
-func invocationFor(cmd *ir.Command, path []*ir.Command, forwarded []string, helpRequested bool) *ir.Invocation {
-	names := make([]string, len(path))
-	for i, c := range path {
-		names[i] = c.Name
-	}
+func invocationFor(cmd *ir.Command, forwarded []string, helpRequested bool) *ir.Invocation {
 	return &ir.Invocation{
 		Cmd:           cmd,
-		Path:          names,
 		Forwarded:     forwarded,
 		HelpRequested: helpRequested,
 		Stdin:         cmd.Stdin,

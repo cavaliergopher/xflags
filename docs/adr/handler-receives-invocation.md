@@ -64,8 +64,11 @@ parse result, which keeps the source type sealed.
 
 - Every handler in every program changes. The package is pre-v1 with no
   meaningful adoption, so no migration is offered.
-- `Invocation.Path` earns its place: it is now reachable from the one place
-  that wants it. It was very nearly cut for having no reachable consumer.
+- Naming the command that is running becomes reachable from the one place
+  that wants it, through `Invocation.Cmd`: `Cmd.FullName` reads as
+  "app remote add" and `Cmd.Ancestry` is the commands themselves. An
+  `Invocation.Path` holding the same names was tried and cut, since it
+  answered a question `Cmd` already answers.
 - Middleware (`func(HandlerFunc) HandlerFunc`) inherits the invocation for
   free, which is where a telemetry label naming the command belongs.
 - Handlers that ignore `inv` carry one unused parameter, as they carried an

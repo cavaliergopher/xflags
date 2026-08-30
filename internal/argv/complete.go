@@ -45,10 +45,9 @@ func Complete(cmd *ir.Command, args []string, word string) ([]string, ir.CompDir
 		return nil, ir.CompDefault
 	}
 
-	path := res.active.Ancestry
-	inv := invocationFor(res.active, path, forwarded, false)
+	inv := invocationFor(res.active, forwarded, false)
 
-	cands, dir := completeCandidates(res, path, inv, word)
+	cands, dir := completeCandidates(res, res.active.Ancestry, inv, word)
 	return finalizeCandidates(cands, word), dir
 }
 
@@ -56,14 +55,14 @@ func Complete(cmd *ir.Command, args []string, word string) ([]string, ir.CompDir
 // the cursor and returns its result, unfiltered; Complete filters,
 // deduplicates and sorts every rule's output the same way, so no rule does
 // it for itself.
-func completeCandidates(res lexResult, path []*ir.Command, inv *ir.Invocation, word string) ([]string, ir.CompDirective) {
+func completeCandidates(res lexResult, ancestry []*ir.Command, inv *ir.Invocation, word string) ([]string, ir.CompDirective) {
 	if res.awaitingValue != nil {
 		return completeValue(res.awaitingValue, inv, word)
 	}
 
 	if strings.HasPrefix(word, "-") && !res.optionsEnded {
 		if key, frag, ok := strings.Cut(word, "="); ok {
-			o, ok := optionTable(path)[key]
+			o, ok := optionTable(ancestry)[key]
 			if !ok {
 				return nil, ir.CompNoFileComp
 			}
@@ -74,7 +73,7 @@ func completeCandidates(res lexResult, path []*ir.Command, inv *ir.Invocation, w
 			}
 			return prefixed, dir
 		}
-		return offeredOptions(path, word), ir.CompNoFileComp
+		return offeredOptions(ancestry, word), ir.CompNoFileComp
 	}
 
 	active := res.active
@@ -101,13 +100,13 @@ func completeValue(f *ir.Flag, inv *ir.Invocation, word string) ([]string, ir.Co
 	return nil, ir.CompDefault
 }
 
-// optionTable returns every non-positional flag reachable along path,
+// optionTable returns every non-positional flag reachable along the ancestry,
 // keyed by every option they answer to, the same accumulation
 // lexer.enterCommand builds while lexing, so an option resolves here
 // exactly as it would resolve on the command line.
-func optionTable(path []*ir.Command) map[string]resolvedOption {
+func optionTable(ancestry []*ir.Command) map[string]resolvedOption {
 	table := make(map[string]resolvedOption)
-	for _, cmd := range path {
+	for _, cmd := range ancestry {
 		for _, group := range cmd.FlagGroups {
 			for _, f := range group.Flags {
 				resolvedOptionsInto(table, f)
@@ -118,7 +117,7 @@ func optionTable(path []*ir.Command) map[string]resolvedOption {
 }
 
 // offeredOptions returns the options offered for word: every option --
-// "--name" and "-s" -- of every flag along path that is neither positional
+// "--name" and "-s" -- of every flag along the ancestry that is neither positional
 // nor Hidden, plus "--help", which is never declared as an ordinary flag
 // but is always legal.
 //
@@ -128,10 +127,10 @@ func optionTable(path []*ir.Command) map[string]resolvedOption {
 // onward puts them in front of the user who is typing one. They match at
 // every point either way -- what a shell offers and what the command line
 // accepts are different questions.
-func offeredOptions(path []*ir.Command, word string) []string {
+func offeredOptions(ancestry []*ir.Command, word string) []string {
 	negating := strings.HasPrefix(word, negatedFragment)
 	var names []string
-	for _, cmd := range path {
+	for _, cmd := range ancestry {
 		for _, group := range cmd.FlagGroups {
 			for _, f := range group.Flags {
 				if f.Positional || f.Hidden {

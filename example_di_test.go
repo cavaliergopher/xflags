@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 )
 
 // DBClient is our main command with two subcommands.
@@ -38,13 +37,13 @@ func Wrap(fn func(ctx context.Context, inv *Invocation, db *sql.DB) error) Handl
 
 // Get is a custom handler for GetCommand
 func Get(ctx context.Context, inv *Invocation, db *sql.DB) error {
-	fmt.Fprintf(inv.Stdout, "%s: issued a get query\n", strings.Join(inv.Path, " "))
+	fmt.Fprintf(inv.Stdout, "%s: issued a get query\n", inv.Cmd.FullName)
 	return nil
 }
 
 // Delete is a custom handler for DeleteCommand
 func Delete(ctx context.Context, inv *Invocation, db *sql.DB) error {
-	fmt.Fprintf(inv.Stdout, "%s: issued a delete query\n", strings.Join(inv.Path, " "))
+	fmt.Fprintf(inv.Stdout, "%s: issued a delete query\n", inv.Cmd.FullName)
 	return nil
 }
 
