@@ -107,9 +107,12 @@ type Command struct {
 	// its subcommands: invoking it directly is a usage error.
 	Handler HandlerFunc `json:"-"`
 
-	// UsageFunc, if set, renders this command's help message in place of
-	// the default. The Usage method resolves it through ancestors before
-	// falling back to the default renderer, Usage.
+	// UsageFunc renders this command's help message in place of the
+	// default, and is inherited from the nearest ancestor that set one.
+	// Compile resolves it while lowering, so a command carries the
+	// renderer it will actually be printed with rather than one the Usage
+	// method has to go looking for; it is nil only when no command on the
+	// path set one, and Usage falls back to the default renderer.
 	UsageFunc UsageFunc `json:"-"`
 
 	// Stdin, Stdout and Stderr are the streams resolved for this command
@@ -141,9 +144,9 @@ func (c *Command) Validate() error {
 	return validateTree(c.Root)
 }
 
-// Usage prints a help message for c to w, using the nearest UsageFunc set
-// on c or one of its ancestors, or the default renderer, Usage, if none
-// set one.
+// Usage prints a help message for c to w, using c's UsageFunc, which
+// Compile resolved from the nearest ancestor that set one, or the default
+// renderer, Usage, when no command on the path did.
 func (c *Command) Usage(w io.Writer) error {
 	return writeUsage(c, w)
 }

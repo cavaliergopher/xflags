@@ -16,9 +16,6 @@ func writeUsage(c *Command, w io.Writer) error {
 	// TODO: Usage formatting is a function of the chosen argv vocabulary
 	// (POSIX/GNU, Go, Windows, etc.) so we'll need to break this API.
 	f := c.UsageFunc
-	for p := c; f == nil && p != nil; p = p.Parent {
-		f = p.UsageFunc
-	}
 	if f == nil {
 		f = Usage
 	}

@@ -201,7 +201,8 @@ func (c *Command) Compile() (*ir.Command, error) {
 // field the ir type keeps, including those inherited from an ancestor so
 // nothing about the compiled tree has to walk itself again: FullName,
 // computed from parent's own FullName plus c's name, and the three
-// streams, each taken from parent unless c overrides it. Inheritance
+// streams and the usage renderer, each taken from parent unless c
+// overrides it. Inheritance
 // reads the node being built rather than the source tree's parent links,
 // which are not to be trusted until Compile has checked them.
 //
@@ -248,6 +249,9 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 	if parent != nil {
 		node.Root = parent.Root
 		node.Stdin, node.Stdout, node.Stderr = parent.Stdin, parent.Stdout, parent.Stderr
+		if node.UsageFunc == nil {
+			node.UsageFunc = parent.UsageFunc
+		}
 	}
 	// Each stream resolves on its own, so redirecting one leaves the
 	// others inherited.

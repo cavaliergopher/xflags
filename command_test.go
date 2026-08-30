@@ -2032,3 +2032,67 @@ func TestDuplicateValueNameCollides(t *testing.T) {
 		t.Errorf("message = %q, want %q", got, want)
 	}
 }
+
+// TestUsageFuncIsInheritedAtCompileTime asserts that a command carries the
+// renderer it will be printed with, rather than the Usage method going
+// looking for one up the tree: a subcommand that sets none compiles with
+// its nearest ancestor's, and one that sets its own keeps it.
+func TestUsageFuncIsInheritedAtCompileTime(t *testing.T) {
+	rootFunc := func(w io.Writer, cmd *ir.Command) error {
+		_, err := io.WriteString(w, "root renderer\n")
+		return err
+	}
+	leafFunc := func(w io.Writer, cmd *ir.Command) error {
+		_, err := io.WriteString(w, "leaf renderer\n")
+		return err
+	}
+	own := NewCommand("own", "").UsageFunc(leafFunc)
+	inherits := NewCommand("inherits", "").Subcommands(
+		NewCommand("deep", ""),
+	)
+	node, err := NewCommand("app", "").UsageFunc(rootFunc).
+		Subcommands(own, inherits).Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range []struct {
+		path []string
+		want string
+	}{
+		{nil, "root renderer\n"},
+		{[]string{"own"}, "leaf renderer\n"},
+		{[]string{"inherits"}, "root renderer\n"},
+		{[]string{"inherits", "deep"}, "root renderer\n"}, // two levels up
+	} {
+		t.Run(strings.Join(append([]string{"app"}, tt.path...), " "), func(t *testing.T) {
+			cmd := node
+			for _, name := range tt.path {
+				for _, sub := range cmd.Subcommands {
+					if sub.Name == name {
+						cmd = sub
+					}
+				}
+			}
+			if cmd.UsageFunc == nil {
+				t.Fatal("UsageFunc was not resolved at compile time")
+			}
+			var buf strings.Builder
+			if err := cmd.Usage(&buf); err != nil {
+				t.Fatal(err)
+			}
+			if got := buf.String(); got != tt.want {
+				t.Errorf("Usage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	// A tree that sets none leaves it nil, so Usage falls back.
+	bare, err := NewCommand("bare", "").Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bare.UsageFunc != nil {
+		t.Error("UsageFunc = non-nil, want nil so Usage falls back to the default")
+	}
+}
