@@ -1,9 +1,12 @@
-package ir
+package argv
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/cavaliergopher/xflags/ir"
 )
 
 // lexStep is a comparable projection of one instruction, so a golden test
@@ -20,7 +23,7 @@ type lexStep struct {
 // flagKey returns how f would spell itself as a Flag.String() would: an
 // upper-cased name for a positional, otherwise its long or short option
 // spelling.
-func flagKey(f *Flag) string {
+func flagKey(f *ir.Flag) string {
 	if f.Positional {
 		return strings.ToUpper(f.Name)
 	}
@@ -48,6 +51,18 @@ func errMessages(errs []error) []string {
 		msgs[i] = humanMessage(err)
 	}
 	return msgs
+}
+
+// humanMessage renders an error the way a program reports it, preferring
+// String() over Error() so that a lex error reads as the sentence a user
+// sees rather than the "xflags: " tagged form. Both ir and the root
+// package keep their own unexported copy of this; the assertions below
+// compare against the sentence, so the test needs one too.
+func humanMessage(err error) string {
+	if s, ok := err.(fmt.Stringer); ok {
+		return s.String()
+	}
+	return err.Error()
 }
 
 func (s lexStep) equal(o lexStep) bool {
@@ -83,16 +98,16 @@ func assertLexErrs(t *testing.T, want, got []string) {
 // opt returns an option flag named the way Compile would name one,
 // keeping Name, Names and Forms consistent so that a hand-built fixture
 // matches on the command line exactly as a lowered flag does.
-func opt(names ...string) *Flag {
-	return &Flag{
-		Name:  CanonicalName(names),
+func opt(names ...string) *ir.Flag {
+	return &ir.Flag{
+		Name:  ir.CanonicalName(names),
 		Names: names,
 		Forms: FormsOf(names),
 	}
 }
 
 // valueOpt is opt for a flag that takes a value.
-func valueOpt(names ...string) *Flag {
+func valueOpt(names ...string) *ir.Flag {
 	f := opt(names...)
 	f.TakesValue = true
 	return f
@@ -103,12 +118,12 @@ func valueOpt(names ...string) *Flag {
 // string flag with a long and short spelling (name), a value-taking short
 // (foxtrot), and an int (count). It declares no positionals or
 // subcommands, so an operand is always "extra".
-func lexOptTree() *Command {
-	return &Command{
+func lexOptTree() *ir.Command {
+	return &ir.Command{
 		Name: "app",
-		FlagGroups: []*FlagGroup{{
+		FlagGroups: []*ir.FlagGroup{{
 			Name: "options",
-			Flags: []*Flag{
+			Flags: []*ir.Flag{
 				opt("alpha", "a"),
 				opt("bravo", "b"),
 				opt("verbose", "v"),
@@ -122,12 +137,12 @@ func lexOptTree() *Command {
 
 // lexPosTree returns a command with two positionals: BAZ, bounded to
 // exactly two, and QUX, unbounded.
-func lexPosTree() *Command {
-	return &Command{
+func lexPosTree() *ir.Command {
+	return &ir.Command{
 		Name: "app",
-		FlagGroups: []*FlagGroup{{
+		FlagGroups: []*ir.FlagGroup{{
 			Name: "options",
-			Flags: []*Flag{
+			Flags: []*ir.Flag{
 				{Name: "baz", Positional: true, TakesValue: true, MinCount: 2, MaxCount: 2},
 				{Name: "qux", Positional: true, TakesValue: true},
 			},
@@ -138,19 +153,19 @@ func lexPosTree() *Command {
 // lexSubTree returns a root command with its own "name" flag and one
 // subcommand, "sub", with its own "sub-name" flag -- for asserting descent
 // and that a root flag stays matchable once the parser has descended.
-func lexSubTree() *Command {
-	sub := &Command{
+func lexSubTree() *ir.Command {
+	sub := &ir.Command{
 		Name: "sub",
-		FlagGroups: []*FlagGroup{{
-			Flags: []*Flag{valueOpt("sub-name", "s")},
+		FlagGroups: []*ir.FlagGroup{{
+			Flags: []*ir.Flag{valueOpt("sub-name", "s")},
 		}},
 	}
-	root := &Command{
+	root := &ir.Command{
 		Name: "app",
-		FlagGroups: []*FlagGroup{{
-			Flags: []*Flag{valueOpt("name")},
+		FlagGroups: []*ir.FlagGroup{{
+			Flags: []*ir.Flag{valueOpt("name")},
 		}},
-		Subcommands: []*Command{sub},
+		Subcommands: []*ir.Command{sub},
 	}
 	sub.Parent = root
 	return root
@@ -158,14 +173,14 @@ func lexSubTree() *Command {
 
 // lexHintTree returns a root command with one subcommand, "add", declaring
 // a flag the root does not -- for asserting the unrecognized-option hint.
-func lexHintTree() *Command {
-	add := &Command{
+func lexHintTree() *ir.Command {
+	add := &ir.Command{
 		Name: "add",
-		FlagGroups: []*FlagGroup{{
-			Flags: []*Flag{opt("tags", "t")},
+		FlagGroups: []*ir.FlagGroup{{
+			Flags: []*ir.Flag{opt("tags", "t")},
 		}},
 	}
-	root := &Command{Name: "app", Subcommands: []*Command{add}}
+	root := &ir.Command{Name: "app", Subcommands: []*ir.Command{add}}
 	add.Parent = root
 	return root
 }
@@ -177,7 +192,7 @@ func lexHintTree() *Command {
 func TestLex(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
-		build func() *Command
+		build func() *ir.Command
 		args  []string
 		want  []lexStep
 		errs  []string
@@ -266,7 +281,7 @@ func TestLex(t *testing.T) {
 		},
 		{
 			"TerminatorForwardsInsteadWhenOptedIn",
-			func() *Command {
+			func() *ir.Command {
 				c := lexOptTree()
 				c.ForwardArgs = true
 				return c

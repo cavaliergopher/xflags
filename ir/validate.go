@@ -1,7 +1,6 @@
 package ir
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"unicode"
@@ -9,57 +8,31 @@ import (
 )
 
 // validateTree implements (*Command).Validate: it checks c and,
-// recursively, each of its subcommands, joining every error found. claimed
-// maps each option spelling declared by c's ancestors to the command that
-// declared it: a name may not repeat anywhere along an ancestor-descendant
-// chain, and the check runs here because a command cannot know its
-// ancestors until the whole tree is in view. See
-// docs/adr/path-scoped-flag-names.md.
-func validateTree(c *Command, claimed map[string]*Command) error {
+// recursively, each of its subcommands, joining every error found.
+//
+// Every rule here reads a command or a flag on its own terms, so the
+// recursion carries nothing down it. The rules that read a spelling --
+// whether two flags collide on one, and whether one is reserved for help
+// -- live in internal/argv, which owns how a name is spelled.
+func validateTree(c *Command) error {
 	var errs []error
-	if err := validateSelf(c, claimed); err != nil {
+	if err := validateSelf(c); err != nil {
 		errs = append(errs, err)
 	}
-	if len(c.Subcommands) == 0 {
-		return JoinErrors(errs)
-	}
-	// Descendants see c's names claimed in a copy, so sibling subtrees may
-	// still reuse names freely.
-	claims := make(map[string]*Command, len(claimed))
-	for key, cmd := range claimed {
-		claims[key] = cmd
-	}
-	for _, group := range c.FlagGroups {
-		if group.Mounted {
-			// A mounted group's flags are the registering library's, not
-			// this command's, and a command is often mounted somewhere its
-			// author did not choose. Claiming them would make a subcommand
-			// that mounts the same set as an ancestor -- the ordinary way
-			// two teams both reach CommandLine -- a configuration error.
-			continue
-		}
-		for _, flag := range group.Flags {
-			for _, form := range claimedForms(flag) {
-				claims[form] = c
-			}
-		}
-	}
 	for _, sub := range c.Subcommands {
-		if err := validateTree(sub, claims); err != nil {
+		if err := validateTree(sub); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return JoinErrors(errs)
 }
 
-// validateSelf checks c's own flags for configuration errors: flag syntax,
-// names already declared -- within c, or by the ancestors whose claims are
-// passed in -- and positional/subcommand conflicts. It does not descend
-// into subcommands.
-func validateSelf(c *Command, claimed map[string]*Command) error {
+// validateSelf checks c's own flags for configuration errors: flag syntax
+// and positional/subcommand conflicts. It does not descend into
+// subcommands.
+func validateSelf(c *Command) error {
 	var errs []error
 
-	flagsByName := make(map[string]*Flag)
 	hasUnboundedPositional := false
 	for _, group := range c.FlagGroups {
 		for _, flag := range group.Flags {
@@ -77,65 +50,9 @@ func validateSelf(c *Command, claimed map[string]*Command) error {
 					hasUnboundedPositional = true
 				}
 			}
-			// A collision is reported by the colliding form rather than by
-			// the name behind it: it is a fact about a spelling, so the
-			// spelling is what the reader needs.
-			for _, key := range claimedForms(flag) {
-				if _, ok := flagsByName[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
-						alreadyDeclaredMessage(flag, key)))
-				}
-				if ancestor, ok := claimed[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
-						alreadyDeclaredByAncestorMessage(flag, key, ancestor.Name)))
-				}
-				flagsByName[key] = flag
-			}
 		}
 	}
 	return JoinErrors(errs)
-}
-
-// alreadyDeclaredMessage reports a name key colliding with one already
-// declared on the same command. A positional flag names itself, since key
-// is a synthetic "--"/"-" spelling it never appears with on the command
-// line; an option is named by that spelling.
-func alreadyDeclaredMessage(flag *Flag, key string) string {
-	if flag.Positional {
-		return fmt.Sprintf("operand already declared: %s", flag)
-	}
-	return fmt.Sprintf("flag already declared: %s", key)
-}
-
-// alreadyDeclaredByAncestorMessage is alreadyDeclaredMessage's counterpart
-// for a name an ancestor, named by ancestor, already claimed.
-func alreadyDeclaredByAncestorMessage(flag *Flag, key, ancestor string) string {
-	if flag.Positional {
-		return fmt.Sprintf("operand already declared by ancestor %q: %s", ancestor, flag)
-	}
-	return fmt.Sprintf("flag already declared by ancestor %q: %s", ancestor, key)
-}
-
-// claimedForms returns the spellings f claims in the name space that
-// validation checks for collisions. An option claims each of its forms; a
-// positional argument has none, so it claims its canonical name spelled as
-// an option, since a name means one flag along a command path whether or
-// not it is spelled with dashes. See
-// docs/adr/path-scoped-flag-names.md.
-func claimedForms(f *Flag) []string {
-	if f.Positional {
-		if f.Name == "" {
-			return nil
-		}
-		return []string{FormOf(f.Name)}
-	}
-	forms := make([]string, 0, len(f.Forms))
-	for _, form := range f.Forms {
-		if form != "" {
-			forms = append(forms, form)
-		}
-	}
-	return forms
 }
 
 // validateFlag implements the flag half of (*Command).Validate: it verifies
@@ -177,11 +94,6 @@ func validateFlag(f *Flag) error {
 		// guideline 3 confines that to one alphanumeric character.
 		if utf8.RuneCountInString(name) == 1 && !isShortName(name) {
 			fail("short name must be one character from [A-Za-z0-9]: %q", name)
-		}
-		// The lexer matches -h and --help before the option table, so a
-		// flag claiming either spelling would silently never fire.
-		if form := FormOf(name); form == "-h" || form == "--help" {
-			fail("flag name is reserved for help: %s", form)
 		}
 	}
 	if f.Value == nil {

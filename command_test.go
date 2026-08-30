@@ -825,8 +825,12 @@ func TestValidateCollectsAllErrors(t *testing.T) {
 	if got, want := code, 2; got != want {
 		t.Errorf("exit code = %d, want %d", got, want)
 	}
-	want := "Program error: test: flag already declared: --foo\n" +
-		"Program error: --bar: short name must be one character from [A-Za-z0-9]: \"!\"\n"
+	// Model errors precede spelling errors: Compile runs ir's validation,
+	// which reads each flag on its own terms, before argv's, which reads
+	// the spellings they render to. Order within a batch is not part of
+	// the contract; that every error appears exactly once is.
+	want := "Program error: --bar: short name must be one character from [A-Za-z0-9]: \"!\"\n" +
+		"Program error: test: flag already declared: --foo\n"
 	if got := stderr; got != want {
 		t.Errorf("stderr = %q, want %q", got, want)
 	}

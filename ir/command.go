@@ -46,8 +46,8 @@ type Invocation struct {
 // A HandlerFunc handles the invocation of a command specified by command
 // line arguments.
 //
-// ctx is the context given to Dispatch, so a handler that does anything
-// cancelable should honor it.
+// ctx is the context given to (*xflags.Command).Dispatch, so a handler
+// that does anything cancelable should honor it.
 //
 // inv describes the invocation: the command that was named, the path it was
 // reached by, any arguments forwarded past a "--" terminator, and the
@@ -141,81 +141,17 @@ func (c *Command) String() string { return c.Name }
 // malformed tree surfaces its errors in a batch, not one per run.
 //
 // Validation always covers the whole tree, from Root down, wherever in the
-// tree it is called: a name may not repeat along an ancestor-descendant
-// chain, which no single command can see for itself. A Command produced by
-// (*xflags.Command).Compile is already validated.
+// tree it is called. It checks each command and flag on its own terms:
+// whether two flags would answer to the same spelling is settled where
+// spelling is, so a tree that passes here may still be rejected by
+// (*xflags.Command).Compile, which runs both. A Command produced by
+// Compile is already validated.
 func (c *Command) Validate() error {
-	return validateTree(c.rootOrSelf(), nil)
+	return validateTree(c.rootOrSelf())
 }
 
 // WriteUsage prints a help message for c to w, using the nearest
 // FormatFunc set on c or one of its ancestors, or Format if none set one.
 func (c *Command) WriteUsage(w io.Writer) error {
 	return writeUsage(c, w)
-}
-
-// Parse parses the given set of command line arguments and stores the
-// value of each argument in each flag's target. The rules for each flag
-// are checked and any errors are returned.
-//
-// Parse resets every flag reachable from c to its default before reading
-// any arguments, so parsing the same tree twice yields the same result.
-// It does not validate the tree; a Command produced by
-// (*xflags.Command).Compile is already validated, and one built by hand
-// should be validated with Validate first.
-//
-// The returned Invocation names this command, or one of its subcommands if
-// the arguments specified one.
-//
-// If -h or --help are specified, parsing stops there and the returned
-// Invocation has HelpRequested set. That is not an error: it is for the
-// caller to report the command's usage.
-func (c *Command) Parse(args []string) (*Invocation, error) {
-	if err := applyDefaults(c.rootOrSelf()); err != nil {
-		return nil, err
-	}
-	return apply(c, lex(c, args))
-}
-
-// Dispatch parses the given set of command line arguments and calls the
-// handler for the command or subcommand specified by the arguments. The
-// handler's error, or the error that stopped the command line from being
-// parsed, is returned raw: Dispatch prints no error text.
-//
-// If -h or --help are specified, no handler runs: usage information is
-// printed to the command's stdout and Dispatch returns nil, or the error
-// that kept the usage message from being written.
-//
-// A command invoked with no handler returns an *ArgumentError, as for any
-// other wrong command line.
-func (c *Command) Dispatch(ctx context.Context, args []string) error {
-	inv, err := c.Parse(args)
-	if err != nil {
-		return err
-	}
-	if inv.HelpRequested {
-		return inv.Cmd.WriteUsage(inv.Stdout)
-	}
-	if inv.Cmd.Handler == nil {
-		// The command exists only to group its subcommands, so naming it
-		// alone is a usage error rather than a request for help.
-		return newArgumentErrorf(nil, inv.Cmd, nil, "", "missing subcommand")
-	}
-	return inv.Cmd.Handler(ctx, inv)
-}
-
-// Complete resolves shell completion candidates for a command line that is
-// still being typed. args is the command line so far, excluding the
-// program name and the word currently under the cursor; word is that
-// fragment, possibly empty.
-//
-// Complete is best-effort: a broken or half-typed command line still
-// yields whatever can be offered for the position the cursor is in --
-// required flags need not be present, and an unrecognized token earlier on
-// the line does not stop completion at the position after it. It calls
-// Set on every flag named earlier in args, since a value's CompleteFunc
-// may need to see them, so it must run in a throwaway process built for
-// completion and never beside a program's live state.
-func (c *Command) Complete(args []string, word string) ([]string, CompDirective) {
-	return complete(c, args, word)
 }

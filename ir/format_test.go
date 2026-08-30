@@ -81,7 +81,7 @@ func TestPrintUsage(t *testing.T) {
 				Name:     "test",
 				FullName: "test",
 				FlagGroups: []*FlagGroup{{Flags: []*Flag{
-					{Name: "arg", Positional: true, MinCount: 0, MaxCount: 1},
+					{Name: "arg", ValueName: "ARG", Positional: true, MinCount: 0, MaxCount: 1},
 				}}},
 			},
 			want: "Usage: test [ARG]\n",
@@ -92,7 +92,7 @@ func TestPrintUsage(t *testing.T) {
 				Name:     "test",
 				FullName: "test",
 				FlagGroups: []*FlagGroup{{Flags: []*Flag{
-					{Name: "arg", Positional: true, MinCount: 0, MaxCount: 0},
+					{Name: "arg", ValueName: "ARG", Positional: true, MinCount: 0, MaxCount: 0},
 				}}},
 			},
 			want: "Usage: test [ARG...]\n",
@@ -103,7 +103,7 @@ func TestPrintUsage(t *testing.T) {
 				Name:     "test",
 				FullName: "test",
 				FlagGroups: []*FlagGroup{{Flags: []*Flag{
-					{Name: "arg", Positional: true, MinCount: 1, MaxCount: 1},
+					{Name: "arg", ValueName: "ARG", Positional: true, MinCount: 1, MaxCount: 1},
 				}}},
 			},
 			want: "Usage: test ARG\n",
@@ -114,7 +114,7 @@ func TestPrintUsage(t *testing.T) {
 				Name:     "test",
 				FullName: "test",
 				FlagGroups: []*FlagGroup{{Flags: []*Flag{
-					{Name: "arg", Positional: true, MinCount: 1, MaxCount: 0},
+					{Name: "arg", ValueName: "ARG", Positional: true, MinCount: 1, MaxCount: 0},
 				}}},
 			},
 			want: "Usage: test ARG...\n",
@@ -143,8 +143,8 @@ func TestDetailPositionalsReportsBlip(t *testing.T) {
 	cmd := &Command{
 		Name: "test",
 		FlagGroups: []*FlagGroup{{Flags: []*Flag{
-			{Name: "a", Positional: true},
-			{Name: "b", Positional: true},
+			{Name: "a", ValueName: "A", Positional: true},
+			{Name: "b", ValueName: "B", Positional: true},
 		}}},
 	}
 	// The header line succeeds; the first flag's row is where the writer

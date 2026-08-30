@@ -356,6 +356,70 @@ func TestCompilePositional(t *testing.T) {
 	}
 }
 
+// TestCompileValueName asserts what a flag's value is called: the flag's
+// own name by default, the override where one was given, and nothing at
+// all for a flag that takes no value.
+func TestCompileValueName(t *testing.T) {
+	var s, o, forced string
+	var b bool
+	var tags []string
+	cmd := NewCommand("test", "").Flags(
+		String(&s, "name", "", "usage"),
+		String(&o, "output", "", "usage").ValueName("path"),
+		Bool(&b, "verbose", false, "usage"),
+		String(&forced, "log-level", "", "usage"),
+		Strings(&tags, "tags", nil, "usage").ValueName("tag"),
+	)
+	node, err := cmd.Compile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for i, want := range []string{"NAME", "PATH", "", "LOG_LEVEL", "TAG"} {
+		if got := node.FlagGroups[0].Flags[i].ValueName; got != want {
+			t.Errorf("Flags[%d].ValueName = %q, want %q", i, got, want)
+		}
+	}
+}
+
+// TestPositionalIsShownByItsValueName asserts that a positional argument,
+// having no spelling of its own, is shown by its value name wherever a
+// flag is named -- and that the name is displayed as a synopsis shows
+// one, upper-cased with dashes as underscores.
+func TestPositionalIsShownByItsValueName(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		flag *Flag
+		want string
+	}{
+		{"FromFlagName", String(new(string), "src", "", "usage").Positional(), "SRC"},
+		{"Overridden", String(new(string), "src", "", "usage").Positional().ValueName("path"), "PATH"},
+		{"DashesBecomeUnderscores", String(new(string), "log-level", "", "usage").Positional(), "LOG_LEVEL"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := NewCommand("test", "").Flags(tt.flag.Required())
+			node, err := cmd.Compile()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := node.FlagGroups[0].Flags[0].String(); got != tt.want {
+				t.Errorf("String() = %q, want %q", got, tt.want)
+			}
+			var sb strings.Builder
+			if err := node.WriteUsage(&sb); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if want := "Usage: test " + tt.want + "\n"; !strings.HasPrefix(sb.String(), want) {
+				t.Errorf("usage = %q, want prefix %q", sb.String(), want)
+			}
+			_, err = cmd.Parse(nil)
+			if want := "missing required argument: " + tt.want; err == nil ||
+				!strings.Contains(err.Error(), want) {
+				t.Errorf("error = %v, want one containing %q", err, want)
+			}
+		})
+	}
+}
+
 // TestCanonicalNameCoalesces asserts that the name a flag is known by is
 // the first it declares that is not empty, so a flag declaring only a
 // short name still reports itself by one.

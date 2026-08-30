@@ -37,12 +37,20 @@ migration is documented, because it is the one place the resemblance
 misleads.
 
 Other dialects are deferred, not refused. Nothing in the model names a
-POSIX category: a flag holds a list of names, and `ir.FormOf` is the one
-place a name becomes a command line spelling, from the shape of the name
-rather than the slot it was declared in. Everything that matches, prints or
-completes a flag reads the spellings it produced, in `ir.Flag.Forms`, so a
-second dialect replaces the speller and the matcher and nothing else. The
-design for that seam is in `wip/lexer.md`; none of it is built.
+POSIX category: a flag holds a list of names, and `internal/argv.FormOf`
+is the one place a name becomes a command line spelling, from the shape of
+the name rather than the slot it was declared in. Everything that matches,
+prints or completes a flag reads the spellings it produced, in
+`ir.Flag.Forms` and `ir.Flag.Metavar`, so a second dialect replaces the
+speller and the matcher and nothing else. The design for that seam is in
+`wip/lexer.md`; none of it is built.
+
+The separation is structural rather than conventional. `internal/argv`
+holds spelling, matching and everything that reads a command line;
+`ir` holds what the program means and imports nothing of it, so a
+dialect's opinion cannot leak into the compiled tree even by accident.
+Help *layout* is not spelling and stays in `ir`: a dialect changes what a
+flag is called, not which sections a help message has.
 
 ## Consequences
 

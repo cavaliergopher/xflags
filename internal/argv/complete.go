@@ -1,44 +1,29 @@
-package ir
+package argv
 
 import (
 	"slices"
 	"strings"
+
+	"github.com/cavaliergopher/xflags/ir"
 )
 
-// CompDirective tells a shell how to treat the candidates a CompleteFunc
-// returns.
-type CompDirective int
-
-const (
-	// CompDefault lets the shell fall back to its own filename completion
-	// when the candidates given do not satisfy it, such as when there are
-	// none.
-	CompDefault CompDirective = iota
-
-	// CompNoFileComp tells the shell not to fall back to filename
-	// completion: the candidates given, even if there are none, are the
-	// whole answer.
-	CompNoFileComp
-)
-
-// CompleteFunc completes a flag's value for a shell. inv is the invocation
-// parsed so far, and word is the fragment under the cursor, which may be
-// empty.
+// Complete resolves shell completion candidates for a command line that is
+// still being typed against the compiled command cmd. args is the command
+// line so far, excluding the program name and the word currently under the
+// cursor; word is that fragment, possibly empty.
 //
-// inv is given because what completes a value often depends on flags
-// already given -- git checkout completing a ref depends on which
-// repository -r named, for instance -- and not on the word alone. Flags
-// named earlier on the command line are set on inv's command by the time
-// CompleteFunc is called; flags named later are not, since completion has
-// not read that far.
-type CompleteFunc func(inv *Invocation, word string) ([]string, CompDirective)
-
-// complete implements (*Command).Complete.
-func complete(c *Command, args []string, word string) ([]string, CompDirective) {
-	if err := applyDefaults(c.rootOrSelf()); err != nil {
-		return nil, CompNoFileComp
+// Complete is best-effort: a broken or half-typed command line still
+// yields whatever can be offered for the position the cursor is in --
+// required flags need not be present, and an unrecognized token earlier on
+// the line does not stop completion at the position after it. It calls
+// Set on every flag named earlier in args, since a value's CompleteFunc
+// may need to see them, so it must run in a throwaway process built for
+// completion and never beside a program's live state.
+func Complete(cmd *ir.Command, args []string, word string) ([]string, ir.CompDirective) {
+	if err := applyDefaults(rootOf(cmd)); err != nil {
+		return nil, ir.CompNoFileComp
 	}
-	res := lex(c, args)
+	res := lex(cmd, args)
 
 	var forwarded []string
 	var forwardedArgs bool
@@ -57,7 +42,7 @@ func complete(c *Command, args []string, word string) ([]string, CompDirective) 
 		// Once argv has crossed a ForwardArgs terminator, the rest belongs
 		// to whatever the command forwards to, not to this tree -- nothing
 		// here can say what completes it.
-		return nil, CompDefault
+		return nil, ir.CompDefault
 	}
 
 	path := ancestorPath(res.active)
@@ -69,8 +54,8 @@ func complete(c *Command, args []string, word string) ([]string, CompDirective) 
 
 // ancestorPath returns active and every ancestor of it, from the root
 // down.
-func ancestorPath(active *Command) []*Command {
-	var path []*Command
+func ancestorPath(active *ir.Command) []*ir.Command {
+	var path []*ir.Command
 	for c := active; c != nil; c = c.Parent {
 		path = append(path, c)
 	}
@@ -82,7 +67,7 @@ func ancestorPath(active *Command) []*Command {
 // the cursor and returns its result, unfiltered; Complete filters,
 // deduplicates and sorts every rule's output the same way, so no rule does
 // it for itself.
-func completeCandidates(res lexResult, path []*Command, inv *Invocation, word string) ([]string, CompDirective) {
+func completeCandidates(res lexResult, path []*ir.Command, inv *ir.Invocation, word string) ([]string, ir.CompDirective) {
 	if res.awaitingValue != nil {
 		return completeValue(res.awaitingValue, inv, word)
 	}
@@ -91,7 +76,7 @@ func completeCandidates(res lexResult, path []*Command, inv *Invocation, word st
 		if key, frag, ok := strings.Cut(word, "="); ok {
 			f := optionTable(path)[key]
 			if f == nil {
-				return nil, CompNoFileComp
+				return nil, ir.CompNoFileComp
 			}
 			cands, dir := completeValue(f, inv, frag)
 			prefixed := make([]string, len(cands))
@@ -100,39 +85,39 @@ func completeCandidates(res lexResult, path []*Command, inv *Invocation, word st
 			}
 			return prefixed, dir
 		}
-		return flagForms(path), CompNoFileComp
+		return flagForms(path), ir.CompNoFileComp
 	}
 
 	active := res.active
 	if len(active.Subcommands) > 0 {
-		return subcommandNames(active), CompNoFileComp
+		return subcommandNames(active), ir.CompNoFileComp
 	}
 	if res.openPositional != nil {
 		return completeValue(res.openPositional, inv, word)
 	}
-	return nil, CompDefault
+	return nil, ir.CompDefault
 }
 
 // completeValue resolves f's own value candidates: its Choices if it
 // declared any, since an enumerable list always wins, otherwise its
 // CompleteFunc if it declared one, otherwise no candidates with the shell
 // left free to fall back to filename completion.
-func completeValue(f *Flag, inv *Invocation, word string) ([]string, CompDirective) {
+func completeValue(f *ir.Flag, inv *ir.Invocation, word string) ([]string, ir.CompDirective) {
 	if len(f.Choices) > 0 {
-		return f.Choices, CompNoFileComp
+		return f.Choices, ir.CompNoFileComp
 	}
 	if f.CompleteFunc != nil {
 		return f.CompleteFunc(inv, word)
 	}
-	return nil, CompDefault
+	return nil, ir.CompDefault
 }
 
 // optionTable returns every non-positional flag reachable along path,
 // keyed by its long and short spellings -- "--name" and "-s" -- the same
 // accumulation lexer.enterCommand builds while lexing, so a key resolves
 // here exactly as it would resolve on the command line.
-func optionTable(path []*Command) map[string]*Flag {
-	table := make(map[string]*Flag)
+func optionTable(path []*ir.Command) map[string]*ir.Flag {
+	table := make(map[string]*ir.Flag)
 	for _, cmd := range path {
 		for _, group := range cmd.FlagGroups {
 			for _, f := range group.Flags {
@@ -154,7 +139,7 @@ func optionTable(path []*Command) map[string]*Flag {
 // flagForms returns every form -- "--name" and "-s" -- of every flag along
 // path that is neither positional nor Hidden, plus "--help", which is
 // never declared as an ordinary flag but is always legal.
-func flagForms(path []*Command) []string {
+func flagForms(path []*ir.Command) []string {
 	var forms []string
 	for _, cmd := range path {
 		for _, group := range cmd.FlagGroups {
@@ -171,12 +156,12 @@ func flagForms(path []*Command) []string {
 			}
 		}
 	}
-	return append(forms, "--help")
+	return append(forms, helpLongForm)
 }
 
 // subcommandNames returns the name of every subcommand of active that is
 // not Hidden.
-func subcommandNames(active *Command) []string {
+func subcommandNames(active *ir.Command) []string {
 	var names []string
 	for _, sub := range active.Subcommands {
 		if sub.Hidden {

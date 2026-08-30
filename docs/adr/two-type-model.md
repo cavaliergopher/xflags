@@ -52,6 +52,15 @@ formatting, completion, marshaling -- all consume. The types keep their
 plain names and take the qualifier for disambiguation, as
 `ast.File` does against `types.Package`: `ir.Command` beside `Command`.
 
+Those later passes do not all live in `ir`. The ones that read a command
+line -- lexing, applying, completion, and the spelling of options they
+share -- are in `internal/argv`, which imports `ir`; `ir` holds no
+execution and cannot import back. Two compilations were sharing one
+package, and the vocabulary said so: we `Compile()` a tree and then
+`lex()` against it, where a compiler lexes first and produces an IR last.
+`ir` is what the program means; `argv` is the machine that reads a
+command line against it.
+
 Every field on an `ir` type is exported. The handful that carry behavior
 -- `Command.Handler`, `.FormatFunc` and its three streams, `Flag.Value`
 and `.ValidateFunc` -- are tagged `json:"-"` instead of staying
@@ -101,7 +110,13 @@ loss: completion evaluates a broken command line and must apply nothing.
 Help rendering moves into `ir`. The earlier reasoning that kept it in the
 root package -- that `desc` earns its place by being data only, so
 admitting one consumer invites all of them -- lapses with the premise it
-rested on.
+rested on. Rendering reads the spellings `argv` put on the compiled flag;
+it does not construct them.
+
+Every `ir` field being public is what later made `internal/argv`
+possible: a sibling package lexes and applies over the compiled tree with
+no accessors added for it. The unexported design would have blocked that
+outright.
 
 Two imports appear where one was enough, for the advanced consumer only.
 That is the cost deliberately accepted for keeping the root package's

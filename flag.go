@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cavaliergopher/xflags/internal/argv"
 	"github.com/cavaliergopher/xflags/ir"
 )
 
@@ -37,6 +38,10 @@ type Flag struct {
 	names    []string
 	usage    string
 	defValue string
+
+	// valueName overrides the name shown for the flag's value; empty
+	// takes the flag's canonical name instead. See Flag.ValueName.
+	valueName string
 
 	// hasDefault records that a typed constructor captured defValue from a
 	// live Value, so Parse may re-apply it. It stays false for Var and for
@@ -206,17 +211,9 @@ func Uint64(p *uint64, name string, value uint64, usage string) *Flag {
 	return c
 }
 
-func (c *Flag) String() string {
-	name := ir.CanonicalName(c.names)
-	switch {
-	case name == "":
-		return "unknown"
-	case c.positional:
-		return strings.ToUpper(name)
-	default:
-		return ir.FormOf(name)
-	}
-}
+// String returns how the flag is shown to a reader, which is what it
+// compiles to: see (*ir.Flag).String.
+func (c *Flag) String() string { return c.lower().String() }
 
 // ShowDefault specifies that the default value of this flag should be shown
 // in the help message.
@@ -247,6 +244,27 @@ func (c *Flag) ShowDefault() *Flag {
 // printed elsewhere.
 func (c *Flag) Aliases(names ...string) *Flag {
 	c.names = append(c.names, names...)
+	return c
+}
+
+// ValueName names the value the flag takes, which stands in for it
+// wherever the flag is shown to a reader: the usage line, the help
+// message, and any error naming the flag. A positional argument is shown
+// by this alone, having no spelling of its own, and an option shows it
+// beside its names.
+//
+// The flag's own name is used when this is not called, so a flag needs it
+// only where that name reads poorly for the value:
+//
+//	Strings(&tags, "tags", nil, usage).Positional().ValueName("tag")
+//
+// Give the name alone, undecorated. How it is written for a reader
+// follows the command line conventions this package speaks, which write
+// "tag" as TAG, the same way they decide a name is spelled "--tag". A
+// flag that takes no value, such as a boolean, has nothing to name and
+// ignores this.
+func (c *Flag) ValueName(name string) *Flag {
+	c.valueName = name
 	return c
 }
 
@@ -337,17 +355,31 @@ func (c *Flag) Complete(fn ir.CompleteFunc) *Flag {
 // Compile runs over the whole lowered tree.
 func (c *Flag) lower() *ir.Flag {
 	// A positional argument is named rather than spelled, so it compiles
-	// with no forms. Validation still spells its name to check for
-	// collisions: a name means one flag along a command path whether or
-	// not it is spelled with dashes.
+	// with no forms and is shown by its value name alone. Validation
+	// still spells its name to check for collisions: a name means one
+	// flag along a command path whether or not it is spelled with dashes.
+	name := ir.CanonicalName(c.names)
 	var forms []string
 	if !c.positional {
-		forms = ir.FormsOf(c.names)
+		forms = argv.FormsOf(c.names)
+	}
+	// Only a flag that takes a value has one to name, and a value name
+	// defaults to the flag's own name: --count takes a COUNT until its
+	// author says otherwise.
+	takesValue := c.positional || !isBoolValue(c.value)
+	valueName := ""
+	if takesValue {
+		if c.valueName != "" {
+			valueName = argv.ValueNameOf(c.valueName)
+		} else {
+			valueName = argv.ValueNameOf(name)
+		}
 	}
 	return &ir.Flag{
-		Name:         ir.CanonicalName(c.names),
+		Name:         name,
 		Names:        slices.Clone(c.names),
 		Forms:        forms,
+		ValueName:    valueName,
 		Usage:        c.usage,
 		Default:      c.defValue,
 		ShowDefault:  c.showDefault,
@@ -357,7 +389,7 @@ func (c *Flag) lower() *ir.Flag {
 		MaxCount:     c.maxCount,
 		EnvVar:       c.envVar,
 		Choices:      slices.Clone(c.choices),
-		TakesValue:   c.positional || !isBoolValue(c.value),
+		TakesValue:   takesValue,
 		HasDefault:   c.hasDefault,
 		Value:        c.value,
 		ValidateFunc: c.validateFunc,

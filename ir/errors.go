@@ -183,7 +183,11 @@ type ArgumentError struct {
 	Message string
 }
 
-func newArgumentErrorf(err error, cmd *Command, flag *Flag, arg string, format string, a ...any) *ArgumentError {
+// NewArgumentErrorf returns an ArgumentError naming the offending command
+// or flag, either of which may be nil, and the command line argument that
+// failed, wrapping err (which may also be nil) and formatting message from
+// format and a.
+func NewArgumentErrorf(err error, cmd *Command, flag *Flag, arg string, format string, a ...any) *ArgumentError {
 	return &ArgumentError{
 		Err:     err,
 		Cmd:     cmd,

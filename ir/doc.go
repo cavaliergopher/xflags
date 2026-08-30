@@ -9,12 +9,21 @@
 // here, the implementation type: the same information, plus resolution --
 // ancestry via Parent, a full name and resolved streams computed once
 // while lowering, a flag's default rendered as a string -- with every
-// field public, which is what a compiled tree needs to be validated,
-// parsed, dispatched, formatted and marshaled all at once.
+// field public, which is what lets a formatter, a marshaler and the
+// machine that reads a command line all walk one tree.
+//
+// This package is what a program means, not what its command line says.
+// Reading a command line against a compiled tree -- lexing, applying and
+// completion -- belongs to the internal argv package, which imports this
+// one and is the only place that knows how a flag is written down -- that
+// a name is spelled with dashes, and that the value it takes is shown as
+// SERVICE. A compiled flag carries what argv wrote for it, in Forms and
+// ValueName, and everything here prints what it was given.
 //
 // A handful of fields still carry behavior a marshaler has no use for --
-// Command's Handler, FormatFunc and three streams, Flag's Value and
-// ValidateFunc -- and each is tagged json:"-" rather than kept unexported,
+// Command's Handler, FormatFunc and three streams, Flag's Value,
+// ValidateFunc and CompleteFunc -- and each is tagged json:"-" rather
+// than kept unexported,
 // so encoding/json or any other reflection-based marshaler sees exactly
 // the description of the tree. TestMarshalOmitsBehavior guards the tags:
 // a behavior field added later without one fails that test, not silently.

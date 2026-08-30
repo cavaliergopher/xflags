@@ -1,8 +1,10 @@
-package ir
+package argv
 
 import (
 	"slices"
 	"unicode/utf8"
+
+	"github.com/cavaliergopher/xflags/ir"
 )
 
 // terminator ends option processing by default, or, on a command that opted
@@ -27,14 +29,14 @@ type instruction struct {
 	kind instructionKind
 
 	// set
-	flag     *Flag
+	flag     *ir.Flag
 	value    string
 	attached bool
 	argIndex int // index into argv of the token the value came from
 
 	// dispatch, help: the command the instruction concerns -- the one
 	// descended into, or the one active when help was seen.
-	cmd *Command
+	cmd *ir.Command
 
 	// forward: every argument after the terminator, unparsed.
 	forwarded []string
@@ -49,15 +51,15 @@ type instruction struct {
 type lexResult struct {
 	instructions   []instruction
 	errs           []error
-	active         *Command
-	openPositional *Flag
+	active         *ir.Command
+	openPositional *ir.Flag
 
 	// awaitingValue is set when the last token in argv was an option that
 	// takes a value and no value followed -- "option requires an argument"
 	// at the end of the line specifically, not a mid-line miss such as
 	// --foxtrot followed by another option, which stays a plain error with
 	// nothing for completion to resume from.
-	awaitingValue *Flag
+	awaitingValue *ir.Flag
 
 	// optionsEnded reports whether the first "--" terminator, if any, had
 	// already been seen by the end of argv -- see lexOne's doc comment on
@@ -72,10 +74,10 @@ type lexResult struct {
 //
 // lex must never call Set: a completion engine evaluates a command line
 // that may be broken or only half typed, and must be able to do so without
-// applying anything to the flags it inspects. Merging the bound tree into
-// *Command bought lex the ability to call Set -- it now holds the same
-// pointer apply does -- so this is a rule the type system no longer
-// enforces on lex's behalf; apply, not lex, is where Set is called.
+// applying anything to the flags it inspects. The compiled tree lex reads
+// is the one apply mutates -- it holds the same pointers -- so this is a
+// rule the type system does not enforce on lex's behalf; apply, not lex,
+// is where Set is called.
 //
 // lex never stops at the first error. An unrecognized or malformed token
 // consumes only itself and lexing continues in the same command, so a
@@ -83,13 +85,13 @@ type lexResult struct {
 // apply only ever surfaces the first, see apply's doc comment -- and so
 // that a --help anywhere on an otherwise broken line still produces a help
 // instruction for apply to find.
-func lex(root *Command, argv []string) lexResult {
+func lex(root *ir.Command, argv []string) lexResult {
 	lx := &lexer{argv: argv}
 	lx.enterCommand(root)
 	for lx.pos < len(lx.argv) {
 		lx.lexOne()
 	}
-	var openPositional *Flag
+	var openPositional *ir.Flag
 	if len(lx.positionals) > 0 {
 		openPositional = lx.positionals[0]
 	}
@@ -104,21 +106,20 @@ func lex(root *Command, argv []string) lexResult {
 }
 
 // lexer holds lex's working state. optionsByKey accumulates across a
-// descent rather than being rebuilt at each command, exactly as it did
-// before the split: a name declared by an ancestor stays matchable after
-// its subcommand is named, which is what lets a parent's flag still bind
-// once the command line has moved past the token that named the
-// subcommand. positionals and subcommandsByName, by contrast, are rebuilt
-// fresh on every descent, since only the current command's own positionals
-// and subcommands are ever legal there.
+// descent rather than being rebuilt at each command: a name declared by an
+// ancestor stays matchable after its subcommand is named, which is what
+// lets a parent's flag still bind once the command line has moved past the
+// token that named the subcommand. positionals and subcommandsByName, by
+// contrast, are rebuilt fresh on every descent, since only the current
+// command's own positionals and subcommands are ever legal there.
 type lexer struct {
 	argv []string
 	pos  int // index of the next unread argument in argv
 
-	cmd               *Command
-	optionsByKey      map[string]*Flag
-	subcommandsByName map[string]*Command
-	positionals       []*Flag
+	cmd               *ir.Command
+	optionsByKey      map[string]*ir.Flag
+	subcommandsByName map[string]*ir.Command
+	positionals       []*ir.Flag
 	posCount          int // set instructions already queued for positionals[0]
 
 	optionsEnded bool
@@ -126,7 +127,7 @@ type lexer struct {
 	// awaitingValue mirrors lexResult's field of the same name; see there.
 	// It can be set at most once: reaching the end of argv is what sets
 	// it, and reaching the end of argv is also what ends lex's loop.
-	awaitingValue *Flag
+	awaitingValue *ir.Flag
 
 	instructions []instruction
 	errs         []error
@@ -134,12 +135,12 @@ type lexer struct {
 
 // enterCommand descends the lexer into cmd, growing the option table with
 // cmd's own flags and replacing the positional and subcommand tables with
-// cmd's. Item 33: a positional flag never enters the option table, so it
-// cannot be set as if it were one.
-func (lx *lexer) enterCommand(cmd *Command) {
+// cmd's. A positional flag never enters the option table, so it cannot be
+// set as if it were one.
+func (lx *lexer) enterCommand(cmd *ir.Command) {
 	lx.cmd = cmd
 	if lx.optionsByKey == nil {
-		lx.optionsByKey = make(map[string]*Flag)
+		lx.optionsByKey = make(map[string]*ir.Flag)
 	}
 	lx.positionals = nil
 	for _, group := range cmd.FlagGroups {
@@ -157,7 +158,7 @@ func (lx *lexer) enterCommand(cmd *Command) {
 		}
 	}
 	lx.posCount = 0
-	lx.subcommandsByName = make(map[string]*Command)
+	lx.subcommandsByName = make(map[string]*ir.Command)
 	for _, sub := range cmd.Subcommands {
 		lx.subcommandsByName[sub.Name] = sub
 	}
@@ -195,7 +196,7 @@ func (lx *lexer) lexOne() {
 			}
 			return
 		}
-		if tok == "-h" || tok == "--help" {
+		if tok == helpShortForm || tok == helpLongForm {
 			lx.instructions = append(lx.instructions, instruction{kind: instHelp, cmd: lx.cmd})
 			return
 		}
@@ -226,13 +227,13 @@ func (lx *lexer) lexOperand(tok string, idx int) {
 		// This isn't a lookup miss like the two "unrecognized" cases below:
 		// the operand is well understood, there is just no positional slot
 		// left to take it. See rm(1)'s "extra operand".
-		lx.errs = append(lx.errs, newArgumentErrorf(nil, lx.cmd, nil, tok,
+		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, nil, tok,
 			"extra operand: %s", tok))
 		return
 	}
 	sub, ok := lx.subcommandsByName[tok]
 	if !ok {
-		lx.errs = append(lx.errs, newArgumentErrorf(nil, lx.cmd, nil, tok,
+		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, nil, tok,
 			"unrecognized subcommand: %s", tok))
 		return
 	}
@@ -285,7 +286,7 @@ func (lx *lexer) lexShortOptions(arg string, idx int) {
 		if i == 0 {
 			continue // the delimiter
 		}
-		name := "-" + string(r)
+		name := shortForm(r)
 		f := lx.optionsByKey[name]
 		if f == nil {
 			// A malformed token consumes only itself: the rest of this
@@ -331,12 +332,12 @@ func (lx *lexer) lexShortOptions(arg string, idx int) {
 // docs/adr/path-scoped-flag-names.md.
 func (lx *lexer) unrecognizedOption(name string) {
 	if sub := findDescendantWithFlag(lx.cmd, name); sub != nil {
-		lx.errs = append(lx.errs, newArgumentErrorf(nil, lx.cmd, nil, name,
+		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, nil, name,
 			"unrecognized option: %s (defined by subcommand %q)",
 			name, sub.Name))
 		return
 	}
-	lx.errs = append(lx.errs, newArgumentErrorf(nil, lx.cmd, nil, name,
+	lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, nil, name,
 		"unrecognized option: %s", name))
 }
 
@@ -352,15 +353,15 @@ func (lx *lexer) unrecognizedOption(name string) {
 // there, offering f's value for the word under the cursor, but a mid-line
 // miss has a further token lex will still resolve on its own, so there is
 // nothing for completion to wait on.
-func (lx *lexer) lexDetachedValue(f *Flag, name string, idx int) {
+func (lx *lexer) lexDetachedValue(f *ir.Flag, name string, idx int) {
 	if lx.pos >= len(lx.argv) {
 		lx.awaitingValue = f
-		lx.errs = append(lx.errs, newArgumentErrorf(nil, lx.cmd, f, name,
+		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, f, name,
 			"option requires an argument: %s", name))
 		return
 	}
 	if !isOperand(lx.argv[lx.pos]) {
-		lx.errs = append(lx.errs, newArgumentErrorf(nil, lx.cmd, f, name,
+		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, f, name,
 			"option requires an argument: %s", name))
 		return
 	}
@@ -371,7 +372,7 @@ func (lx *lexer) lexDetachedValue(f *Flag, name string, idx int) {
 }
 
 // emitSet records an instruction binding value to f.
-func (lx *lexer) emitSet(f *Flag, value string, attached bool, argIndex int) {
+func (lx *lexer) emitSet(f *ir.Flag, value string, attached bool, argIndex int) {
 	lx.instructions = append(lx.instructions, instruction{
 		kind:     instSet,
 		flag:     f,
@@ -392,7 +393,7 @@ func (lx *lexer) emitSet(f *Flag, value string, attached bool, argIndex int) {
 // unadvertised, so the hint must not name it either. The flag stays
 // usable; the error just falls back to the plain "unrecognized option"
 // message.
-func findDescendantWithFlag(cmd *Command, key string) *Command {
+func findDescendantWithFlag(cmd *ir.Command, key string) *ir.Command {
 	for _, sub := range cmd.Subcommands {
 		if sub.Hidden {
 			continue
@@ -412,27 +413,6 @@ func findDescendantWithFlag(cmd *Command, key string) *Command {
 		}
 	}
 	return nil
-}
-
-func isShortOption(arg string) bool {
-	if len(arg) < 2 {
-		return false
-	}
-	return arg[0] == '-' && arg[1] != '-'
-}
-
-func isLongOption(arg string) bool {
-	if len(arg) < 3 {
-		return false
-	}
-	return arg[0] == '-' && arg[1] == '-'
-}
-
-// isOperand reports whether arg is an operand rather than an option.
-// Guideline 14: if it parses as an option, it is one, so the syntax alone
-// decides -- a token is an operand only when it looks like neither form.
-func isOperand(arg string) bool {
-	return !isShortOption(arg) && !isLongOption(arg)
 }
 
 // splitLongOption divides a long option argument into its name and any

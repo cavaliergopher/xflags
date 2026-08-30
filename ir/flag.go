@@ -1,10 +1,5 @@
 package ir
 
-import (
-	"strings"
-	"unicode/utf8"
-)
-
 // Flag is the compiled, implementation form of a command line flag or
 // positional argument, produced by lowering a configuration tree with
 // (*xflags.Command).Compile.
@@ -37,6 +32,21 @@ type Flag struct {
 	// Not every form a parser accepts need appear here, so this is what is
 	// worth showing rather than an exhaustive account of what matches.
 	Forms []string
+
+	// ValueName is how the value the flag takes is written where the flag
+	// is shown to a reader: the "SERVICE" of "Usage: deploy SERVICE" and
+	// of "missing required argument: SERVICE", and the placeholder beside
+	// an option that takes one. Where Forms says what a reader types to
+	// name the flag, this says what they type after it -- so a positional
+	// argument, which is named by nothing and is only its value, is shown
+	// by this alone.
+	//
+	// Like Forms it arrives already written, so a formatter prints it as
+	// given. Both the name it is taken from and the convention it is
+	// written by belong to whatever reads the command line, which is what
+	// lets one convention print SERVICE where another prints <service>. A
+	// flag that takes no value has none.
+	ValueName string
 
 	Usage       string
 	Default     string
@@ -71,53 +81,32 @@ type Flag struct {
 	ValidateFunc ValidateFunc `json:"-"`
 
 	// CompleteFunc, if set, completes the flag's value for a shell. See
-	// Complete.
+	// (*xflags.Command).Complete.
 	CompleteFunc CompleteFunc `json:"-"`
 }
 
-// String returns the flag's canonical spelling on the command line: its
-// upper-cased name for a positional argument, and otherwise its canonical
-// name spelled as an option.
-func (f *Flag) String() string {
-	switch {
-	case f.Name == "":
-		return "unknown"
-	case f.Positional:
-		return strings.ToUpper(f.Name)
-	default:
-		return FormOf(f.Name)
-	}
-}
-
-// FormOf returns how a flag name is spelled on the command line: one
-// character takes a single dash and anything longer takes two, which is
-// POSIX guideline 3 and the GNU long-option convention between them. The
-// shape of the name decides, not the slot it was declared in.
+// String returns how the flag is shown wherever one string stands for it,
+// which is how the usage line, the help message and every error naming a
+// flag all refer to it: its canonical spelling on the command line, or,
+// for a positional argument that has no spelling, its value name.
 //
-// This is the one place a name becomes a command line spelling, which is
-// what a second argv dialect would replace; see
-// docs/adr/posix-gnu-argv-dialect.md.
-func FormOf(name string) string {
-	if name == "" {
-		return ""
+// It does not spell a name for itself. How a name is spelled is settled
+// when the tree is compiled, so that everything showing a flag shows the
+// same thing.
+func (f *Flag) String() string {
+	for _, form := range f.Forms {
+		if form != "" {
+			return form
+		}
 	}
-	if utf8.RuneCountInString(name) == 1 {
-		return "-" + name
+	switch {
+	case f.ValueName != "":
+		return f.ValueName
+	case f.Name != "":
+		return f.Name
+	default:
+		return "unknown"
 	}
-	return "--" + name
-}
-
-// FormsOf returns the spelling of each name given, parallel to them so
-// that an empty slot stays empty.
-func FormsOf(names []string) []string {
-	if len(names) == 0 {
-		return nil
-	}
-	forms := make([]string, len(names))
-	for i, name := range names {
-		forms[i] = FormOf(name)
-	}
-	return forms
 }
 
 // CanonicalName returns the first of names that is not empty, which is the
@@ -141,6 +130,34 @@ func (f *Flag) Set(s string) error {
 	}
 	return f.Value.Set(s)
 }
+
+// CompDirective tells a shell how to treat the candidates a CompleteFunc
+// returns.
+type CompDirective int
+
+const (
+	// CompDefault lets the shell fall back to its own filename completion
+	// when the candidates given do not satisfy it, such as when there are
+	// none.
+	CompDefault CompDirective = iota
+
+	// CompNoFileComp tells the shell not to fall back to filename
+	// completion: the candidates given, even if there are none, are the
+	// whole answer.
+	CompNoFileComp
+)
+
+// CompleteFunc completes a flag's value for a shell. inv is the invocation
+// parsed so far, and word is the fragment under the cursor, which may be
+// empty.
+//
+// inv is given because what completes a value often depends on flags
+// already given -- git checkout completing a ref depends on which
+// repository -r named, for instance -- and not on the word alone. Flags
+// named earlier on the command line are set on inv's command by the time
+// CompleteFunc is called; flags named later are not, since completion has
+// not read that far.
+type CompleteFunc func(inv *Invocation, word string) ([]string, CompDirective)
 
 // FlagGroup is the compiled, implementation form of a nominal grouping of
 // flags, which affects how the flags are shown in help messages. Unlike

@@ -97,7 +97,7 @@ func printUsage(w io.Writer, cmd *Command) error {
 		b.WriteString(" COMMAND")
 	}
 	for _, flag := range getPositionals(cmd) {
-		name := strings.ToUpper(flag.Name)
+		name := flag.String()
 		if flag.MinCount == 0 {
 			if flag.MaxCount == 1 {
 				fmt.Fprintf(&b, " [%s]", name)
@@ -128,7 +128,7 @@ func detailPositionals(w io.Writer, cmd *Command) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, flag := range flags {
 		var row strings.Builder
-		fmt.Fprintf(&row, "  %s", strings.ToUpper(flag.Name))
+		fmt.Fprintf(&row, "  %s", flag)
 		if flag.Usage != "" {
 			fmt.Fprintf(&row, "\t%s", flag.Usage)
 			if flag.ShowDefault {
@@ -141,6 +141,17 @@ func detailPositionals(w io.Writer, cmd *Command) error {
 		}
 	}
 	return tw.Flush()
+}
+
+// isLongForm reports whether a rendered form belongs in the long-option
+// column. It reads the spelling it was handed rather than deciding one:
+// how a name is spelled is settled before a formatter ever sees it, and
+// this is only where the result lines up.
+func isLongForm(form string) bool {
+	if len(form) < 3 {
+		return false
+	}
+	return form[0] == '-' && form[1] == '-'
 }
 
 func filterOptions(flags []*Flag) []*Flag {
@@ -173,7 +184,7 @@ func detailFlagGroup(w io.Writer, group *FlagGroup) error {
 		for _, form := range flag.Forms[:min(2, len(flag.Forms))] {
 			switch {
 			case form == "":
-			case isLongOption(form):
+			case isLongForm(form):
 				if name == "" {
 					name = form
 				}

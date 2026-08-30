@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/cavaliergopher/xflags/internal/argv"
 	"github.com/cavaliergopher/xflags/ir"
 )
 
@@ -111,7 +112,7 @@ func (c *Command) Parse(args []string) (*Invocation, error) {
 	if err != nil {
 		return nil, err
 	}
-	return node.Parse(args)
+	return argv.Parse(node, args)
 }
 
 // validate compiles the whole command tree c belongs to and reports only
@@ -163,6 +164,12 @@ func (c *Command) Compile() (*ir.Command, error) {
 	var errs []error
 	rootNode := root.lower(nil, nodeMap, &errs)
 	if err := rootNode.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+	// Whether two flags collide, and whether one claims a form reserved
+	// for help, are questions about spellings rather than about the model,
+	// so they are argv's to answer; see internal/argv.Validate.
+	if err := argv.Validate(rootNode); err != nil {
 		errs = append(errs, err)
 	}
 	if err := ir.JoinErrors(errs); err != nil {
@@ -331,7 +338,19 @@ func (c *Command) Dispatch(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	return node.Dispatch(ctx, args)
+	inv, err := argv.Parse(node, args)
+	if err != nil {
+		return err
+	}
+	if inv.HelpRequested {
+		return inv.Cmd.WriteUsage(inv.Stdout)
+	}
+	if inv.Cmd.Handler == nil {
+		// The command exists only to group its subcommands, so naming it
+		// alone is a usage error rather than a request for help.
+		return ir.NewArgumentErrorf(nil, inv.Cmd, nil, "", "missing subcommand")
+	}
+	return inv.Cmd.Handler(ctx, inv)
 }
 
 // WriteUsage prints a help message to the given Writer using the configured
@@ -362,7 +381,7 @@ func (c *Command) Complete(args []string, word string) ([]string, ir.CompDirecti
 	if err != nil {
 		return nil, ir.CompNoFileComp
 	}
-	return node.Complete(args, word)
+	return argv.Complete(node, args, word)
 }
 
 // handleErr reports err on the stderr of the command that produced it --
