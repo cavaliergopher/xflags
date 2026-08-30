@@ -4,6 +4,6 @@
 package identity
 
 // Actor is set from the --actor global flag on the root command. It names
-// who is running orbital, for the audit check in
-// examples/orbital/internal/middleware.
+// who is running orbital, and is read at call time by the Audit
+// middleware in examples/orbital/internal/middleware.
 var Actor string

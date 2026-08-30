@@ -7,16 +7,16 @@ import (
 	"strings"
 
 	"github.com/cavaliergopher/xflags"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/identity"
 	"github.com/cavaliergopher/xflags/examples/orbital/internal/middleware"
 )
 
 // setCommand returns "orbital config set KEY VALUE". It mutates the local
-// store, so its handler goes through middleware.Chain like the other
-// mutating commands.
+// store, so it declares middleware.Audit like the other mutating
+// commands; "config get" does not.
 func setCommand() *xflags.Command {
 	var key, value string
 	return xflags.NewCommand("set", "Set a configuration key to a value").
+		Middleware(middleware.Audit).
 		Flags(
 			xflags.String(&key, "KEY", "", "Configuration key to set").
 				Positional().
@@ -26,13 +26,13 @@ func setCommand() *xflags.Command {
 				Positional().
 				Required(),
 		).
-		HandleFunc(middleware.Chain(&identity.Actor,
+		HandleFunc(
 			func(ctx context.Context, inv *xflags.Invocation) error {
 				store[key] = value
 				fmt.Fprintf(inv.Stdout, "%s = %s\n", key, value)
 				return nil
 			},
-		))
+		)
 }
 
 // validKey rejects a key the store doesn't already recognize, naming the

@@ -101,6 +101,47 @@ Flags may then be used directly.
 	fmt.Println("ip has value ", ip)
 	fmt.Println("flagvar has value ", flagvar)
 
+# Middleware
+
+Command.Middleware wraps a command's handler, and every handler beneath
+it, in one function of your own:
+
+	var App = xflags.NewCommand(os.Args[0], "My application").
+		Middleware(Authorize, Trace).
+		Subcommands(GetCommand, DeleteCommand)
+
+	func Authorize(next xflags.HandlerFunc) xflags.HandlerFunc {
+		return func(ctx context.Context, inv *xflags.Invocation) error {
+			if !allowed(inv.Cmd.FullName) {
+				return xflags.Exitf(xflags.ExitCodeUsage, "not authorized")
+			}
+			return next(ctx, inv)
+		}
+	}
+
+This is for the work every command in a subtree has to do -- an
+authorization check, a timing trace, opening a resource and closing it
+again -- written once rather than at the top of every handler. Middleware
+is inherited down the command path, so one declared on the root wraps
+every command in the program, and the outermost wrapper is the one
+declared highest in the tree.
+
+A wrapper decides whether to call the handler it wrapped, so returning an
+error without calling it refuses the invocation, and Run maps that error
+to an exit code as it would the handler's own. It runs only around a
+handler, and only after the command line has parsed: neither --help, an
+unparsable command line, nor a command that exists only to group
+subcommands reaches one.
+
+Middleware cannot change what a handler is given, since both sides of it
+are a HandlerFunc.
+
+A wrapper must be a pure function of the handler it is given, doing its
+work in the handler it returns rather than in the wrapper itself. The
+wrapping happens when the command tree is compiled, which happens more
+than once in a run, so a wrapper that registers a metric or opens a
+connection before returning does so more often than its author expects.
+
 # Exit codes
 
 Run returns the exit code the program should terminate with:

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/cavaliergopher/xflags"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/identity"
 	"github.com/cavaliergopher/xflags/examples/orbital/internal/middleware"
 )
 
@@ -18,13 +17,14 @@ import (
 func Command() *xflags.Command {
 	var service string
 	return xflags.NewCommand("exec", "Run a one-off command inside a service's container").
+		Middleware(middleware.Audit).
 		ForwardArgs().
 		Flags(
 			xflags.String(&service, "service", "", "Service whose container to exec into").
 				Aliases("s").
 				Required(),
 		).
-		HandleFunc(middleware.Chain(&identity.Actor,
+		HandleFunc(
 			func(ctx context.Context, inv *xflags.Invocation) error {
 				if len(inv.Forwarded) == 0 {
 					return fmt.Errorf(
@@ -34,5 +34,5 @@ func Command() *xflags.Command {
 					service, strings.Join(inv.Forwarded, " "))
 				return nil
 			},
-		))
+		)
 }

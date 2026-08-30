@@ -65,6 +65,28 @@ path it was reached by, and anything after a `--` terminator. A command is
 usually mounted by whoever composes the binary rather than by the team that
 wrote it, so its own path is not something it can know until it runs.
 
+`Command.Middleware` wraps a command's handler, and every handler beneath it,
+in a function of your own — an authorization check, a timing trace, opening a
+resource and closing it again — written once instead of at the top of every
+handler. Middleware is inherited down the command path, the outermost wrapper
+being the one declared highest in the tree, and a wrapper that returns without
+calling the handler refuses the invocation.
+
+```go
+var App = xflags.NewCommand("fleet", "Operate the fleet").
+	Middleware(Authorize, Trace).
+	Subcommands(RestartCommand, StatusCommand)
+
+func Authorize(next xflags.HandlerFunc) xflags.HandlerFunc {
+	return func(ctx context.Context, inv *xflags.Invocation) error {
+		if !allowed(inv.Cmd.FullName) {
+			return xflags.Exitf(xflags.ExitCodeUsage, "not authorized")
+		}
+		return next(ctx, inv)
+	}
+}
+```
+
 ## Command line syntax
 
 The dialect is the POSIX Utility Syntax Guidelines plus GNU long options —

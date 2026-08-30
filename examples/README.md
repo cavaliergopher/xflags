@@ -37,8 +37,9 @@ set `ORBITAL_ACTOR`. `--help` does not.
 | `Hidden` flag | `internal/deploy` `--unsafe-skip-health-checks` |
 | `ShowDefault` | `internal/telemetry`, `internal/deploy`, `internal/logscmd` |
 | `NArgs` | `internal/deploy` `--tag` (`NArgs(0, 5)`); `internal/logscmd` `SERVICE` (`NArgs(1, 0)`) |
-| Middleware/`Wrap` chain | `internal/middleware` (`Chain`: audit check + timing trace) |
-| Dependency injection via closures | `internal/fleet.Client`, threaded into `deploy.Command`; `identity.Actor`, threaded into `middleware.Chain` |
+| `Middleware` inherited from the root | `internal/middleware.Timing`, declared once in `main.go`, times every command |
+| `Middleware` on one command | `internal/middleware.Audit`, declared by `config set`, `deploy run` and `exec` only |
+| Dependency injection via closures | `internal/fleet.Client`, threaded into `deploy.Command` |
 | Handlers honoring `ctx` cancellation | `internal/deploy` (`status`, `run`), `internal/logscmd` |
 | Handlers writing to `inv.Stdout`/`inv.Stderr` | all of them; never `os.Stdout` |
 | Exit codes: custom (`Exitf`) | `internal/deploy` `run`, refusing an unconfirmed production deploy (exit 4) |
@@ -65,7 +66,7 @@ examples/orbital/
         telemetry/               shared flag group: --log-level, --trace
         legacy/                  a stdlib flag.FlagSet imported with FromFlagSet
         fleet/                   a stand-in fleet API client
-        middleware/              the Wrap-style Chain: audit + timing
+        middleware/              the Audit and Timing middleware
         config/                  config get|set
         deploy/                  deploy status|run
         logscmd/                 logs SERVICE...

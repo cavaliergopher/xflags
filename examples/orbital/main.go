@@ -18,6 +18,7 @@ import (
 	"github.com/cavaliergopher/xflags/examples/orbital/internal/identity"
 	"github.com/cavaliergopher/xflags/examples/orbital/internal/legacy"
 	"github.com/cavaliergopher/xflags/examples/orbital/internal/logscmd"
+	"github.com/cavaliergopher/xflags/examples/orbital/internal/middleware"
 )
 
 func main() {
@@ -25,6 +26,10 @@ func main() {
 
 	root := xflags.NewCommand("orbital", "Deploy and operate services on the fleet").
 		EnableCompletion().
+		// Declared once here and inherited by every command in the tree,
+		// so --trace times whichever one runs. The audit check is not:
+		// only the commands that change fleet state declare it.
+		Middleware(middleware.Timing).
 		Description(
 			"orbital is the platform team's command line front end to the\n"+
 				"fleet API. Each subcommand below is owned and versioned by the\n"+

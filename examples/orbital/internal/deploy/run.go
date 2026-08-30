@@ -6,13 +6,12 @@ import (
 
 	"github.com/cavaliergopher/xflags"
 	"github.com/cavaliergopher/xflags/examples/orbital/internal/fleet"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/identity"
 	"github.com/cavaliergopher/xflags/examples/orbital/internal/middleware"
 )
 
 // runCommand returns "orbital deploy run", the one command in this binary
-// that changes what is running, so its handler goes through
-// middleware.Chain.
+// that changes what is running, so it declares middleware.Audit. The
+// timing trace it also runs inside is the root's, inherited.
 func runCommand(client *fleet.Client) *xflags.Command {
 	var (
 		service    string
@@ -24,6 +23,7 @@ func runCommand(client *fleet.Client) *xflags.Command {
 		skipHealth bool
 	)
 	return xflags.NewCommand("run", "Roll out a new version of a service").
+		Middleware(middleware.Audit).
 		Flags(
 			xflags.String(&service, "service", "", "Service to deploy").
 				Aliases("s").
@@ -43,7 +43,7 @@ func runCommand(client *fleet.Client) *xflags.Command {
 			xflags.Bool(&skipHealth, "unsafe-skip-health-checks", false, "Skip post-deploy health checks").
 				Hidden(),
 		).
-		HandleFunc(middleware.Chain(&identity.Actor,
+		HandleFunc(
 			func(ctx context.Context, inv *xflags.Invocation) error {
 				if env == "production" && !confirm {
 					// A misuse the parser could not catch on its own --
@@ -62,7 +62,7 @@ func runCommand(client *fleet.Client) *xflags.Command {
 				}
 				return nil
 			},
-		))
+		)
 }
 
 // validVersion is a stand-in for real version validation.

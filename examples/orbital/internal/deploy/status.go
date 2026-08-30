@@ -10,7 +10,8 @@ import (
 )
 
 // statusCommand returns "orbital deploy status SERVICE". It is read-only,
-// so it is not wrapped with middleware.Chain's audit check.
+// so it declares no middleware.Audit; it still runs inside the timing
+// trace the root declared, which every command in the tree inherits.
 func statusCommand(client *fleet.Client) *xflags.Command {
 	var (
 		service string

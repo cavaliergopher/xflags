@@ -15,8 +15,8 @@ func Command(client *fleet.Client) *xflags.Command {
 	return xflags.NewCommand("deploy", "Deploy and inspect services running on the fleet").
 		Description(
 			"Subcommands here talk to the fleet API on behalf of the caller\n"+
-				"named by --actor. \"run\" changes what is deployed and is\n"+
-				"wrapped with an audit check; \"status\" only reads and is not.",
+				"named by --actor. \"run\" changes what is deployed and declares\n"+
+				"an audit middleware; \"status\" only reads and does not.",
 		).
 		Subcommands(statusCommand(client), runCommand(client))
 }

@@ -108,9 +108,13 @@ type Command struct {
 	// tree's shape and is not marshaled.
 	Root *Command `json:"-"`
 
-	// Handler is called to run the command once its command line parses
-	// successfully. A nil Handler means the command exists only to group
-	// its subcommands: invoking it directly is a usage error.
+	// Handler runs the command once its command line parses
+	// successfully, and is never nil: it is the whole of what a command
+	// does, assembled while lowering. Whatever the command declared
+	// arrives here already wrapped in the wrappers its program put around
+	// it, and a command that declared no handler of its own gets one
+	// reporting a usage error, since such a command exists only to group
+	// its subcommands. Calling it is how a command is run.
 	Handler HandlerFunc `json:"-"`
 
 	// UsageFunc renders this command's help message in place of the

@@ -37,6 +37,28 @@ type Invocation = ir.Invocation
 // code. See Command.Run for the whole contract.
 type HandlerFunc = ir.HandlerFunc
 
+// A Middleware wraps a command's handler in another handler, so that the
+// wrapper runs first and decides whether, and with what, to call the one
+// it wrapped:
+//
+//	func timing(next xflags.HandlerFunc) xflags.HandlerFunc {
+//	    return func(ctx context.Context, inv *xflags.Invocation) error {
+//	        start := time.Now()
+//	        err := next(ctx, inv)
+//	        fmt.Fprintf(inv.Stderr, "%s took %s\n", inv.Cmd.FullName, time.Since(start))
+//	        return err
+//	    }
+//	}
+//
+// A Middleware must be a pure function of the handler it is given, doing
+// its work in the handler it returns rather than in the wrapper itself.
+// Compile applies it while lowering, and may lower a tree more than once
+// in a run, so a wrapper that registers a metric or opens a connection
+// before returning does so more often than its author expects.
+//
+// See Command.Middleware for how one is declared and what it wraps.
+type Middleware func(HandlerFunc) HandlerFunc
+
 // Command configures a command that users may invoke from the command line.
 //
 // Programs should not create Command directly and instead use NewCommand to
@@ -53,6 +75,7 @@ type Command struct {
 	subcommands []*Command
 	usageFunc   ir.UsageFunc
 	handlerFunc HandlerFunc
+	middleware  []Middleware
 	stdin       io.Reader
 	stdout      io.Writer
 	stderr      io.Writer
@@ -179,7 +202,7 @@ func (c *Command) Compile() (*ir.Command, error) {
 	}
 	nodeMap := make(map[*Command]*ir.Command)
 	var errs []error
-	rootNode := root.lower(nil, nodeMap, &errs)
+	rootNode := root.lower(nil, nil, nodeMap, &errs)
 	if err := rootNode.Validate(); err != nil {
 		errs = append(errs, err)
 	}
@@ -203,16 +226,29 @@ func (c *Command) Compile() (*ir.Command, error) {
 // nothing about the compiled tree has to walk itself again: FullName,
 // computed from parent's own FullName plus c's name, and the three
 // streams and the usage renderer, each c's own where it named one and
-// the parent's otherwise, and Ancestry, the parent's with c appended. Inheritance
-// reads the node being built rather than the source tree's parent links,
-// which are not to be trusted until Compile has checked them.
+// the parent's otherwise, and Ancestry, the parent's with c appended.
+// Inheritance reads the node being built rather than the source tree's
+// parent links, which are not to be trusted until Compile has checked
+// them.
+//
+// Handler is assembled rather than copied: c's own handler is wrapped in
+// the middleware c declared and in everything it inherited, which arrives
+// as inherited because it is scaffolding for building Handler rather than
+// anything a compiled command carries. A command that declared no handler
+// gets missingSubcommand's instead, so Handler is never nil and nothing
+// downstream needs to know either mechanism exists.
 //
 // It records the node for c in nodeMap so Compile can look up the node
 // for any source *Command after lowering from the root.
 //
-// It also collects into errs the two configuration checks that cannot
+// It also collects into errs the three configuration checks that cannot
 // move onto the compiled tree, because they depend on the source tree's
 // own bookkeeping rather than on anything a lowered node carries:
+//
+// Whether any middleware c declared is nil, which cannot be applied to a
+// handler and which chainMiddleware therefore skips. Composing leaves
+// nothing on the node to check afterwards, so it is checked here, where
+// it is still a list of what one command declared.
 //
 // Whether a subcommand's parent actually names the command about to
 // claim it as a child. See Subcommands for why -- a shared command such
@@ -227,7 +263,7 @@ func (c *Command) Compile() (*ir.Command, error) {
 // parent links Compile checked: Subcommands leaves an owned command's
 // parent alone, so a command can be mounted below its own ancestor
 // without any parent link changing.
-func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, errs *[]error) *ir.Command {
+func (c *Command) lower(parent *ir.Command, inherited Middleware, nodeMap map[*Command]*ir.Command, errs *[]error) *ir.Command {
 	fullName := c.name
 	if parent != nil {
 		fullName = parent.FullName + " " + c.name
@@ -272,6 +308,29 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 			node.Stderr = parent.Stderr
 		}
 	}
+	// Middleware composes where the fields above fall back: a command's
+	// own wrappers run inside every one its ancestors declared, so what
+	// this command adds is wrapped by what it inherited rather than
+	// replacing it.
+	for _, mw := range c.middleware {
+		if mw == nil {
+			*errs = append(*errs, ir.NewConfigErrorf(nil, node, nil,
+				"middleware must not be nil"))
+		}
+	}
+	middleware := chainMiddleware(inherited, c.middleware)
+
+	// The handler is assembled here rather than at dispatch, so the
+	// compiled command carries the whole of what it does and nothing
+	// downstream has to know that middleware exists. The fallback is not
+	// wrapped: there is no handler for a wrapper to wrap, and a command
+	// that only groups subcommands must not run its ancestors' wrappers.
+	if node.Handler == nil {
+		node.Handler = missingSubcommand(node)
+	} else if middleware != nil {
+		node.Handler = middleware(node.Handler)
+	}
+
 	// The root has no parent to inherit from, so a stream nobody named is
 	// the process's. UsageFunc has no default to fall back to here: nil
 	// means the help renderer chooses one when it prints.
@@ -310,9 +369,59 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 			*errs = append(*errs, ir.NewConfigErrorf(nil, node, nil,
 				"%q is already a subcommand of %q", sub.name, sub.parent.name))
 		}
-		node.Subcommands = append(node.Subcommands, sub.lower(node, nodeMap, errs))
+		node.Subcommands = append(node.Subcommands, sub.lower(node, middleware, nodeMap, errs))
 	}
 	return node
+}
+
+// chainMiddleware composes outer, the middleware a command inherits from
+// its parent, with own, the middleware that command declared, into the
+// single Middleware the compiled command carries.
+//
+// Applying the result wraps a handler so that outer runs first, then
+// own's entries in the order they were declared, then the handler itself,
+// each resuming in reverse as the call returns. The outermost wrapper is
+// therefore the one declared highest in the tree, and earliest in its
+// command's Middleware call.
+//
+// A command that adds nothing inherits outer unchanged, so a path that
+// declared no middleware at all composes to nil and costs no call.
+//
+// A nil entry in own is skipped rather than applied. Lowering reports one
+// as a configuration error and then has to finish, so that the rest of
+// the tree's errors are collected in the same run; the tree it composes
+// meanwhile is never dispatched.
+func chainMiddleware(outer Middleware, own []Middleware) Middleware {
+	if len(own) == 0 {
+		return outer
+	}
+	return func(next HandlerFunc) HandlerFunc {
+		// Built inside out, which reads backwards from the order above:
+		// the wrapper applied last ends up outermost, and so runs first.
+		for _, mw := range slices.Backward(own) {
+			if mw == nil {
+				continue
+			}
+			next = mw(next)
+		}
+		if outer != nil {
+			next = outer(next)
+		}
+		return next
+	}
+}
+
+// missingSubcommand returns the handler lowering gives a command that
+// declared none of its own. Such a command exists only to group its
+// subcommands, so naming it alone is a usage error rather than a request
+// for help, and reporting that is the whole of what it does.
+//
+// It names cmd rather than the invocation's command so that the error
+// names the command that lacked the handler, whoever ran it.
+func missingSubcommand(cmd *ir.Command) HandlerFunc {
+	return func(ctx context.Context, inv *Invocation) error {
+		return ir.NewArgumentErrorf(nil, cmd, nil, "", "missing subcommand")
+	}
 }
 
 // Run parses the given set of command line arguments and calls the handler
@@ -374,7 +483,10 @@ func (c *Command) Run(ctx context.Context, args []string) int {
 // UsageFunc.
 //
 // A command invoked with no handler returns an *ir.ArgumentError, as for
-// any other wrong command line.
+// any other wrong command line, and no middleware runs: there is no
+// handler for it to wrap. Otherwise the handler runs inside every
+// middleware declared on the command and its ancestors, outermost first,
+// Compile having wrapped it while lowering. See Command.Middleware.
 func (c *Command) Dispatch(ctx context.Context, args []string) error {
 	node, err := c.Compile()
 	if err != nil {
@@ -386,11 +498,6 @@ func (c *Command) Dispatch(ctx context.Context, args []string) error {
 	}
 	if inv.HelpRequested {
 		return inv.Cmd.Usage(inv.Stdout)
-	}
-	if inv.Cmd.Handler == nil {
-		// The command exists only to group its subcommands, so naming it
-		// alone is a usage error rather than a request for help.
-		return ir.NewArgumentErrorf(nil, inv.Cmd, nil, "", "missing subcommand")
 	}
 	return inv.Cmd.Handler(ctx, inv)
 }
@@ -514,8 +621,46 @@ func (c *Command) Description(s string) *Command {
 // HandleFunc registers the handler for the command. If no handler is
 // specified and the command is invoked, Run reports an argument error
 // followed by the command's usage and exits with the usage error code.
+//
+// The handler runs inside whatever middleware the command and its
+// ancestors declared, Compile having wrapped it while lowering the tree;
+// see Command.Middleware.
 func (c *Command) HandleFunc(handler HandlerFunc) *Command {
 	c.handlerFunc = handler
+	return c
+}
+
+// Middleware wraps the handler of this command, and of every command
+// beneath it, in each of the given wrappers. It is where whatever a whole
+// subtree has to do belongs -- an authorization check, a timing trace,
+// opening a resource and closing it again -- written once instead of at
+// the top of every handler.
+//
+//	var App = xflags.NewCommand("myapp", "Do things").
+//	    Middleware(authorize, trace).
+//	    Subcommands(GetCommand, DeleteCommand)
+//
+// Middleware is inherited down the command path, and the outermost
+// wrapper is the one declared highest in the tree: a middleware on the
+// root runs before one a subcommand declared, and within one command they
+// run in the order given here. Repeated calls append.
+//
+// A wrapper runs only around a handler, and only once the command line
+// has parsed, so flag values are set by the time it is called and it may
+// read them. Neither -h nor --help, an unparsable command line, nor
+// naming a command that only groups subcommands reaches one, because none
+// of them runs a handler.
+//
+// A wrapper decides whether to call the handler it wrapped, so returning
+// an error without calling it is how one refuses an invocation, and Run
+// maps that error to an exit code as it would the handler's own.
+//
+// Each wrapper must be a pure function of the handler it is given, doing
+// its work in the handler it returns: Compile applies them while lowering
+// the tree, and lowers a tree more than once in a run. See Middleware for
+// a worked wrapper, and Command.HandleFunc for the handler itself.
+func (c *Command) Middleware(mw ...Middleware) *Command {
+	c.middleware = append(c.middleware, mw...)
 	return c
 }
 

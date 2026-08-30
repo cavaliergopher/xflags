@@ -1755,13 +1755,6 @@ func TestUsageFuncIsInherited(t *testing.T) {
 	}
 }
 
-// TestMarshalOmitsBehavior guards the json:"-" tags on ir.Command's and
-// ir.Flag's behavior fields. It compiles a tree exercising every one of
-// them -- a handler, a custom UsageFunc, all three stream overrides, a
-// bound Value, a ValidateFunc, a Choices list, a subcommand and a
-// positional -- and marshals it, so a behavior field added later without
-// its tag fails here, in a test, rather than leaking into a program's
-// machine-readable output.
 // TestParseFromSubcommandResetsTheTree asserts that Parse resets every
 // flag in the tree it is called on, not merely the subtree below the
 // command it was called on: a value an earlier parse left on an ancestor
@@ -1784,6 +1777,14 @@ func TestParseFromSubcommandResetsTheTree(t *testing.T) {
 	assertString(t, "info", level)
 }
 
+// TestMarshalOmitsBehavior guards the json:"-" tags on ir.Command's and
+// ir.Flag's behavior fields. It compiles a tree exercising every one of
+// them -- a handler, a custom UsageFunc, all three stream overrides, a
+// bound Value, a ValidateFunc, a Choices list, a subcommand and a
+// positional -- and marshals it, so a behavior field added later without
+// its tag fails here, in a test, rather than leaking into a program's
+// machine-readable output. A middleware is declared too, to pin that
+// wrapping a handler adds nothing to the description.
 func TestMarshalOmitsBehavior(t *testing.T) {
 	var name, arg string
 	sub := NewCommand("sub", "Sub summary").
@@ -1801,6 +1802,7 @@ func TestMarshalOmitsBehavior(t *testing.T) {
 		)
 	root := NewCommand("root", "Root summary").
 		UsageFunc(func(w io.Writer, cmd *ir.Command) error { return nil }).
+		Middleware(func(next HandlerFunc) HandlerFunc { return next }).
 		Stdin(strings.NewReader("")).
 		Stdout(&strings.Builder{}).
 		Stderr(&strings.Builder{}).
