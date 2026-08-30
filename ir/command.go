@@ -94,6 +94,17 @@ type Command struct {
 	// tree's shape, and including it would make the tree self-referential.
 	Parent *Command `json:"-"`
 
+	// Ancestry is every command from the root of the tree down to and
+	// including this one, which is the commands whose flags are in scope
+	// here: a flag is usable from the point its own command is named
+	// onward, so what this command accepts is the union of theirs. See
+	// docs/adr/path-scoped-flag-names.md.
+	//
+	// Compile builds it top down while lowering, so nothing reading a
+	// compiled tree has to walk back up to reconstruct it. Like Parent,
+	// it is derivable from the tree's shape and is not marshaled.
+	Ancestry []*Command `json:"-"`
+
 	// Root is the command at the top of the tree this command belongs to,
 	// and is the command itself at the root. Whole-tree work -- validation,
 	// and restoring defaults before a parse -- starts here, so that calling

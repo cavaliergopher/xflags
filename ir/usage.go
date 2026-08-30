@@ -67,19 +67,21 @@ func getPositionals(cmd *Command) []*Flag {
 	return a
 }
 
+// hasOptions reports whether anything in scope at cmd is an option worth
+// showing, which is what decides the "[OPTIONS]" clause of the usage line.
+// Inherited options count, so this reads the whole ancestry.
 func hasOptions(cmd *Command) bool {
-	if cmd == nil {
-		return false
-	}
-	for _, group := range cmd.FlagGroups {
-		for _, flag := range group.Flags {
-			if flag.Hidden || flag.Positional {
-				continue
+	for _, c := range cmd.Ancestry {
+		for _, group := range c.FlagGroups {
+			for _, flag := range group.Flags {
+				if flag.Hidden || flag.Positional {
+					continue
+				}
+				return true
 			}
-			return true
 		}
 	}
-	return hasOptions(cmd.Parent)
+	return false
 }
 
 // printUsage writes the usage line, which it assembles in full before
@@ -207,24 +209,26 @@ func detailFlagGroup(w io.Writer, group *FlagGroup) error {
 	return tw.Flush()
 }
 
-func getEnvVars(a []*Flag, cmd *Command) []*Flag {
-	if cmd == nil {
-		return a
-	}
-	a = getEnvVars(a, cmd.Parent)
-	for _, group := range cmd.FlagGroups {
-		for _, flag := range group.Flags {
-			if flag.EnvVar == "" || flag.Hidden {
-				continue
+// getEnvVars returns every flag in scope at cmd that reads an environment
+// variable, from the root down, so an inherited one is listed before the
+// command's own.
+func getEnvVars(cmd *Command) []*Flag {
+	var a []*Flag
+	for _, c := range cmd.Ancestry {
+		for _, group := range c.FlagGroups {
+			for _, flag := range group.Flags {
+				if flag.EnvVar == "" || flag.Hidden {
+					continue
+				}
+				a = append(a, flag)
 			}
-			a = append(a, flag)
 		}
 	}
 	return a
 }
 
 func detailEnvVars(w io.Writer, cmd *Command) error {
-	flags := getEnvVars(nil, cmd)
+	flags := getEnvVars(cmd)
 	if len(flags) == 0 {
 		return nil
 	}

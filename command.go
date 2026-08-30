@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 
 	"github.com/cavaliergopher/xflags/internal/argv"
 	"github.com/cavaliergopher/xflags/ir"
@@ -202,7 +203,7 @@ func (c *Command) Compile() (*ir.Command, error) {
 // nothing about the compiled tree has to walk itself again: FullName,
 // computed from parent's own FullName plus c's name, and the three
 // streams and the usage renderer, each taken from parent unless c
-// overrides it. Inheritance
+// overrides it, and Ancestry, the parent's with c appended. Inheritance
 // reads the node being built rather than the source tree's parent links,
 // which are not to be trusted until Compile has checked them.
 //
@@ -246,8 +247,12 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 		Stderr:      os.Stderr,
 	}
 	node.Root = node
+	node.Ancestry = []*ir.Command{node}
 	if parent != nil {
 		node.Root = parent.Root
+		// Cloned rather than appended in place, or sibling subcommands
+		// would share a backing array and overwrite each other.
+		node.Ancestry = append(slices.Clone(parent.Ancestry), node)
 		node.Stdin, node.Stdout, node.Stderr = parent.Stdin, parent.Stdout, parent.Stderr
 		if node.UsageFunc == nil {
 			node.UsageFunc = parent.UsageFunc

@@ -45,22 +45,11 @@ func Complete(cmd *ir.Command, args []string, word string) ([]string, ir.CompDir
 		return nil, ir.CompDefault
 	}
 
-	path := ancestorPath(res.active)
+	path := res.active.Ancestry
 	inv := invocationFor(res.active, path, forwarded, false)
 
 	cands, dir := completeCandidates(res, path, inv, word)
 	return finalizeCandidates(cands, word), dir
-}
-
-// ancestorPath returns active and every ancestor of it, from the root
-// down.
-func ancestorPath(active *ir.Command) []*ir.Command {
-	var path []*ir.Command
-	for c := active; c != nil; c = c.Parent {
-		path = append(path, c)
-	}
-	slices.Reverse(path)
-	return path
 }
 
 // completeCandidates chooses which of the four candidate rules applies at

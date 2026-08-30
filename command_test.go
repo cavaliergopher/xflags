@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
@@ -2094,5 +2095,52 @@ func TestUsageFuncIsInheritedAtCompileTime(t *testing.T) {
 	}
 	if bare.UsageFunc != nil {
 		t.Error("UsageFunc = non-nil, want nil so Usage falls back to the default")
+	}
+}
+
+// TestAncestryIsResolvedAtCompileTime asserts that each compiled command
+// carries the commands whose flags are in scope at it, from the root down,
+// so nothing reading the tree walks back up to work it out. Siblings must
+// not share a backing array: appending to the parent's slice in place
+// would let the second subcommand overwrite the first.
+func TestAncestryIsResolvedAtCompileTime(t *testing.T) {
+	node, err := NewCommand("app", "").Subcommands(
+		NewCommand("one", "").Subcommands(NewCommand("deep", "")),
+		NewCommand("two", ""),
+	).Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	names := func(c *ir.Command) []string {
+		var out []string
+		for _, a := range c.Ancestry {
+			out = append(out, a.Name)
+		}
+		return out
+	}
+	one, two := node.Subcommands[0], node.Subcommands[1]
+	deep := one.Subcommands[0]
+
+	for _, tt := range []struct {
+		cmd  *ir.Command
+		want []string
+	}{
+		{node, []string{"app"}},
+		{one, []string{"app", "one"}},
+		{two, []string{"app", "two"}},
+		{deep, []string{"app", "one", "deep"}},
+	} {
+		if got := names(tt.cmd); !slices.Equal(got, tt.want) {
+			t.Errorf("%s.Ancestry = %v, want %v", tt.cmd.Name, got, tt.want)
+		}
+	}
+
+	// The ancestry ends with the command itself, and begins at its root.
+	if got, want := deep.Ancestry[len(deep.Ancestry)-1], deep; got != want {
+		t.Errorf("last of Ancestry = %v, want the command itself", got)
+	}
+	if got, want := deep.Ancestry[0], node; got != want {
+		t.Errorf("first of Ancestry = %v, want the root", got)
 	}
 }
