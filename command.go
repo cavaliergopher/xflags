@@ -84,13 +84,24 @@ func NewCommand(name, summary string) *Command {
 func (c *Command) String() string { return c.name }
 
 // root returns the root of the command tree c belongs to, which is c itself
-// if it has no parent.
-func (c *Command) root() *Command {
+// if it has no parent, and reports a configuration error if the parent
+// links form a cycle instead of reaching a root.
+//
+// Nothing else walks the source tree: a cycle is representable until
+// Compile has rejected it, so every other reader takes its ancestry from
+// the compiled tree. See Compile.
+func (c *Command) root() (*Command, error) {
+	seen := map[*Command]struct{}{c: {}}
 	root := c
 	for root.parent != nil {
 		root = root.parent
+		if _, ok := seen[root]; ok {
+			return nil, ir.NewConfigErrorf(nil, nil, nil,
+				"%q is its own ancestor", root.name)
+		}
+		seen[root] = struct{}{}
 	}
-	return root
+	return root, nil
 }
 
 // Parse compiles the whole command tree c belongs to (see Compile) and
@@ -159,7 +170,12 @@ func (c *Command) effectiveGroups() []*FlagGroup {
 // parsed values are live. There is no caching, so every call lowers,
 // validates and returns the tree afresh.
 func (c *Command) Compile() (*ir.Command, error) {
-	root := c.root()
+	root, err := c.root()
+	if err != nil {
+		// The tree has no root to lower from, so this error stands alone
+		// rather than joining the batch the rest of the run collects.
+		return nil, err
+	}
 	nodeMap := make(map[*Command]*ir.Command)
 	var errs []error
 	rootNode := root.lower(nil, nodeMap, &errs)
@@ -180,20 +196,33 @@ func (c *Command) Compile() (*ir.Command, error) {
 
 // lower builds the compiled ir.Command for c and, recursively, each of its
 // subcommands, setting parent as its Parent and copying across every
-// field the ir type keeps, including the three resolved here so nothing
-// about the compiled tree has to walk itself again: FullName, computed
-// from parent's own FullName plus c's name, and the three streams, read
-// once through getStdin/getStdout/getStderr. It records the node for c in
-// nodeMap so Compile can look up the node for any source *Command after
-// lowering from the root.
+// field the ir type keeps, including those inherited from an ancestor so
+// nothing about the compiled tree has to walk itself again: FullName,
+// computed from parent's own FullName plus c's name, and the three
+// streams, each taken from parent unless c overrides it. Inheritance
+// reads the node being built rather than the source tree's parent links,
+// which are not to be trusted until Compile has checked them.
 //
-// It also collects into errs the one configuration check that cannot move
-// onto the compiled tree, because it depends on the source tree's own
-// bookkeeping rather than anything a lowered node carries: whether a
-// subcommand's parent actually names the command about to claim it as a
-// child. See Subcommands for why -- a shared command such as
-// xflags.CommandLine may be mounted under more than one parent, and only
-// the source *Command remembers which one Subcommands actually accepted.
+// It records the node for c in nodeMap so Compile can look up the node
+// for any source *Command after lowering from the root.
+//
+// It also collects into errs the two configuration checks that cannot
+// move onto the compiled tree, because they depend on the source tree's
+// own bookkeeping rather than on anything a lowered node carries:
+//
+// Whether a subcommand's parent actually names the command about to
+// claim it as a child. See Subcommands for why -- a shared command such
+// as xflags.CommandLine may be mounted under more than one parent, and
+// only the source *Command remembers which one Subcommands actually
+// accepted.
+//
+// Whether a subcommand has already been lowered, which means the
+// subcommand links lead back into the tree above. nodeMap is the record
+// of what has been visited, so the descent stops there rather than
+// building nodes forever. Note that a cycle here need not be one in the
+// parent links Compile checked: Subcommands leaves an owned command's
+// parent alone, so a command can be mounted below its own ancestor
+// without any parent link changing.
 func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, errs *[]error) *ir.Command {
 	fullName := c.name
 	if parent != nil {
@@ -209,13 +238,25 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 		Parent:      parent,
 		Handler:     c.handlerFunc,
 		UsageFunc:   c.usageFunc,
-		Stdin:       c.getStdin(),
-		Stdout:      c.getStdout(),
-		Stderr:      c.getStderr(),
+		Stdin:       os.Stdin,
+		Stdout:      os.Stdout,
+		Stderr:      os.Stderr,
 	}
 	node.Root = node
 	if parent != nil {
 		node.Root = parent.Root
+		node.Stdin, node.Stdout, node.Stderr = parent.Stdin, parent.Stdout, parent.Stderr
+	}
+	// Each stream resolves on its own, so redirecting one leaves the
+	// others inherited.
+	if c.stdin != nil {
+		node.Stdin = c.stdin
+	}
+	if c.stdout != nil {
+		node.Stdout = c.stdout
+	}
+	if c.stderr != nil {
+		node.Stderr = c.stderr
 	}
 	nodeMap[c] = node
 
@@ -231,6 +272,11 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 		}
 	}
 	for _, sub := range c.subcommands {
+		if prev, ok := nodeMap[sub]; ok {
+			*errs = append(*errs, ir.NewConfigErrorf(nil, node, nil,
+				"%q is already mounted at %q", sub.name, prev.FullName))
+			continue
+		}
 		// Subcommands leaves an already-parented command's parent alone
 		// rather than stealing it, so the mismatch is still visible here
 		// to report.
@@ -241,41 +287,6 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 		node.Subcommands = append(node.Subcommands, sub.lower(node, nodeMap, errs))
 	}
 	return node
-}
-
-// getStdin returns the reader the command's handler reads, inheriting from
-// the nearest ancestor that set one and defaulting to the process stream.
-// Each stream resolves on its own, so redirecting one leaves the others
-// where they were.
-func (c *Command) getStdin() io.Reader {
-	for p := c; p != nil; p = p.parent {
-		if p.stdin != nil {
-			return p.stdin
-		}
-	}
-	return os.Stdin
-}
-
-// getStdout returns the writer for the command's help messages and for
-// whatever its handler writes to Invocation.Stdout. See getStdin.
-func (c *Command) getStdout() io.Writer {
-	for p := c; p != nil; p = p.parent {
-		if p.stdout != nil {
-			return p.stdout
-		}
-	}
-	return os.Stdout
-}
-
-// getStderr returns the writer for the command's error messages and for
-// whatever its handler writes to Invocation.Stderr. See getStdin.
-func (c *Command) getStderr() io.Writer {
-	for p := c; p != nil; p = p.parent {
-		if p.stderr != nil {
-			return p.stderr
-		}
-	}
-	return os.Stderr
 }
 
 // Run parses the given set of command line arguments and calls the handler
@@ -381,11 +392,11 @@ func (c *Command) Complete(args []string, word string) ([]string, ir.CompDirecti
 //
 // Where a line goes turns on whether the tree compiled. A config error
 // means it did not, and the stream overrides are part of what failed to
-// validate -- the parent links getStderr walks are themselves something
-// Compile checks -- so nothing the tree says about its streams decides
-// where the line goes, and it goes to os.Stderr. Every other error is
-// reported after a successful Compile, so it goes to the stderr of the
-// command the error names, or the receiver's when it names none.
+// validate -- the parent links a stream is inherited along are themselves
+// something Compile checks -- so nothing the tree says about its streams
+// decides where the line goes, and it goes to os.Stderr. Every other
+// error is reported after a successful Compile, so it goes to the stderr
+// of the command the error names, or the receiver's when it names none.
 //
 // An argument error is followed by that command's usage, so the reader
 // who mistyped sees what to type instead; a config error is not, because
@@ -396,9 +407,18 @@ func (c *Command) handleErr(err error) int {
 		return ExitCodeSuccess
 	}
 
+	// Only a compiled command knows its streams, so the tree is compiled
+	// here to find them and, where the error names no command, to describe
+	// itself. A config error is the case where that fails, and it is the
+	// one error that does not consult the tree at all.
+	node, cerr := c.Compile()
+
 	for _, e := range ir.FlattenErrors(err) {
 		errTypeName := "Error"
-		stderr := c.getStderr()
+		var stderr io.Writer = os.Stderr
+		if cerr == nil {
+			stderr = node.Stderr
+		}
 
 		var argErr *ir.ArgumentError
 		var cfgErr *ir.ConfigError
@@ -431,8 +451,7 @@ func (c *Command) handleErr(err error) int {
 			cmd := argErr.Cmd
 			if cmd == nil {
 				// The error names no command, so the receiver describes
-				// itself instead, which means compiling it first.
-				node, cerr := c.Compile()
+				// itself instead.
 				if cerr != nil {
 					return fallbackToStderr(cerr)
 				}

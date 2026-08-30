@@ -202,6 +202,82 @@ func TestSubcommandAlreadyParented(t *testing.T) {
 	assertConfigError(t, b, "a subcommand already parented elsewhere")
 }
 
+// TestSubcommandCycle asserts that a command tree that leads back into
+// itself is reported as a ConfigError rather than walked forever. Every
+// shape here wedged the process before the tree could be validated: the
+// first three walking parent links to find a root that is not there, the
+// last two descending subcommand links that lead back up.
+func TestSubcommandCycle(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  func() *Command
+	}{
+		{
+			// A command mounted under itself, which Subcommands accepts
+			// because its parent is nil at the time.
+			name: "Self",
+			cmd: func() *Command {
+				a := NewCommand("a", "")
+				return a.Subcommands(a)
+			},
+		},
+		{
+			name: "Mutual",
+			cmd: func() *Command {
+				a, b := NewCommand("a", ""), NewCommand("b", "")
+				a.Subcommands(b)
+				b.Subcommands(a)
+				return a
+			},
+		},
+		{
+			name: "Deep",
+			cmd: func() *Command {
+				a, b, c := NewCommand("a", ""), NewCommand("b", ""), NewCommand("c", "")
+				a.Subcommands(b)
+				b.Subcommands(c)
+				c.Subcommands(a)
+				return a
+			},
+		},
+		{
+			// The parent links are acyclic here -- Subcommands leaves b's
+			// parent alone, since a already claimed it -- so only the
+			// descent through subcommands leads back up.
+			name: "SubcommandsOnly",
+			cmd: func() *Command {
+				a, b, c := NewCommand("a", ""), NewCommand("b", ""), NewCommand("c", "")
+				a.Subcommands(b)
+				b.Subcommands(c)
+				c.Subcommands(b)
+				return a
+			},
+		},
+		{
+			name: "MountedTwice",
+			cmd: func() *Command {
+				a, b := NewCommand("a", ""), NewCommand("b", "")
+				return a.Subcommands(b, b)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertConfigError(t, tt.cmd(), "a cycle in the command tree")
+		})
+	}
+}
+
+// TestSubcommandCycleFromDescendant asserts that the cycle is reported
+// wherever Compile is called from, not only from the command that closes
+// it.
+func TestSubcommandCycleFromDescendant(t *testing.T) {
+	a, b := NewCommand("a", ""), NewCommand("b", "")
+	a.Subcommands(b)
+	b.Subcommands(a)
+	assertConfigError(t, b, "a cycle reached from a descendant")
+}
+
 func ExampleCommand_FlagGroups() {
 	var n int
 	var rightToLeft bool
@@ -870,6 +946,31 @@ func TestConfigErrorIgnoresConfiguredStreams(t *testing.T) {
 	assertString(t, "", subErr.String())
 }
 
+// TestStreamsAreInherited asserts that a command with no stream of its
+// own takes each one from the nearest ancestor that named it, and that
+// the three resolve independently, so redirecting one leaves the others
+// where they were.
+func TestStreamsAreInherited(t *testing.T) {
+	var rootOut, midErr strings.Builder
+	leaf := NewCommand("leaf", "")
+	mid := NewCommand("mid", "").Stderr(&midErr).Subcommands(leaf)
+	NewCommand("root", "").Stdout(&rootOut).Subcommands(mid)
+
+	node, err := leaf.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := node.Stdout, io.Writer(&rootOut); got != want {
+		t.Errorf("Stdout = %v, want the root's", got)
+	}
+	if got, want := node.Stderr, io.Writer(&midErr); got != want {
+		t.Errorf("Stderr = %v, want the middle command's", got)
+	}
+	if got, want := node.Stdin, io.Reader(os.Stdin); got != want {
+		t.Errorf("Stdin = %v, want os.Stdin", got)
+	}
+}
+
 // TestArgumentErrorWrapsArgumentErrorOnce asserts that an ArgumentError
 // wrapping another, such as Choices reporting a bad value, prints its
 // wrapped message plain: Error() tags it "xflags: " for a Go caller, and
@@ -1175,6 +1276,19 @@ func TestRunExitCodes(t *testing.T) {
 				),
 			wantCode:    2,
 			wantProcErr: "Program error: test: flag already declared: --foo\n",
+		},
+		{
+			// A tree that leads back into itself reports like any other
+			// malformed tree, rather than wedging with no output at all.
+			name: "CycleConfigError",
+			cmd: func() *Command {
+				cmd, sub := NewCommand("test", ""), NewCommand("sub", "")
+				cmd.Subcommands(sub)
+				sub.Subcommands(cmd)
+				return cmd
+			}(),
+			wantCode:    2,
+			wantProcErr: "Program error: \"test\" is its own ancestor\n",
 		},
 		{
 			name:     "Exit",

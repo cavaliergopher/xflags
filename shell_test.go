@@ -98,3 +98,32 @@ func TestRunCompletionUnknownValueFallsThrough(t *testing.T) {
 		t.Error("handler was not called; Run did not fall through")
 	}
 }
+
+// TestRunCompletionMalformedTreeFallsThrough asserts that a tree that does
+// not compile answers no completion request and falls through to Run's
+// ordinary reporting, rather than answering from a tree whose shape is
+// exactly what failed to validate.
+func TestRunCompletionMalformedTreeFallsThrough(t *testing.T) {
+	cmd := NewCommand("app", "").EnableCompletion().Flags(
+		String(new(string), "foo", "", ""),
+		String(new(string), "foo", "", ""),
+	)
+	t.Setenv("APP_COMPLETE", "bash_source")
+
+	var code int
+	var stdout string
+	procErr := captureStderr(t, func() {
+		code, stdout, _ = runCaptured(cmd)
+	})
+
+	if got, want := code, ExitCodeUsage; got != want {
+		t.Errorf("code = %d, want %d", got, want)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty", stdout)
+	}
+	want := "Program error: app: flag already declared: --foo\n"
+	if got := procErr; got != want {
+		t.Errorf("os.Stderr = %q, want %q", got, want)
+	}
+}

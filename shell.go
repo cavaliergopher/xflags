@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/cavaliergopher/xflags/internal/argv"
 	"github.com/cavaliergopher/xflags/ir"
 )
 
@@ -46,10 +47,25 @@ func shellFuncName(prog string) string {
 // completionHook answers c's shell completion environment variable when it
 // is set to a value Run recognizes, reporting handled as false when it is
 // unset or holds anything else, so Run falls through to parsing args as
-// usual. See EnableCompletion and (*Command).Run.
+// usual. A tree that does not compile answers nothing and reports handled
+// as false, so the fault is reported when Run goes on to compile it. See
+// EnableCompletion and (*Command).Run.
 func completionHook(c *Command) (code int, handled bool) {
-	root := c.root()
-	varName := completionEnvVar(root.name)
+	// Which variable to consult is a question about the tree, since it is
+	// named from the root's name, so the tree compiles before the question
+	// can be asked.
+	//
+	// TODO: this compiles the tree a second time on the path where no
+	// completion is requested, which is every ordinary invocation of a
+	// command that enabled it. It goes away once Run compiles once and
+	// passes the compiled node down instead of each step compiling for
+	// itself.
+	node, err := c.Compile()
+	if err != nil {
+		return 0, false
+	}
+	rootName := node.Root.Name
+	varName := completionEnvVar(rootName)
 	val, ok := os.LookupEnv(varName)
 	if !ok {
 		return 0, false
@@ -57,13 +73,13 @@ func completionHook(c *Command) (code int, handled bool) {
 
 	switch val {
 	case "bash_source":
-		fmt.Fprint(c.getStdout(), bashSourceScript(root.name, varName))
+		fmt.Fprint(node.Stdout, bashSourceScript(rootName, varName))
 		return ExitCodeSuccess, true
 	case "zsh_source":
-		fmt.Fprint(c.getStdout(), zshSourceScript(root.name, varName))
+		fmt.Fprint(node.Stdout, zshSourceScript(rootName, varName))
 		return ExitCodeSuccess, true
 	case "bash_complete", "zsh_complete":
-		writeCompletionReply(c, c.getStdout())
+		writeCompletionReply(node, node.Stdout)
 		return ExitCodeSuccess, true
 	default:
 		return 0, false
@@ -92,7 +108,7 @@ func completionHook(c *Command) (code int, handled bool) {
 // This always exits 0: a shell script evaluates the reply, and a nonzero
 // exit or anything on stderr would surface as noise in the user's
 // terminal rather than as a completion failure anyone can act on.
-func writeCompletionReply(c *Command, w io.Writer) {
+func writeCompletionReply(cmd *ir.Command, w io.Writer) {
 	var words []string
 	if s := os.Getenv("COMP_WORDS"); s != "" {
 		words = strings.Split(s, "\n")
@@ -108,7 +124,7 @@ func writeCompletionReply(c *Command, w io.Writer) {
 		word = words[cword]
 	}
 
-	cands, dir := c.Complete(args, word)
+	cands, dir := argv.Complete(cmd, args, word)
 
 	for _, cand := range cands {
 		fmt.Fprintf(w, "plain,%s\n", cand)
