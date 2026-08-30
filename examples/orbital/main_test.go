@@ -151,6 +151,36 @@ func TestOrbital(t *testing.T) {
 	}
 }
 
+// TestOrbitalNegatedBool exercises the second spelling every boolean
+// answers to, on the flag where it earns its keep: --trace reads
+// ORBITAL_TRACE, so --no-trace is how one invocation turns off what the
+// environment turned on. Nothing declares it -- xflags generates one for
+// every boolean -- and nothing advertises it either, which is why an
+// example is the only place a reader meets it.
+func TestOrbitalNegatedBool(t *testing.T) {
+	const traced = "trace: orbital exec took "
+	args := []string{"exec", "--service", "api", "--", "echo", "hi"}
+	env := []string{actor, "ORBITAL_TRACE=1"}
+
+	_, stderr, code := run(t, env, args...)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if !strings.HasPrefix(stderr, traced) {
+		t.Fatalf("stderr = %q, want it to start with %q", stderr, traced)
+	}
+
+	// Giving the flag counts as giving it, so the environment variable is
+	// not consulted, and the negated spelling sets it false.
+	_, stderr, code = run(t, env, append([]string{"--no-trace"}, args...)...)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want nothing traced", stderr)
+	}
+}
+
 // TestOrbitalHelp pins the whole help message. It guards the example, and
 // the formatter with it: every section orbital exercises -- imported
 // groups, a registered group, environment variables, the description --
@@ -224,6 +254,23 @@ func TestOrbitalCompletion(t *testing.T) {
 			name:  "ChoicesCompleteAnOptionValue",
 			words: []string{"orbital", "deploy", "run", "--env", ""}, cword: "4",
 			want: "plain,production\nplain,staging\nnofiles,\n",
+		},
+		{
+			// Every boolean answers to --no-<name>, but none is offered
+			// here: with one per boolean they would double the list for a
+			// spelling most users never type.
+			name:  "NegationsAreNotOfferedUnprompted",
+			words: []string{"orbital", "--"}, cword: "1",
+			want: "plain,--actor\nplain,--help\nplain,--legacy-metrics-addr\n" +
+				"plain,--log-level\nplain,--trace\nnofiles,\n",
+		},
+		{
+			// Once the word reaches for one they arrive. --trace is the
+			// only boolean in scope at the root, so it is the only
+			// negation to offer.
+			name:  "NegationsArriveOnceReachedFor",
+			words: []string{"orbital", "--no"}, cword: "1",
+			want: "plain,--no-trace\nnofiles,\n",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
