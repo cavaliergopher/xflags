@@ -22,20 +22,10 @@ import (
 // Invocation has HelpRequested set. That is not an error: it is for the
 // caller to report the command's usage.
 func Parse(cmd *ir.Command, args []string) (*ir.Invocation, error) {
-	if err := applyDefaults(rootOf(cmd)); err != nil {
+	if err := applyDefaults(cmd.Root); err != nil {
 		return nil, err
 	}
 	return apply(cmd, lex(cmd, args))
-}
-
-// rootOf returns the root of the tree cmd belongs to, tolerating a Root
-// that was never set: (*xflags.Command).Compile always sets it, but a tree
-// built by hand may not, and whole-tree work should not panic on one.
-func rootOf(cmd *ir.Command) *ir.Command {
-	if cmd.Root != nil {
-		return cmd.Root
-	}
-	return cmd
 }
 
 // applyDefaults restores every flag reachable from c, and from every

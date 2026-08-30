@@ -97,8 +97,9 @@ type Command struct {
 	// Root is the command at the top of the tree this command belongs to,
 	// and is the command itself at the root. Whole-tree work -- validation,
 	// and restoring defaults before a parse -- starts here, so that calling
-	// Parse on a subcommand still governs the tree it belongs to. Like
-	// Parent, it is derivable from the tree's shape and is not marshaled.
+	// Parse on a subcommand still governs the tree it belongs to, and is
+	// what requires it to be set. Like Parent, it is derivable from the
+	// tree's shape and is not marshaled.
 	Root *Command `json:"-"`
 
 	// Handler is called to run the command once its command line parses
@@ -122,16 +123,6 @@ type Command struct {
 	Stderr io.Writer `json:"-"`
 }
 
-// rootOrSelf returns the tree's root, tolerating a Root that was never
-// set: (*xflags.Command).Compile always sets it, but a tree built by hand
-// may not, and whole-tree work should not panic on one.
-func (c *Command) rootOrSelf() *Command {
-	if c.Root != nil {
-		return c.Root
-	}
-	return c
-}
-
 // String returns the command's own name, unqualified by its ancestry. See
 // FullName for the full path from the root.
 func (c *Command) String() string { return c.Name }
@@ -147,7 +138,7 @@ func (c *Command) String() string { return c.Name }
 // (*xflags.Command).Compile, which runs both. A Command produced by
 // Compile is already validated.
 func (c *Command) Validate() error {
-	return validateTree(c.rootOrSelf())
+	return validateTree(c.Root)
 }
 
 // Usage prints a help message for c to w, using the nearest UsageFunc set

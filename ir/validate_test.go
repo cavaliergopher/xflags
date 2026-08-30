@@ -78,6 +78,7 @@ func TestValidateDuplicateValueName(t *testing.T) {
 			{ValueName: "FILE", Positional: true, TakesValue: true, Value: stubValue{}, MaxCount: 1},
 		}}},
 	}
+	cmd.Root = cmd // as Compile sets it; Validate walks from the root
 	err := cmd.Validate()
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -106,6 +107,7 @@ func TestValidateOperandDoesNotCollideWithOption(t *testing.T) {
 			},
 		}}},
 	}
+	cmd.Root = cmd // as Compile sets it; Validate walks from the root
 	if err := cmd.Validate(); err != nil {
 		t.Errorf("Validate() = %v, want no error", err)
 	}
