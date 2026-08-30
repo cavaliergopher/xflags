@@ -202,8 +202,8 @@ func (c *Command) Compile() (*ir.Command, error) {
 // field the ir type keeps, including those inherited from an ancestor so
 // nothing about the compiled tree has to walk itself again: FullName,
 // computed from parent's own FullName plus c's name, and the three
-// streams and the usage renderer, each taken from parent unless c
-// overrides it, and Ancestry, the parent's with c appended. Inheritance
+// streams and the usage renderer, each c's own where it named one and
+// the parent's otherwise, and Ancestry, the parent's with c appended. Inheritance
 // reads the node being built rather than the source tree's parent links,
 // which are not to be trusted until Compile has checked them.
 //
@@ -241,9 +241,9 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 		FullName:    fullName,
 		Handler:     c.handlerFunc,
 		UsageFunc:   c.usageFunc,
-		Stdin:       os.Stdin,
-		Stdout:      os.Stdout,
-		Stderr:      os.Stderr,
+		Stdin:       c.stdin,
+		Stdout:      c.stdout,
+		Stderr:      c.stderr,
 	}
 	node.Root = node
 	node.Ancestry = []*ir.Command{node}
@@ -252,21 +252,37 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 		// Cloned rather than appended in place, or sibling subcommands
 		// would share a backing array and overwrite each other.
 		node.Ancestry = append(slices.Clone(parent.Ancestry), node)
-		node.Stdin, node.Stdout, node.Stderr = parent.Stdin, parent.Stdout, parent.Stderr
+	}
+
+	// What c named for itself is above; what it left unnamed is inherited
+	// here. Each field resolves on its own, so naming one leaves the
+	// others inherited, and a parent's are already resolved, so
+	// inheriting ends the search.
+	if parent != nil {
 		if node.UsageFunc == nil {
 			node.UsageFunc = parent.UsageFunc
 		}
+		if node.Stdin == nil {
+			node.Stdin = parent.Stdin
+		}
+		if node.Stdout == nil {
+			node.Stdout = parent.Stdout
+		}
+		if node.Stderr == nil {
+			node.Stderr = parent.Stderr
+		}
 	}
-	// Each stream resolves on its own, so redirecting one leaves the
-	// others inherited.
-	if c.stdin != nil {
-		node.Stdin = c.stdin
+	// The root has no parent to inherit from, so a stream nobody named is
+	// the process's. UsageFunc has no default to fall back to here: nil
+	// means the help renderer chooses one when it prints.
+	if node.Stdin == nil {
+		node.Stdin = os.Stdin
 	}
-	if c.stdout != nil {
-		node.Stdout = c.stdout
+	if node.Stdout == nil {
+		node.Stdout = os.Stdout
 	}
-	if c.stderr != nil {
-		node.Stderr = c.stderr
+	if node.Stderr == nil {
+		node.Stderr = os.Stderr
 	}
 	nodeMap[c] = node
 

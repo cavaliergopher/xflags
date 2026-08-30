@@ -976,6 +976,21 @@ func TestStreamsAreInherited(t *testing.T) {
 	if got, want := node.Stdin, io.Reader(os.Stdin); got != want {
 		t.Errorf("Stdin = %v, want os.Stdin", got)
 	}
+
+	// A command that names its own wins over the ancestor it would
+	// otherwise inherit from, which is what makes the inheritance a
+	// default rather than a rule.
+	var leafOut strings.Builder
+	loud := NewCommand("loud", "").Stdout(&leafOut)
+	NewCommand("root", "").Stdout(&rootOut).Subcommands(loud)
+
+	own, err := loud.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := own.Stdout, io.Writer(&leafOut); got != want {
+		t.Errorf("Stdout = %v, want the command's own, not the root's", got)
+	}
 }
 
 // TestArgumentErrorWrapsArgumentErrorOnce asserts that an ArgumentError
