@@ -14,16 +14,16 @@ import (
 // on the visible one so descent can be asserted.
 func compRootTree() *Command {
 	add := NewCommand("add", "").Flags(
-		String(new(string), "tags", "", "").ShortName("t"),
+		String(new(string), "tags", "", "").Aliases("t"),
 	)
 	hiddenSub := NewCommand("hidden-sub", "").Hidden()
 	return NewCommand("app", "").
 		Flags(
-			Bool(new(bool), "verbose", false, "").ShortName("v"),
-			Bool(new(bool), "extra", false, "").ShortName("x").Hidden(),
-			String(new(string), "env", "", "").ShortName("e").
+			Bool(new(bool), "verbose", false, "").Aliases("v"),
+			Bool(new(bool), "extra", false, "").Aliases("x").Hidden(),
+			String(new(string), "env", "", "").Aliases("e").
 				Choices("dev", "staging", "prod"),
-			String(new(string), "name", "", "").ShortName("n"),
+			String(new(string), "name", "", "").Aliases("n"),
 		).
 		Subcommands(add, hiddenSub)
 }
@@ -146,7 +146,7 @@ func TestComplete(t *testing.T) {
 // back to filename completion.
 func TestCompleteEmptyArgs(t *testing.T) {
 	cmd := NewCommand("app", "").Flags(
-		Bool(new(bool), "verbose", false, "").ShortName("v"),
+		Bool(new(bool), "verbose", false, "").Aliases("v"),
 	)
 	cands, dir := cmd.Complete(nil, "")
 	assertStrings(t, nil, cands)
@@ -169,7 +169,7 @@ func TestCompleteFuncSeesEarlierFlag(t *testing.T) {
 		return []string{"i-2", "i-1"}, ir.CompNoFileComp
 	}
 	cmd := NewCommand("app", "").Flags(
-		String(&region, "region", "", "").ShortName("r"),
+		String(&region, "region", "", "").Aliases("r"),
 		String(new(string), "instance", "", "").Positional().Complete(fn),
 	)
 

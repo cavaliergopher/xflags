@@ -26,7 +26,7 @@ func runCommand(client *fleet.Client) *xflags.Command {
 	return xflags.NewCommand("run", "Roll out a new version of a service").
 		Flags(
 			xflags.String(&service, "service", "", "Service to deploy").
-				ShortName("s").
+				Aliases("s").
 				Required(),
 			xflags.String(&version, "version", "", "Version to deploy, such as a git SHA").
 				Required().

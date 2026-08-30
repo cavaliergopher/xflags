@@ -44,7 +44,7 @@ var App = NewCommand("helloworld", "Print \"Hello, World!\"").
 			"en",
 			"Language (en, es, it or nl)",
 		).
-			ShortName("l").
+			Aliases("l").
 			Env("HW_LANG"),
 
 		// StringSlice flag to optionally print multiple positional

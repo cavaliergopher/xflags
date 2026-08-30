@@ -39,11 +39,8 @@ func validateTree(c *Command, claimed map[string]*Command) error {
 			continue
 		}
 		for _, flag := range group.Flags {
-			if flag.Name != "" {
-				claims["--"+flag.Name] = c
-			}
-			if flag.ShortName != "" {
-				claims["-"+flag.ShortName] = c
+			for _, form := range claimedForms(flag) {
+				claims[form] = c
 			}
 		}
 	}
@@ -80,20 +77,10 @@ func validateSelf(c *Command, claimed map[string]*Command) error {
 					hasUnboundedPositional = true
 				}
 			}
-			if flag.Name != "" {
-				key := "--" + flag.Name
-				if _, ok := flagsByName[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
-						alreadyDeclaredMessage(flag, key)))
-				}
-				if ancestor, ok := claimed[key]; ok {
-					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
-						alreadyDeclaredByAncestorMessage(flag, key, ancestor.Name)))
-				}
-				flagsByName[key] = flag
-			}
-			if flag.ShortName != "" {
-				key := "-" + flag.ShortName
+			// A collision is reported by the colliding form rather than by
+			// the name behind it: it is a fact about a spelling, so the
+			// spelling is what the reader needs.
+			for _, key := range claimedForms(flag) {
 				if _, ok := flagsByName[key]; ok {
 					errs = append(errs, newConfigErrorf(nil, c, flag, "%s",
 						alreadyDeclaredMessage(flag, key)))
@@ -129,6 +116,28 @@ func alreadyDeclaredByAncestorMessage(flag *Flag, key, ancestor string) string {
 	return fmt.Sprintf("flag already declared by ancestor %q: %s", ancestor, key)
 }
 
+// claimedForms returns the spellings f claims in the name space that
+// validation checks for collisions. An option claims each of its forms; a
+// positional argument has none, so it claims its canonical name spelled as
+// an option, since a name means one flag along a command path whether or
+// not it is spelled with dashes. See
+// docs/adr/path-scoped-flag-names.md.
+func claimedForms(f *Flag) []string {
+	if f.Positional {
+		if f.Name == "" {
+			return nil
+		}
+		return []string{FormOf(f.Name)}
+	}
+	forms := make([]string, 0, len(f.Forms))
+	for _, form := range f.Forms {
+		if form != "" {
+			forms = append(forms, form)
+		}
+	}
+	return forms
+}
+
 // validateFlag implements the flag half of (*Command).Validate: it verifies
 // that f is configured correctly, independent of the command it belongs
 // to, reporting every rule it breaks.
@@ -137,30 +146,46 @@ func validateFlag(f *Flag) error {
 	fail := func(format string, a ...any) {
 		errs = append(errs, newConfigErrorf(nil, nil, f, format, a...))
 	}
-	if strings.HasPrefix(f.Name, "-") {
-		fail("flag name must not start with '-'")
+	// A flag with nothing but empty slots can never be named, and has no
+	// canonical name for an error to report it by.
+	if f.Name == "" {
+		fail("flag must declare a name")
 	}
-	// "=" reads as the delimiter of an attached value and whitespace as an
-	// argument break, so a name containing either can never be matched.
-	if strings.ContainsRune(f.Name, '=') {
-		fail("flag name must not contain '='")
+	// A positional argument is named rather than spelled, so an alias
+	// would be a name nothing could ever match: it never enters the option
+	// table. Reported rather than ignored, so the mistake is not silent.
+	if f.Positional && len(f.Names) > 1 {
+		fail("positional arguments do not support aliases")
 	}
-	if strings.ContainsFunc(f.Name, unicode.IsSpace) {
-		fail("flag name must not contain whitespace")
-	}
-	// The parser matches -h and --help before the flag table, so a flag
-	// claiming either spelling would silently never fire.
-	if f.Name == "help" {
-		fail("flag name is reserved for help: --help")
+	for _, name := range f.Names {
+		if name == "" {
+			continue // an empty slot, which xflags.Flag.Aliases documents
+		}
+		if strings.HasPrefix(name, "-") {
+			fail("flag name must not start with '-': %q", name)
+		}
+		// "=" reads as the delimiter of an attached value and whitespace
+		// as an argument break, so a name containing either can never be
+		// matched.
+		if strings.ContainsRune(name, '=') {
+			fail("flag name must not contain '=': %q", name)
+		}
+		if strings.ContainsFunc(name, unicode.IsSpace) {
+			fail("flag name must not contain whitespace: %q", name)
+		}
+		// A one-character name is spelled with a single dash, and POSIX
+		// guideline 3 confines that to one alphanumeric character.
+		if utf8.RuneCountInString(name) == 1 && !isShortName(name) {
+			fail("short name must be one character from [A-Za-z0-9]: %q", name)
+		}
+		// The lexer matches -h and --help before the option table, so a
+		// flag claiming either spelling would silently never fire.
+		if form := FormOf(name); form == "-h" || form == "--help" {
+			fail("flag name is reserved for help: %s", form)
+		}
 	}
 	if f.Value == nil {
 		fail("flag must be bound to a value")
-	}
-	if f.ShortName != "" && !isShortName(f.ShortName) {
-		fail("short name must be one character from [A-Za-z0-9]: %q", f.ShortName)
-	}
-	if f.ShortName == "h" {
-		fail("short name is reserved for help: -h")
 	}
 	if f.MinCount < 0 {
 		fail("minimum count must not be negative: %d", f.MinCount)

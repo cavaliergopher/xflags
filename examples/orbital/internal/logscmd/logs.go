@@ -32,7 +32,7 @@ func Command(client *fleet.Client) *xflags.Command {
 					return client.Services(), ir.CompNoFileComp
 				}),
 			xflags.Bool(&follow, "follow", false, "Keep streaming until interrupted").
-				ShortName("f"),
+				Aliases("f"),
 			xflags.Duration(&since, "since", 10*time.Minute, "How far back to start showing logs").
 				ShowDefault(),
 		).

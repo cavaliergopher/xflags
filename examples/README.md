@@ -32,7 +32,7 @@ set `ORBITAL_ACTOR`. `--help` does not.
 | `Validate` | `internal/config` (`validKey`); `internal/deploy` (`validVersion`) |
 | `Duration` | `internal/deploy` `--timeout`; `internal/logscmd` `--since` |
 | `Strings` | `internal/deploy` `--tag`; `internal/logscmd` `SERVICE` |
-| `ShortName` | `internal/deploy` `-s`; `internal/logscmd` `-f` |
+| `Aliases` | `internal/deploy` `-s`; `internal/logscmd` `-f` |
 | `Hidden` command | `internal/debug` |
 | `Hidden` flag | `internal/deploy` `--unsafe-skip-health-checks` |
 | `ShowDefault` | `internal/telemetry`, `internal/deploy`, `internal/logscmd` |

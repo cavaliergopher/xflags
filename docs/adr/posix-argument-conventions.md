@@ -53,8 +53,9 @@ POSIX terms when it means the standard's concept:
 
 ### Adopted as written
 
-**Guideline 3 — one alphanumeric character per short name.** `ShortName`
-takes a single character from the portable character set: `[A-Za-z0-9]`.
+**Guideline 3 — one alphanumeric character per short name.** A name of one
+character is spelled with a single dash, and validation confines it to the
+portable character set: `[A-Za-z0-9]`.
 The check counted bytes and admitted punctuation until 6195ed8, so `-é` was
 rejected for the wrong reason and `-!` was accepted for none. Guideline 5
 now leans on the rule rather than merely agreeing with it: `=` is read as a

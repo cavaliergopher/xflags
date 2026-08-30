@@ -139,11 +139,11 @@ func optionTable(path []*Command) map[string]*Flag {
 				if f.Positional {
 					continue
 				}
-				if f.Name != "" {
-					table["--"+f.Name] = f
-				}
-				if f.ShortName != "" {
-					table["-"+f.ShortName] = f
+				for _, form := range f.Forms {
+					if form == "" {
+						continue
+					}
+					table[form] = f
 				}
 			}
 		}
@@ -162,11 +162,11 @@ func flagForms(path []*Command) []string {
 				if f.Positional || f.Hidden {
 					continue
 				}
-				if f.Name != "" {
-					forms = append(forms, "--"+f.Name)
-				}
-				if f.ShortName != "" {
-					forms = append(forms, "-"+f.ShortName)
+				for _, form := range f.Forms {
+					if form == "" {
+						continue
+					}
+					forms = append(forms, form)
 				}
 			}
 		}

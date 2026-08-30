@@ -1,6 +1,9 @@
 package ir
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // Flag is the compiled, implementation form of a command line flag or
 // positional argument, produced by lowering a configuration tree with
@@ -13,8 +16,28 @@ import "strings"
 // this is one half of, and TestMarshalOmitsBehavior for what enforces the
 // tags.
 type Flag struct {
-	Name        string
-	ShortName   string
+	// Name is the flag's canonical name, undecorated: the first of Names
+	// that is not empty. It is what an error reports the flag by, and what
+	// a positional argument is named for.
+	Name string
+
+	// Names is every name the flag answers to, in the order
+	// xflags.Flag.Aliases documents: the canonical name, the short name,
+	// then any further aliases. A slot may be empty, which is how a flag
+	// declares an alias but no short name, so the slice is read by index
+	// rather than compacted.
+	Names []string
+
+	// Forms is how each of Names is spelled on the command line, parallel
+	// to it so that an empty slot stays empty: Forms[0] is the canonical
+	// spelling and Forms[1] the short one, both of which a help formatter
+	// prints, and anything after is an alias it does not. A positional
+	// argument has no forms, being named rather than spelled.
+	//
+	// Not every form a parser accepts need appear here, so this is what is
+	// worth showing rather than an exhaustive account of what matches.
+	Forms []string
+
 	Usage       string
 	Default     string
 	ShowDefault bool
@@ -53,19 +76,59 @@ type Flag struct {
 }
 
 // String returns the flag's canonical spelling on the command line: its
-// upper-cased name for a positional argument, otherwise its long option
-// spelling if it has one and its short option spelling otherwise.
+// upper-cased name for a positional argument, and otherwise its canonical
+// name spelled as an option.
 func (f *Flag) String() string {
-	if f.Positional {
+	switch {
+	case f.Name == "":
+		return "unknown"
+	case f.Positional:
 		return strings.ToUpper(f.Name)
+	default:
+		return FormOf(f.Name)
 	}
-	if f.Name != "" {
-		return "--" + f.Name
+}
+
+// FormOf returns how a flag name is spelled on the command line: one
+// character takes a single dash and anything longer takes two, which is
+// POSIX guideline 3 and the GNU long-option convention between them. The
+// shape of the name decides, not the slot it was declared in.
+//
+// This is the one place a name becomes a command line spelling, which is
+// what a second argv dialect would replace; see
+// docs/adr/posix-gnu-argv-dialect.md.
+func FormOf(name string) string {
+	if name == "" {
+		return ""
 	}
-	if f.ShortName != "" {
-		return "-" + f.ShortName
+	if utf8.RuneCountInString(name) == 1 {
+		return "-" + name
 	}
-	return "unknown"
+	return "--" + name
+}
+
+// FormsOf returns the spelling of each name given, parallel to them so
+// that an empty slot stays empty.
+func FormsOf(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	forms := make([]string, len(names))
+	for i, name := range names {
+		forms[i] = FormOf(name)
+	}
+	return forms
+}
+
+// CanonicalName returns the first of names that is not empty, which is the
+// name a flag is known by wherever one name has to stand for it.
+func CanonicalName(names []string) string {
+	for _, name := range names {
+		if name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 // Set validates s with the flag's ValidateFunc, if it has one, and then

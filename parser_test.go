@@ -55,9 +55,9 @@ func TestShortOptionGrouping(t *testing.T) {
 			var a, b bool
 			var f, operand string
 			cmd := NewCommand("test", "").Flags(
-				Bool(&a, "alpha", false, "").ShortName("a"),
-				Bool(&b, "bravo", false, "").ShortName("b"),
-				String(&f, "foxtrot", "", "").ShortName("f"),
+				Bool(&a, "alpha", false, "").Aliases("a"),
+				Bool(&b, "bravo", false, "").Aliases("b"),
+				String(&f, "foxtrot", "", "").Aliases("f"),
 				String(&operand, "OPERAND", "", "").Positional(),
 			)
 			_, err := cmd.Parse(tt.args)
@@ -120,9 +120,9 @@ func TestAttachedValues(t *testing.T) {
 			var verbose bool
 			var name string
 			cmd := NewCommand("test", "").Flags(
-				Int(&count, "count", 0, "").ShortName("c"),
+				Int(&count, "count", 0, "").Aliases("c"),
 				Bool(&verbose, "verbose", false, ""),
-				String(&name, "name", "", "").ShortName("n"),
+				String(&name, "name", "", "").Aliases("n"),
 			)
 			_, err := cmd.Parse(tt.args)
 			if tt.err {
@@ -153,7 +153,7 @@ func TestEmptyAttachedValue(t *testing.T) {
 		t.Helper()
 		var name string
 		cmd := NewCommand("test", "").Flags(
-			String(&name, "name", "unset", "").ShortName("n"),
+			String(&name, "name", "unset", "").Aliases("n"),
 		)
 		if _, err := cmd.Parse([]string{arg}); err != nil {
 			t.Fatal(err)
@@ -165,7 +165,7 @@ func TestEmptyAttachedValue(t *testing.T) {
 
 	parseVerbose := func(arg string) error {
 		cmd := NewCommand("test", "").Flags(
-			Bool(new(bool), "verbose", false, "").ShortName("v"),
+			Bool(new(bool), "verbose", false, "").Aliases("v"),
 		)
 		_, err := cmd.Parse([]string{arg})
 		return err
@@ -186,11 +186,11 @@ func TestEmptyAttachedValue(t *testing.T) {
 func TestUnrecognizedOptionNamesSubtree(t *testing.T) {
 	newApp := func() *Command {
 		del := NewCommand("delete", "").Flags(
-			Bool(new(bool), "force", false, "").ShortName("f"),
+			Bool(new(bool), "force", false, "").Aliases("f"),
 			Bool(new(bool), "dry-run", false, ""),
 		)
 		add := NewCommand("add", "").Flags(
-			Bool(new(bool), "tags", false, "").ShortName("t"),
+			Bool(new(bool), "tags", false, "").Aliases("t"),
 			Bool(new(bool), "dry-run", false, ""),
 		)
 		remote := NewCommand("remote", "").Subcommands(add)
@@ -498,15 +498,15 @@ func FuzzParse(f *testing.F) {
 			files   []string
 		)
 		sub := NewCommand("sub", "").Flags(
-			String(&subName, "sub-name", "", "").ShortName("s"),
+			String(&subName, "sub-name", "", "").Aliases("s"),
 			Strings(&files, "file", nil, "").Positional().NArgs(0, 0),
 		)
 		cmd := NewCommand("fuzz", "").
 			Flags(
-				String(&name, "name", "", "").ShortName("n"),
-				Bool(&verbose, "verbose", false, "").ShortName("v"),
-				Int(&count, "count", 0, "").ShortName("c"),
-				Strings(&tags, "tag", nil, "").ShortName("t"),
+				String(&name, "name", "", "").Aliases("n"),
+				Bool(&verbose, "verbose", false, "").Aliases("v"),
+				Int(&count, "count", 0, "").Aliases("c"),
+				Strings(&tags, "tag", nil, "").Aliases("t"),
 			).
 			Subcommands(sub, NewCommand("other", ""))
 		inv, err := cmd.Parse([]string{arg1, arg2, arg3})

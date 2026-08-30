@@ -24,10 +24,7 @@ func flagKey(f *Flag) string {
 	if f.Positional {
 		return strings.ToUpper(f.Name)
 	}
-	if f.Name != "" {
-		return "--" + f.Name
-	}
-	return "-" + f.ShortName
+	return FormOf(f.Name)
 }
 
 func summarize(instrs []instruction) []lexStep {
@@ -83,6 +80,24 @@ func assertLexErrs(t *testing.T, want, got []string) {
 	}
 }
 
+// opt returns an option flag named the way Compile would name one,
+// keeping Name, Names and Forms consistent so that a hand-built fixture
+// matches on the command line exactly as a lowered flag does.
+func opt(names ...string) *Flag {
+	return &Flag{
+		Name:  CanonicalName(names),
+		Names: names,
+		Forms: FormsOf(names),
+	}
+}
+
+// valueOpt is opt for a flag that takes a value.
+func valueOpt(names ...string) *Flag {
+	f := opt(names...)
+	f.TakesValue = true
+	return f
+}
+
 // lexOptTree returns a command with options only: two bare booleans
 // (alpha/bravo), a boolean with a long and short spelling (verbose), a
 // string flag with a long and short spelling (name), a value-taking short
@@ -94,12 +109,12 @@ func lexOptTree() *Command {
 		FlagGroups: []*FlagGroup{{
 			Name: "options",
 			Flags: []*Flag{
-				{Name: "alpha", ShortName: "a"},
-				{Name: "bravo", ShortName: "b"},
-				{Name: "verbose", ShortName: "v"},
-				{Name: "name", ShortName: "n", TakesValue: true},
-				{Name: "foxtrot", ShortName: "f", TakesValue: true},
-				{Name: "count", ShortName: "c", TakesValue: true},
+				opt("alpha", "a"),
+				opt("bravo", "b"),
+				opt("verbose", "v"),
+				valueOpt("name", "n"),
+				valueOpt("foxtrot", "f"),
+				valueOpt("count", "c"),
 			},
 		}},
 	}
@@ -127,13 +142,13 @@ func lexSubTree() *Command {
 	sub := &Command{
 		Name: "sub",
 		FlagGroups: []*FlagGroup{{
-			Flags: []*Flag{{Name: "sub-name", ShortName: "s", TakesValue: true}},
+			Flags: []*Flag{valueOpt("sub-name", "s")},
 		}},
 	}
 	root := &Command{
 		Name: "app",
 		FlagGroups: []*FlagGroup{{
-			Flags: []*Flag{{Name: "name", TakesValue: true}},
+			Flags: []*Flag{valueOpt("name")},
 		}},
 		Subcommands: []*Command{sub},
 	}
@@ -147,7 +162,7 @@ func lexHintTree() *Command {
 	add := &Command{
 		Name: "add",
 		FlagGroups: []*FlagGroup{{
-			Flags: []*Flag{{Name: "tags", ShortName: "t"}},
+			Flags: []*Flag{opt("tags", "t")},
 		}},
 	}
 	root := &Command{Name: "app", Subcommands: []*Command{add}}

@@ -21,7 +21,7 @@ func Command() *xflags.Command {
 		ForwardArgs().
 		Flags(
 			xflags.String(&service, "service", "", "Service whose container to exec into").
-				ShortName("s").
+				Aliases("s").
 				Required(),
 		).
 		HandleFunc(middleware.Chain(&identity.Actor,

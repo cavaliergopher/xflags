@@ -576,9 +576,9 @@ func TestValidateAncestorShadowing(t *testing.T) {
 		{
 			name: "ShortName",
 			cmd: NewCommand("root", "").
-				Flags(String(new(string), "file", "", "").ShortName("f")).
+				Flags(String(new(string), "file", "", "").Aliases("f")).
 				Subcommands(NewCommand("sub", "").Flags(
-					String(new(string), "output", "", "").ShortName("f"),
+					String(new(string), "output", "", "").Aliases("f"),
 				)),
 			want: `root sub: flag already declared by ancestor "root": -f`,
 		},
@@ -613,10 +613,10 @@ func TestSiblingFlagReuse(t *testing.T) {
 	var deleteForce, pushForce bool
 	app := NewCommand("app", "").Subcommands(
 		NewCommand("delete", "").Flags(
-			Bool(&deleteForce, "force", false, "").ShortName("f"),
+			Bool(&deleteForce, "force", false, "").Aliases("f"),
 		),
 		NewCommand("push", "").Flags(
-			Bool(&pushForce, "force", false, "").ShortName("f"),
+			Bool(&pushForce, "force", false, "").Aliases("f"),
 		),
 	)
 
@@ -777,9 +777,8 @@ func TestValidateUnboundedMaxIsNotExceeded(t *testing.T) {
 // character from [A-Za-z0-9].
 func TestValidateShortName(t *testing.T) {
 	for _, shortName := range []string{
-		"xx", // more than one character
-		"!",  // outside the portable character set
-		"=",  // ... and this one the parser reads as a delimiter
+		"!", // outside the portable character set
+		"=", // ... and this one the parser reads as a delimiter
 		"-",
 		" ",
 		"é", // one character, but not one byte, and still not portable
@@ -787,7 +786,7 @@ func TestValidateShortName(t *testing.T) {
 		t.Run(shortName, func(t *testing.T) {
 			var a string
 			assertParseError(t, NewCommand("test", "").Flags(
-				String(&a, "foo", "", "").ShortName(shortName),
+				String(&a, "foo", "", "").Aliases(shortName),
 			), "illegal short name")
 		})
 	}
@@ -795,7 +794,7 @@ func TestValidateShortName(t *testing.T) {
 		t.Run(shortName, func(t *testing.T) {
 			var a string
 			cmd := NewCommand("test", "").Flags(
-				String(&a, "foo", "", "").ShortName(shortName),
+				String(&a, "foo", "", "").Aliases(shortName),
 			)
 			if _, err := cmd.Parse(nil); err != nil {
 				t.Errorf("expected %q to be a legal short name: %v", shortName, err)
@@ -811,8 +810,8 @@ func TestValidateCollectsAllErrors(t *testing.T) {
 	var a, b, c string
 	cmd := NewCommand("test", "").Flags(
 		String(&a, "foo", "", ""),
-		String(&b, "foo", "", ""),                 // duplicate name
-		String(&c, "bar", "", "").ShortName("xx"), // illegal short name
+		String(&b, "foo", "", ""),              // duplicate name
+		String(&c, "bar", "", "").Aliases("!"), // illegal short name
 	)
 	_, err := cmd.Parse(nil)
 	if err == nil {
@@ -827,7 +826,7 @@ func TestValidateCollectsAllErrors(t *testing.T) {
 		t.Errorf("exit code = %d, want %d", got, want)
 	}
 	want := "Program error: test: flag already declared: --foo\n" +
-		"Program error: --bar: short name must be one character from [A-Za-z0-9]: \"xx\"\n"
+		"Program error: --bar: short name must be one character from [A-Za-z0-9]: \"!\"\n"
 	if got := stderr; got != want {
 		t.Errorf("stderr = %q, want %q", got, want)
 	}
@@ -884,9 +883,9 @@ func TestValidateFlagName(t *testing.T) {
 		name string
 		want string
 	}{
-		{"foo=bar", "flag name must not contain '='"},
-		{"foo bar", "flag name must not contain whitespace"},
-		{"foo\tbar", "flag name must not contain whitespace"},
+		{"foo=bar", `flag name must not contain '=': "foo=bar"`},
+		{"foo bar", `flag name must not contain whitespace: "foo bar"`},
+		{"foo\tbar", `flag name must not contain whitespace: "foo\tbar"`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var a string
@@ -928,13 +927,13 @@ func TestValidateReservedHelpNames(t *testing.T) {
 		},
 		{
 			"ShortH",
-			String(&a, "foo", "", "").ShortName("h"),
-			"--foo: short name is reserved for help: -h",
+			String(&a, "foo", "", "").Aliases("h"),
+			"--foo: flag name is reserved for help: -h",
 		},
 		{
-			"PromotedH", // a one-character name declares a short name
+			"ShortOnlyH", // a one-character name is spelled with one dash
 			String(&a, "h", "", ""),
-			"-h: short name is reserved for help: -h",
+			"-h: flag name is reserved for help: -h",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -951,7 +950,7 @@ func TestValidateReservedHelpNames(t *testing.T) {
 	t.Run("Legal", func(t *testing.T) {
 		var b string
 		cmd := NewCommand("test", "").Flags(
-			String(&a, "helper", "", "").ShortName("H"),
+			String(&a, "helper", "", "").Aliases("H"),
 			String(&b, "no-help", "", ""),
 		)
 		if _, err := cmd.Parse(nil); err != nil {
@@ -1706,5 +1705,37 @@ func TestValidateRepeatableDefaultWithChoices(t *testing.T) {
 	)
 	if _, err := cmd.Parse([]string{"--tag=red", "--tag=blue"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestValidatePositionalAlias asserts that a positional argument takes no
+// alias. One would be a name nothing could match, since a positional never
+// enters the option table, so it is reported rather than ignored.
+func TestValidatePositionalAlias(t *testing.T) {
+	var s string
+	_, err := NewCommand("test", "").Flags(
+		String(&s, "file", "", "").Aliases("f").Positional(),
+	).Parse(nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got, want := humanMessage(err), "FILE: positional arguments do not support aliases"; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
+// TestValidateFlagWithoutName asserts that a flag of nothing but empty
+// slots is rejected: it can never be named on the command line, and has no
+// canonical name for an error to report it by.
+func TestValidateFlagWithoutName(t *testing.T) {
+	var s string
+	_, err := NewCommand("test", "").Flags(
+		String(&s, "", "", "").Aliases(""),
+	).Parse(nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got, want := humanMessage(err), "unknown: flag must declare a name"; got != want {
+		t.Errorf("message = %q, want %q", got, want)
 	}
 }

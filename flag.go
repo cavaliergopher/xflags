@@ -30,10 +30,13 @@ const (
 // Programs should not create Flag directly and instead use one of the typed
 // constructors such as String, Int or Var to construct one.
 type Flag struct {
-	name      string
-	shortName string
-	usage     string
-	defValue  string
+	// names are every name the flag answers to, in the slot order Names
+	// documents. A slot may be empty, which is how a flag declares an
+	// alias without a short name, so the slice is read by index rather
+	// than compacted.
+	names    []string
+	usage    string
+	defValue string
 
 	// hasDefault records that a typed constructor captured defValue from a
 	// live Value, so Parse may re-apply it. It stays false for Var and for
@@ -55,24 +58,19 @@ type Flag struct {
 // Var returns a Flag that can be used to define a command line flag with
 // custom value parsing.
 //
-// A one-character name becomes a short name rather than a long one, so
-// Var(v, "n", usage) declares "-n" and not "--n". Every constructor in this
-// package is built on Var and shares the rule. Declare both spellings by
-// giving the long one here and the short one to Flag.ShortName.
+// name becomes the flag's canonical name, and how it is spelled on the
+// command line follows from its shape: one character takes a single dash,
+// so Var(v, "n", usage) declares "-n", and anything longer takes two.
+// Every constructor in this package is built on Var. Add further names
+// with Flag.Aliases.
 func Var(value ir.Value, name, usage string) *Flag {
-	c := &Flag{
-		name:     name,
+	return &Flag{
+		names:    []string{name},
 		usage:    usage,
 		minCount: defaultMinNArgs,
 		maxCount: defaultMaxNArgs,
 		value:    value,
 	}
-	if len(name) == 1 {
-		// A single character is a short name: "-n", never "--n".
-		c.shortName = c.name
-		c.name = ""
-	}
-	return c
 }
 
 // stringifyDefault returns the string form of a flag's default value, using
@@ -209,25 +207,15 @@ func Uint64(p *uint64, name string, value uint64, usage string) *Flag {
 }
 
 func (c *Flag) String() string {
-	if c.positional {
-		return strings.ToUpper(c.name)
+	name := ir.CanonicalName(c.names)
+	switch {
+	case name == "":
+		return "unknown"
+	case c.positional:
+		return strings.ToUpper(name)
+	default:
+		return ir.FormOf(name)
 	}
-	if c.name != "" {
-		return "--" + c.name
-	}
-	if c.shortName != "" {
-		return "-" + c.shortName
-	}
-	return "unknown"
-}
-
-// keyName returns the name or short name of the flag in that order of
-// precedence.
-func (c *Flag) keyName() string {
-	if c.name != "" {
-		return c.name
-	}
-	return c.shortName
 }
 
 // ShowDefault specifies that the default value of this flag should be shown
@@ -237,14 +225,28 @@ func (c *Flag) ShowDefault() *Flag {
 	return c
 }
 
-// ShortName specifies an alternative short name for a command line flag. For
-// example, a command named "foo" can be specified on the command line with
-// "--foo" but may also use a short name of "f" to be specified by "-f".
+// Aliases specifies further names the flag answers to, after the one its
+// constructor gave. Each is matched on the command line and sets the same
+// value, so the flag below answers to "--verbose", "-v" and "--loud"
+// alike:
+//
+//	Bool(&v, "verbose", false, usage).Aliases("v", "loud")
+//
+// The names carry a convention, which nothing enforces. The first alias is
+// the short name, and help prints it beside the constructor's name.
+// Anything after is matched but left out of help, which is what a
+// compatibility spelling wants. A flag needing one of those but no short
+// name leaves the first alias empty:
+//
+//	String(&c, "colour", "", usage).Aliases("", "color")
 //
 // A short name is one character from [A-Za-z0-9]. Short names that take no
-// value group into a single argument, so "-a -b" may also be written "-ab".
-func (c *Flag) ShortName(name string) *Flag {
-	c.shortName = name
+// value group into a single argument, so "-a -b" may also be written
+// "-ab". How each name is spelled follows from its shape rather than its
+// position, so a name given out of convention still matches; it is only
+// printed elsewhere.
+func (c *Flag) Aliases(names ...string) *Flag {
+	c.names = append(c.names, names...)
 	return c
 }
 
@@ -334,9 +336,18 @@ func (c *Flag) Complete(fn ir.CompleteFunc) *Flag {
 // configuration is not checked here; see ir.Flag's own validation, which
 // Compile runs over the whole lowered tree.
 func (c *Flag) lower() *ir.Flag {
+	// A positional argument is named rather than spelled, so it compiles
+	// with no forms. Validation still spells its name to check for
+	// collisions: a name means one flag along a command path whether or
+	// not it is spelled with dashes.
+	var forms []string
+	if !c.positional {
+		forms = ir.FormsOf(c.names)
+	}
 	return &ir.Flag{
-		Name:         c.name,
-		ShortName:    c.shortName,
+		Name:         ir.CanonicalName(c.names),
+		Names:        slices.Clone(c.names),
+		Forms:        forms,
 		Usage:        c.usage,
 		Default:      c.defValue,
 		ShowDefault:  c.showDefault,

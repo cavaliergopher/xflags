@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cavaliergopher/xflags/ir"
 )
 
 func TestBitField(t *testing.T) {
@@ -260,7 +262,7 @@ func TestFlagGroupStandalone(t *testing.T) {
 func TestCompileFlag(t *testing.T) {
 	var s string
 	flg := String(&s, "name", "default-value", "flag usage").
-		ShortName("n").
+		Aliases("n").
 		NArgs(1, 3).
 		Hidden().
 		ShowDefault().
@@ -282,8 +284,8 @@ func TestCompileFlag(t *testing.T) {
 	if got, want := df.Name, "name"; got != want {
 		t.Errorf("Name = %q, want %q", got, want)
 	}
-	if got, want := df.ShortName, "n"; got != want {
-		t.Errorf("ShortName = %q, want %q", got, want)
+	if got, want := strings.Join(df.Forms, ","), "--name,-n"; got != want {
+		t.Errorf("Forms = %q, want %q", got, want)
 	}
 	if got, want := df.Usage, "flag usage"; got != want {
 		t.Errorf("Usage = %q, want %q", got, want)
@@ -351,5 +353,77 @@ func TestCompilePositional(t *testing.T) {
 	df := node.FlagGroups[0].Flags[0]
 	if got, want := df.Positional, true; got != want {
 		t.Errorf("Positional = %v, want %v", got, want)
+	}
+}
+
+// TestCanonicalNameCoalesces asserts that the name a flag is known by is
+// the first it declares that is not empty, so a flag declaring only a
+// short name still reports itself by one.
+func TestCanonicalNameCoalesces(t *testing.T) {
+	var s string
+	flg := String(&s, "", "", "usage").Aliases("v")
+	cmd := NewCommand("test", "").Flags(flg)
+
+	node, err := cmd.Compile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	df := node.FlagGroups[0].Flags[0]
+	if got, want := df.Name, "v"; got != want {
+		t.Errorf("Name = %q, want %q", got, want)
+	}
+	// The empty slot survives compiling, so a formatter can still tell the
+	// short name from an alias by position.
+	if got, want := strings.Join(df.Forms, ","), ",-v"; got != want {
+		t.Errorf("Forms = %q, want %q", got, want)
+	}
+	if got, want := flg.String(), "-v"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
+
+// TestAliasIsMatchedButNotPrinted asserts the bargain the third slot
+// makes: an alias resolves on the command line and stays out of help,
+// which is what a compatibility spelling wants.
+func TestAliasIsMatchedButNotPrinted(t *testing.T) {
+	var s string
+	cmd := NewCommand("test", "").Flags(
+		String(&s, "colour", "", "which colour").Aliases("", "color"),
+	)
+	if _, err := cmd.Parse([]string{"--color", "red"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := s, "red"; got != want {
+		t.Errorf("value = %q, want %q", got, want)
+	}
+	node, err := cmd.Compile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var sb strings.Builder
+	if err := ir.Format(&sb, node); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if help := sb.String(); !strings.Contains(help, "--colour") ||
+		strings.Contains(help, "--color ") {
+		t.Errorf("help should name --colour and not the alias:\n%s", help)
+	}
+}
+
+// TestAliasPositionIsNotEnforced asserts that where a name is declared
+// decides nothing but where help prints it: how a name is spelled comes
+// from its shape, so a name of more than one character given as the first
+// alias is spelled with two dashes rather than rejected.
+func TestAliasPositionIsNotEnforced(t *testing.T) {
+	var s string
+	node, err := NewCommand("test", "").Flags(
+		String(&s, "foo", "", "").Aliases("xx"),
+	).Compile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	forms := node.FlagGroups[0].Flags[0].Forms
+	if got, want := strings.Join(forms, ","), "--foo,--xx"; got != want {
+		t.Errorf("Forms = %q, want %q", got, want)
 	}
 }

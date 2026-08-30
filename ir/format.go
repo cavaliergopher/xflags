@@ -164,16 +164,27 @@ func detailFlagGroup(w io.Writer, group *FlagGroup) error {
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
 	for _, flag := range flags {
+		// Only the first two forms print; anything after is an alias,
+		// matched on the command line but deliberately undocumented.
+		// Which column a form lands in follows its shape rather than its
+		// slot, so a short spelling stays with the short ones however it
+		// was declared.
 		var name, shortName string
-		if flag.Name != "" {
-			name = fmt.Sprintf("--%s", flag.Name)
-		}
-		if flag.ShortName != "" {
-			if flag.Name != "" {
-				shortName = fmt.Sprintf("-%s,", flag.ShortName)
-			} else {
-				shortName = fmt.Sprintf("-%s", flag.ShortName)
+		for _, form := range flag.Forms[:min(2, len(flag.Forms))] {
+			switch {
+			case form == "":
+			case isLongOption(form):
+				if name == "" {
+					name = form
+				}
+			default:
+				if shortName == "" {
+					shortName = form
+				}
 			}
+		}
+		if shortName != "" && name != "" {
+			shortName += ","
 		}
 		var row strings.Builder
 		fmt.Fprintf(&row, "  %s\t%s\t %s", shortName, name, flag.Usage)

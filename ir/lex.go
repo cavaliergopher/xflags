@@ -1,6 +1,9 @@
 package ir
 
-import "unicode/utf8"
+import (
+	"slices"
+	"unicode/utf8"
+)
 
 // terminator ends option processing by default, or, on a command that opted
 // in with ForwardArgs, marks where forwarding begins. Only the first one
@@ -145,11 +148,11 @@ func (lx *lexer) enterCommand(cmd *Command) {
 				lx.positionals = append(lx.positionals, f)
 				continue
 			}
-			if f.Name != "" {
-				lx.optionsByKey["--"+f.Name] = f
-			}
-			if f.ShortName != "" {
-				lx.optionsByKey["-"+f.ShortName] = f
+			for _, form := range f.Forms {
+				if form == "" {
+					continue
+				}
+				lx.optionsByKey[form] = f
 			}
 		}
 	}
@@ -399,8 +402,7 @@ func findDescendantWithFlag(cmd *Command, key string) *Command {
 				if flag.Positional {
 					continue
 				}
-				if (flag.Name != "" && key == "--"+flag.Name) ||
-					(flag.ShortName != "" && key == "-"+flag.ShortName) {
+				if key != "" && slices.Contains(flag.Forms, key) {
 					return sub
 				}
 			}
