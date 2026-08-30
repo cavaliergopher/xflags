@@ -23,10 +23,12 @@ choice has to be made once, at the top.
 
 ## Decision
 
-Command lines are POSIX/GNU: `--name` for long flags, `-n` for short ones, a
-value either attached (`--name=value`, `-nvalue`, `-n=value`) or given as
-the following argument, and `--` terminating flag parsing for commands that
-opt into it. Single-dash long names are not accepted.
+Command lines are POSIX/GNU: `--name` for long flags, `-n` for short ones,
+short flags grouping into one argument (`-abc`), a value either attached
+(`--name=value`, `-nvalue`, `-n=value`) or given as the following argument,
+and `--` terminating flag parsing for commands that opt into it.
+Single-dash long names are not accepted. Which parts of POSIX this adopts,
+and where it departs, is settled in `posix-argument-conventions.md`.
 
 Compatibility with `flag` is at the API and migration layer only — the
 `Value` interface, the constructor signatures, and importing a
@@ -34,13 +36,13 @@ Compatibility with `flag` is at the API and migration layer only — the
 migration is documented, because it is the one place the resemblance
 misleads.
 
-Other dialects are deferred, not refused. The parser is the only component
-that would have to change: it resolves argv against the compiled
-description, and everything downstream — the data model, help, generated
-docs, machine-readable output — reads the description rather than the
-command line. Splitting tokenizing from interpretation, already planned for
-its own reasons, is what would make a second dialect cheap. Nobody has asked
-for one, so none is built.
+Other dialects are deferred, not refused. Nothing in the model names a
+POSIX category: a flag holds a list of names, and `ir.FormOf` is the one
+place a name becomes a command line spelling, from the shape of the name
+rather than the slot it was declared in. Everything that matches, prints or
+completes a flag reads the spellings it produced, in `ir.Flag.Forms`, so a
+second dialect replaces the speller and the matcher and nothing else. The
+design for that seam is in `wip/lexer.md`; none of it is built.
 
 ## Consequences
 
@@ -48,13 +50,13 @@ for one, so none is built.
   type. Single-dash long flags stop working, and that breakage lands on the
   program's users, not on the author doing the migration. It has to be in
   the migration notes.
-- Short-flag grouping (`-abc` meaning `-a -b -c`) is not supported. Today
-  everything after the short name is its attached value, so `-abc` is `-a`
-  with the value `bc`, and when `-a` is boolean and takes no value the
-  remainder falls through as a stray positional. Whether to add grouping is
-  a question inside this dialect, and this decision does not settle it.
 - Windows slash-style flags and a stdlib-compatible mode are possible later
-  without touching the data model, on the strength of the seam described
-  above.
-- Help output, completion and generated documentation can render flags one
-  way, since there is one way.
+  on the strength of the seam above. The data model paid for that once, in
+  dropping its short and long names for a list; it does not pay again per
+  dialect.
+- Help output, completion and generated documentation render flags from one
+  source rather than in one way: each reads the forms the dialect produced,
+  and none of them spells a flag itself.
+- What a dialect matches may exceed what anything renders, since a dialect
+  may match by rule — without regard to case, say. No rendered list is a
+  complete account of what the parser accepts.
