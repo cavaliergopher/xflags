@@ -564,3 +564,91 @@ func TestUnrecognizedOptionNamesMountedFlags(t *testing.T) {
 		t.Errorf("message = %q, want %q", got, want)
 	}
 }
+
+// TestNegatedBool asserts the second spelling every boolean answers to.
+// "--verbose=false" already set one false, so "--no-verbose" is a
+// spelling rather than a capability, and it is generated for every long
+// name a boolean has rather than declared per flag; see
+// docs/adr/posix-argument-conventions.md.
+func TestNegatedBool(t *testing.T) {
+	for _, tt := range []struct {
+		args    []string
+		verbose bool
+		loud    bool
+		err     bool
+	}{
+		// The default is true, so a test that reads false proves the
+		// negation ran rather than that nothing happened.
+		{args: nil, verbose: true, loud: true},
+		{args: []string{"--no-verbose"}, verbose: false, loud: true},
+
+		// The value negates with the flag, so both halves apply and
+		// "--no-verbose=false" is a double negative.
+		{args: []string{"--no-verbose=false"}, verbose: true, loud: true},
+		{args: []string{"--no-verbose=true"}, verbose: false, loud: true},
+
+		// Rejected by the flag's own value, identically to "--verbose".
+		{args: []string{"--no-verbose=nonsense"}, err: true},
+
+		// Every long name is negated, aliases included, or two spellings
+		// of one flag would disagree about what it can be told.
+		{args: []string{"--no-loud"}, verbose: true, loud: false},
+		{args: []string{"--no-noisy"}, verbose: true, loud: false},
+
+		// A short name is not: "-v=false" is already the short spelling
+		// for false, and "-no-v" is not a thing anyone types.
+		{args: []string{"--no-v"}, err: true},
+
+		// Only a boolean has an opposite to spell.
+		{args: []string{"--no-name=x"}, err: true},
+
+		// The last spelling wins, the same as any repeated flag, though
+		// the count check rejects both being given at once today; see
+		// wip/TODO.md item 47.
+		{args: []string{"--verbose", "--no-verbose"}, err: true},
+	} {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			var verbose, loud bool
+			var name string
+			cmd := NewCommand("test", "").Flags(
+				Bool(&verbose, "verbose", true, "").Aliases("v"),
+				Bool(&loud, "loud", true, "").Aliases("", "noisy"),
+				String(&name, "name", "", ""),
+			)
+			_, err := cmd.Parse(tt.args)
+			if tt.err {
+				if err == nil {
+					t.Fatalf("expected an error, got verbose=%v loud=%v", verbose, loud)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertBool(t, tt.verbose, verbose)
+			assertBool(t, tt.loud, loud)
+		})
+	}
+}
+
+// TestNegatedBoolIsNotAdvertised asserts the cost of generating the
+// spelling rather than declaring it: help says nothing about it. The
+// convention is documented once, in the package doc and the README,
+// rather than repeated beside every boolean a program declares.
+func TestNegatedBoolIsNotAdvertised(t *testing.T) {
+	var verbose bool
+	cmd := NewCommand("test", "").Flags(
+		Bool(&verbose, "verbose", false, "be chatty"),
+	)
+	node, err := cmd.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf strings.Builder
+	if err := node.Usage(&buf); err != nil {
+		t.Fatal(err)
+	}
+	if got := buf.String(); strings.Contains(got, "--no-verbose") {
+		t.Errorf("help mentions --no-verbose:\n%s", got)
+	}
+}

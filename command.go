@@ -182,9 +182,11 @@ func (c *Command) Compile() (*ir.Command, error) {
 	if err := rootNode.Validate(); err != nil {
 		errs = append(errs, err)
 	}
-	// Whether two flags collide, and whether one claims a form reserved
-	// for help, are questions about spellings rather than about the model,
-	// so they are argv's to answer; see internal/argv.Validate.
+	// Whether two flags collide is a question about the options they are
+	// written as rather than about the model, so it is argv's to answer;
+	// see internal/argv.Validate. What a name may be in the first place
+	// is argv's too, and was settled during lowering, while the names
+	// were still undecorated.
 	if err := argv.Validate(rootNode); err != nil {
 		errs = append(errs, err)
 	}
@@ -264,11 +266,11 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 	// effectiveGroups reports and marking which is which -- validation
 	// needs to tell a declared flag from a mounted one.
 	for _, group := range c.flagGroups {
-		node.FlagGroups = append(node.FlagGroups, group.lower(false))
+		node.FlagGroups = append(node.FlagGroups, group.lower(false, errs))
 	}
 	for _, set := range c.groupSets {
 		for _, group := range set.groups {
-			node.FlagGroups = append(node.FlagGroups, group.lower(true))
+			node.FlagGroups = append(node.FlagGroups, group.lower(true, errs))
 		}
 	}
 	for _, sub := range c.subcommands {

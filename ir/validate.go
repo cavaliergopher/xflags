@@ -3,17 +3,16 @@ package ir
 import (
 	"slices"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 )
 
 // validateTree implements (*Command).Validate: it checks c and,
 // recursively, each of its subcommands, joining every error found.
 //
 // Every rule here reads a command or a flag on its own terms, so the
-// recursion carries nothing down it. The rules that read a spelling --
-// whether two flags collide on one, and whether one is reserved for help
-// -- live in internal/argv, which owns how a name is spelled.
+// recursion carries nothing down it. The rules that read a name as the
+// command line writes it -- whether two flags collide on one, and what a
+// name may contain at all -- live in internal/argv, which owns how a name
+// is written.
 func validateTree(c *Command) error {
 	var errs []error
 	if err := validateSelf(c); err != nil {
@@ -34,6 +33,12 @@ func validateSelf(c *Command) error {
 	var errs []error
 
 	hasUnboundedPositional := false
+	// A positional argument is shown by its value name alone, so two of
+	// them sharing one is the collision that matters: "missing required
+	// argument: FILE" cannot say which was meant. Options are checked
+	// elsewhere, against the names they claim, which a positional has
+	// none of.
+	operands := make(map[string]bool)
 	for _, group := range c.FlagGroups {
 		for _, flag := range group.Flags {
 			if err := validateFlag(flag); err != nil {
@@ -49,6 +54,11 @@ func validateSelf(c *Command) error {
 				if flag.MaxCount == 0 {
 					hasUnboundedPositional = true
 				}
+				if operands[flag.ValueName] {
+					errs = append(errs, newConfigErrorf(nil, c, flag,
+						"operand declared more than once: %s", flag))
+				}
+				operands[flag.ValueName] = true
 			}
 		}
 	}
@@ -63,37 +73,19 @@ func validateFlag(f *Flag) error {
 	fail := func(format string, a ...any) {
 		errs = append(errs, newConfigErrorf(nil, nil, f, format, a...))
 	}
-	// A flag with nothing but empty slots can never be named, and has no
-	// canonical name for an error to report it by.
-	if f.Name == "" {
-		fail("flag must declare a name")
-	}
-	// A positional argument is named rather than spelled, so an alias
-	// would be a name nothing could ever match: it never enters the option
-	// table. Reported rather than ignored, so the mistake is not silent.
-	if f.Positional && len(f.Names) > 1 {
-		fail("positional arguments do not support aliases")
-	}
-	for _, name := range f.Names {
-		if name == "" {
+	// ClaimedOptions is what matches and NamedOptions is what is shown,
+	// so an option missing from it is one the flag advertises and then
+	// refuses. That is a bug in the convention that lowered the flag
+	// rather than in the program declaring it, which is why it is checked
+	// here rather than trusted: a second argv dialect is a replacement
+	// for exactly this pairing. What the names are allowed to contain is
+	// settled before this, while they are still undecorated.
+	for _, option := range f.NamedOptions {
+		if option == "" {
 			continue // an empty slot, which xflags.Flag.Aliases documents
 		}
-		if strings.HasPrefix(name, "-") {
-			fail("flag name must not start with '-': %q", name)
-		}
-		// "=" reads as the delimiter of an attached value and whitespace
-		// as an argument break, so a name containing either can never be
-		// matched.
-		if strings.ContainsRune(name, '=') {
-			fail("flag name must not contain '=': %q", name)
-		}
-		if strings.ContainsFunc(name, unicode.IsSpace) {
-			fail("flag name must not contain whitespace: %q", name)
-		}
-		// A one-character name is spelled with a single dash, and POSIX
-		// guideline 3 confines that to one alphanumeric character.
-		if utf8.RuneCountInString(name) == 1 && !isShortName(name) {
-			fail("short name must be one character from [A-Za-z0-9]: %q", name)
+		if !f.Claims(option) {
+			fail("option is not matchable: %s", option)
 		}
 	}
 	if f.Value == nil {
@@ -124,21 +116,4 @@ func validateFlag(f *Flag) error {
 		fail("default %q is not one of: %s", f.Default, strings.Join(f.Choices, ", "))
 	}
 	return JoinErrors(errs)
-}
-
-// isShortName reports whether s is a legal short name. POSIX guideline 3
-// confines one to a single character from the portable character set, and
-// the parser leans on that: reading "=" as a delimiter after a boolean
-// short flag costs no ambiguity only because "=" can never be a name.
-//
-// Measured in characters rather than bytes, so a multi-byte rune is
-// rejected for falling outside the set rather than for its length.
-func isShortName(s string) bool {
-	r, size := utf8.DecodeRuneInString(s)
-	if size != len(s) {
-		return false
-	}
-	return ('a' <= r && r <= 'z') ||
-		('A' <= r && r <= 'Z') ||
-		('0' <= r && r <= '9')
 }

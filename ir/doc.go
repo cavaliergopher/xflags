@@ -16,9 +16,10 @@
 // Reading a command line against a compiled tree -- lexing, applying and
 // completion -- belongs to the internal argv package, which imports this
 // one and is the only place that knows how a flag is written down -- that
-// a name is spelled with dashes, and that the value it takes is shown as
-// SERVICE. A compiled flag carries what argv wrote for it, in Forms and
-// ValueName, and everything here prints what it was given.
+// a name is written with dashes, and that the value it takes is shown as
+// SERVICE. A compiled flag carries what argv wrote for it, in
+// NamedOptions and ValueName, along with everything it answers to in
+// ClaimedOptions, and everything here prints what it was given.
 //
 // A handful of fields still carry behavior a marshaler has no use for --
 // Command's Handler, UsageFunc and three streams, Flag's Value,

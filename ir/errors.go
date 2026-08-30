@@ -130,9 +130,15 @@ func (e *exitError) Error() string {
 // configuration and can only report it onward. See
 // docs/adr/human-readable-errors.md.
 type ConfigError struct {
-	Err     error
-	Cmd     *Command
-	Flag    *Flag
+	Err error
+	Cmd *Command
+
+	// Flag is a flag the error concerns, where one does. An error about
+	// two flags at once -- two claiming the same option, say -- names
+	// only the one it was reported against, which is not a claim that
+	// that flag is the one at fault.
+	Flag *Flag
+
 	Message string
 }
 

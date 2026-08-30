@@ -281,11 +281,11 @@ func TestCompileFlag(t *testing.T) {
 		t.Fatalf("len(FlagGroups[0].Flags) = %d, want %d", got, want)
 	}
 	df := node.FlagGroups[0].Flags[0]
-	if got, want := df.Name, "name"; got != want {
-		t.Errorf("Name = %q, want %q", got, want)
+	if got, want := df.String(), "--name"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
 	}
-	if got, want := strings.Join(df.Forms, ","), "--name,-n"; got != want {
-		t.Errorf("Forms = %q, want %q", got, want)
+	if got, want := strings.Join(df.NamedOptions, ","), "--name,-n"; got != want {
+		t.Errorf("NamedOptions = %q, want %q", got, want)
 	}
 	if got, want := df.Usage, "flag usage"; got != want {
 		t.Errorf("Usage = %q, want %q", got, want)
@@ -420,9 +420,9 @@ func TestPositionalIsShownByItsValueName(t *testing.T) {
 	}
 }
 
-// TestCanonicalNameCoalesces asserts that the name a flag is known by is
-// the first it declares that is not empty, so a flag declaring only a
-// short name still reports itself by one.
+// TestCanonicalNameCoalesces asserts that the option a flag is known by
+// is the first slot it declares that is not empty, so a flag declaring
+// only a short name still reports itself by one.
 func TestCanonicalNameCoalesces(t *testing.T) {
 	var s string
 	flg := String(&s, "", "", "usage").Aliases("v")
@@ -433,13 +433,13 @@ func TestCanonicalNameCoalesces(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	df := node.FlagGroups[0].Flags[0]
-	if got, want := df.Name, "v"; got != want {
-		t.Errorf("Name = %q, want %q", got, want)
+	if got, want := df.String(), "-v"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
 	}
 	// The empty slot survives compiling, so a formatter can still tell the
 	// short name from an alias by position.
-	if got, want := strings.Join(df.Forms, ","), ",-v"; got != want {
-		t.Errorf("Forms = %q, want %q", got, want)
+	if got, want := strings.Join(df.NamedOptions, ","), ",-v"; got != want {
+		t.Errorf("NamedOptions = %q, want %q", got, want)
 	}
 	if got, want := flg.String(), "-v"; got != want {
 		t.Errorf("String() = %q, want %q", got, want)
@@ -486,8 +486,8 @@ func TestAliasPositionIsNotEnforced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	forms := node.FlagGroups[0].Flags[0].Forms
-	if got, want := strings.Join(forms, ","), "--foo,--xx"; got != want {
-		t.Errorf("Forms = %q, want %q", got, want)
+	options := node.FlagGroups[0].Flags[0].NamedOptions
+	if got, want := strings.Join(options, ","), "--foo,--xx"; got != want {
+		t.Errorf("NamedOptions = %q, want %q", got, want)
 	}
 }

@@ -61,7 +61,7 @@ func TestComplete(t *testing.T) {
 		dir   ir.CompDirective
 	}{
 		{
-			"FlagFormsHiddenExcludedHelpPresent",
+			"OptionsOfferedHiddenExcludedHelpPresent",
 			compRootTree, nil, "-",
 			[]string{"--env", "--help", "--name", "--verbose", "-e", "-n", "-v"},
 			ir.CompNoFileComp,
@@ -70,6 +70,21 @@ func TestComplete(t *testing.T) {
 			"FlagPrefixFilteringHiddenStillExcluded",
 			compRootTree, nil, "--e",
 			[]string{"--env"},
+			ir.CompNoFileComp,
+		},
+		{
+			// Every boolean has a negation, so offering them beside the
+			// forms would double the list for a spelling most users never
+			// type. They arrive once the word is visibly reaching for one.
+			"NegationsOfferedOnceTheWordReachesForOne",
+			compRootTree, nil, "--no",
+			[]string{"--no-verbose"},
+			ir.CompNoFileComp,
+		},
+		{
+			"NegationsNotOfferedBeforeThat",
+			compRootTree, nil, "--n",
+			[]string{"--name"},
 			ir.CompNoFileComp,
 		},
 		{

@@ -2,8 +2,8 @@ package argv
 
 import (
 	"fmt"
+	"maps"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/cavaliergopher/xflags/ir"
@@ -13,21 +13,11 @@ import (
 // can assert against it without comparing pointers.
 type lexStep struct {
 	kind      instructionKind
-	flag      string // the flag's canonical key, e.g. "--name", "-n" or "OPERAND"
+	flag      string // how the flag names itself, e.g. "--name" or "OPERAND"
 	value     string
 	attached  bool
 	cmd       string // dispatch, help: the target command's name
 	forwarded []string
-}
-
-// flagKey returns how f would spell itself as a Flag.String() would: an
-// upper-cased name for a positional, otherwise its long or short option
-// spelling.
-func flagKey(f *ir.Flag) string {
-	if f.Positional {
-		return strings.ToUpper(f.Name)
-	}
-	return FormOf(f.Name)
 }
 
 func summarize(instrs []instruction) []lexStep {
@@ -35,7 +25,7 @@ func summarize(instrs []instruction) []lexStep {
 	for i, instr := range instrs {
 		s := lexStep{kind: instr.kind, value: instr.value, attached: instr.attached, forwarded: instr.forwarded}
 		if instr.flag != nil {
-			s.flag = flagKey(instr.flag)
+			s.flag = instr.flag.String()
 		}
 		if instr.cmd != nil {
 			s.cmd = instr.cmd.Name
@@ -95,23 +85,23 @@ func assertLexErrs(t *testing.T, want, got []string) {
 	}
 }
 
-// opt returns an option flag named the way Compile would name one,
-// keeping Name, Names and Forms consistent so that a hand-built fixture
+// newOpt returns an option flag written the way Compile would write one,
+// keeping NamedOptions and ClaimedOptions consistent so that a fixture
 // matches on the command line exactly as a lowered flag does.
-func opt(names ...string) *ir.Flag {
+func newOpt(names []string, takesValue bool) *ir.Flag {
+	named, claimed := OptionsFor(names, false, takesValue)
 	return &ir.Flag{
-		Name:  ir.CanonicalName(names),
-		Names: names,
-		Forms: FormsOf(names),
+		NamedOptions:   named,
+		ClaimedOptions: claimed,
+		TakesValue:     takesValue,
 	}
 }
 
-// valueOpt is opt for a flag that takes a value.
-func valueOpt(names ...string) *ir.Flag {
-	f := opt(names...)
-	f.TakesValue = true
-	return f
-}
+// opt is newOpt for a boolean flag, which takes no value.
+func opt(names ...string) *ir.Flag { return newOpt(names, false) }
+
+// valueOpt is newOpt for a flag that takes a value.
+func valueOpt(names ...string) *ir.Flag { return newOpt(names, true) }
 
 // lexOptTree returns a command with options only: two bare booleans
 // (alpha/bravo), a boolean with a long and short spelling (verbose), a
@@ -135,6 +125,24 @@ func lexOptTree() *ir.Command {
 	}
 }
 
+// lexNegTree returns a command with the three shapes negation has to tell
+// apart: a boolean with a short name, a boolean with a second long name
+// and no short one, and a flag that takes a value, which has no opposite
+// to spell.
+func lexNegTree() *ir.Command {
+	return &ir.Command{
+		Name: "app",
+		FlagGroups: []*ir.FlagGroup{{
+			Name: "options",
+			Flags: []*ir.Flag{
+				opt("verbose", "v"),
+				opt("loud", "", "noisy"),
+				valueOpt("name", "n"),
+			},
+		}},
+	}
+}
+
 // lexPosTree returns a command with two positionals: BAZ, bounded to
 // exactly two, and QUX, unbounded.
 func lexPosTree() *ir.Command {
@@ -143,8 +151,8 @@ func lexPosTree() *ir.Command {
 		FlagGroups: []*ir.FlagGroup{{
 			Name: "options",
 			Flags: []*ir.Flag{
-				{Name: "baz", Positional: true, TakesValue: true, MinCount: 2, MaxCount: 2},
-				{Name: "qux", Positional: true, TakesValue: true},
+				{ValueName: "BAZ", Positional: true, TakesValue: true, MinCount: 2, MaxCount: 2},
+				{ValueName: "QUX", Positional: true, TakesValue: true},
 			},
 		}},
 	}
@@ -220,6 +228,64 @@ func TestLex(t *testing.T) {
 			lexOptTree, []string{"--verbose=false"},
 			[]lexStep{{kind: instSet, flag: "--verbose", value: "false", attached: true}},
 			nil,
+		},
+		{
+			// Negation is a spelling of the value, not of the flag: the
+			// instruction names --verbose and carries the inverse, so
+			// nothing downstream of lex knows a key was negated.
+			"NegatedBoolIsFalse",
+			lexNegTree, []string{"--no-verbose"},
+			[]lexStep{{kind: instSet, flag: "--verbose", value: "false"}},
+			nil,
+		},
+		{
+			// Both halves negate, so the value is inverted once by the
+			// key and set as written by the "=".
+			"NegatedBoolAttachedFalseIsTrue",
+			lexNegTree, []string{"--no-verbose=false"},
+			[]lexStep{{kind: instSet, flag: "--verbose", value: "true", attached: true}},
+			nil,
+		},
+		{
+			"NegatedBoolAttachedTrueIsFalse",
+			lexNegTree, []string{"--no-verbose=1"},
+			[]lexStep{{kind: instSet, flag: "--verbose", value: "false", attached: true}},
+			nil,
+		},
+		{
+			// Not a boolean, so there is nothing to invert. It passes
+			// through for the flag's own Value to reject, which is what
+			// reports an unparseable boolean everywhere else.
+			"NegatedBoolAttachedNonBoolPassesThrough",
+			lexNegTree, []string{"--no-verbose=banana"},
+			[]lexStep{{kind: instSet, flag: "--verbose", value: "banana", attached: true}},
+			nil,
+		},
+		{
+			// Every long spelling of a boolean is negated, aliases
+			// included, or --loud and --noisy would disagree about what
+			// the same flag can be told.
+			"NegatedAlias",
+			lexNegTree, []string{"--no-noisy"},
+			[]lexStep{{kind: instSet, flag: "--loud", value: "false"}},
+			nil,
+		},
+		{
+			// A short name is not negated: -v=false is already the short
+			// spelling for false.
+			"ShortNameHasNoNegation",
+			lexNegTree, []string{"--no-v"},
+			nil,
+			[]string{"unrecognized option: --no-v"},
+		},
+		{
+			"ValueFlagHasNoNegation",
+			lexNegTree, []string{"--no-name", "bar"},
+			nil,
+			[]string{
+				"unrecognized option: --no-name",
+				"extra operand: bar",
+			},
 		},
 		{
 			"NegativeNumberAttached",
@@ -393,13 +459,13 @@ func TestLexOpenPositional(t *testing.T) {
 	root := lexPosTree()
 
 	res := lex(root, nil)
-	if res.openPositional == nil || res.openPositional.Name != "baz" {
-		t.Errorf("openPositional = %v, want baz", res.openPositional)
+	if res.openPositional == nil || res.openPositional.String() != "BAZ" {
+		t.Errorf("openPositional = %v, want BAZ", res.openPositional)
 	}
 
 	res = lex(root, []string{"a", "b"})
-	if res.openPositional == nil || res.openPositional.Name != "qux" {
-		t.Errorf("openPositional = %v, want qux (unbounded, never closes)", res.openPositional)
+	if res.openPositional == nil || res.openPositional.String() != "QUX" {
+		t.Errorf("openPositional = %v, want QUX (unbounded, never closes)", res.openPositional)
 	}
 }
 
@@ -439,5 +505,51 @@ func TestSplitLongOption(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+// TestNegationIsRecognizedNotStored asserts the seam the lexer relies on:
+// the compiled flag maps each option it answers to back to the option it
+// came from, and this dialect works out for itself which of those it
+// generated. Nothing in ir records that negation exists, and nothing
+// between the option table and Set knows what "--no-" is.
+func TestNegationIsRecognizedNotStored(t *testing.T) {
+	f := opt("verbose", "v")
+	want := map[string]string{
+		"--verbose":    "--verbose",
+		"-v":           "-v",
+		"--no-verbose": "--verbose",
+	}
+	if got := f.ClaimedOptions; !maps.Equal(got, want) {
+		t.Fatalf("ClaimedOptions = %v, want %v", got, want)
+	}
+
+	table := map[string]resolvedOption{}
+	resolvedOptionsInto(table, f)
+	for option, wantNegated := range map[string]bool{
+		"--verbose":    false,
+		"-v":           false,
+		"--no-verbose": true,
+	} {
+		o, ok := table[option]
+		if !ok {
+			t.Errorf("%s does not resolve", option)
+			continue
+		}
+		if o.negated != wantNegated {
+			t.Errorf("%s resolved with negated=%v, want %v", option, o.negated, wantNegated)
+		}
+	}
+
+	// A value-taking flag has no opposite, so it claims only what it names
+	// and every claim points at itself.
+	name := valueOpt("name", "n")
+	if got, want := len(name.ClaimedOptions), 2; got != want {
+		t.Errorf("value flag claims %d options, want %d", got, want)
+	}
+	for option, source := range name.ClaimedOptions {
+		if option != source {
+			t.Errorf("%s was generated from %s, want nothing generated", option, source)
+		}
 	}
 }

@@ -74,6 +74,7 @@ and two mean the same thing.
 ```
 -f            --flag           a flag taking no value
 -f=false      --flag=false     a boolean set false
+              --no-flag        a boolean set false, spelled the other way
 -fx  -f=x     --flag=x         a value attached to its flag
 -f x          --flag x         a value in the next argument
 -abc                           -a -b -c, while each takes no value
@@ -91,13 +92,23 @@ An argument beginning with `-` is never taken as a detached value, so
 `--count=-5`. Flags may appear among the operands in any order, and a flag
 is legal from the point its own command is named onward.
 
-Four departures from `getopt_long` are deliberate, and
+Every boolean also answers to `--no-flag`, for each of its long names,
+which sets it false. Nothing declares it and nothing can switch it off: it
+is a second spelling of `--flag=false`, not a feature a flag opts into.
+The value negates with the flag, so `--no-flag=false` sets true. Short
+names get no negated spelling, and help does not list the negated ones,
+since every boolean has one.
+
+Five departures from `getopt_long` are deliberate, and
 [the ADR](docs/adr/posix-argument-conventions.md) argues each one:
 
 - **Attached values follow Go, not getopt.** `-n=value` sets `value` rather
   than `=value`, and a boolean accepts an attached value, so `--flag=false`
   and `-f=false` both set false. Without it a boolean could not be turned
   off at all.
+- **Negated booleans are generated, not declared.** `getopt_long` leaves
+  `--no-flag` to each program to declare; here every boolean has one, so
+  a user never has to find out which of a program's booleans got one.
 - **Long options may not be abbreviated.** `getopt_long` accepts any unique
   prefix, but a command tree makes "unique" a moving target: adding a flag
   to a subcommand can break a script that never changed.

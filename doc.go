@@ -127,12 +127,21 @@ In addition to positional arguments, the following forms are permitted:
 	-abc // equivalent to -a -b -c, for boolean -a and -b
 	--flag
 	--flag=x
-	--flag x // non-boolean flags only
+	--flag x   // non-boolean flags only
+	--no-flag  // boolean flags only
 
 Short flags group into one argument while each takes no value. The first
 that takes one takes the rest of the argument as its value, so -abfx is
 -a -b -f x when -a and -b are boolean. An "=" is always a delimiter rather
 than a flag name, so a boolean is set false as -f=false or --flag=false.
+
+Every boolean also answers to --no-flag, which sets it false, for each of
+its long names. This needs no declaring and cannot be switched off: it is
+a second spelling of --flag=false rather than a feature a flag opts into.
+The value negates with the flag, so --no-flag=false sets true. Short names
+have no negated spelling, since -f=false is already the short way to say
+it, and help does not list the negated spellings, since every boolean has
+one.
 
 The detached forms are not permitted for boolean flags because the meaning
 of the command

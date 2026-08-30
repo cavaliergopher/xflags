@@ -40,7 +40,7 @@ type Flag struct {
 	defValue string
 
 	// valueName overrides the name shown for the flag's value; empty
-	// takes the flag's canonical name instead. See Flag.ValueName.
+	// leaves the command line conventions to name it. See Flag.ValueName.
 	valueName string
 
 	// hasDefault records that a typed constructor captured defValue from a
@@ -213,7 +213,10 @@ func Uint64(p *uint64, name string, value uint64, usage string) *Flag {
 
 // String returns how the flag is shown to a reader, which is what it
 // compiles to: see (*ir.Flag).String.
-func (c *Flag) String() string { return c.lower().String() }
+func (c *Flag) String() string {
+	var errs []error // discarded: Compile is what reports them
+	return c.lower(&errs).String()
+}
 
 // ShowDefault specifies that the default value of this flag should be shown
 // in the help message.
@@ -254,7 +257,10 @@ func (c *Flag) Aliases(names ...string) *Flag {
 // beside its names.
 //
 // The flag's own name is used when this is not called, so a flag needs it
-// only where that name reads poorly for the value:
+// only where that name reads poorly for the value. An option whose only
+// name is a single character is shown as VALUE instead, since the letter
+// says nothing about what it takes; a positional argument keeps its name
+// however short:
 //
 //	Strings(&tags, "tags", nil, usage).Positional().ValueName("tag")
 //
@@ -347,54 +353,77 @@ func (c *Flag) Complete(fn ir.CompleteFunc) *Flag {
 	return c
 }
 
-// lower returns the compiled ir.Flag for c: its data fields copied across,
-// with TakesValue derived from whether its Value is a BoolValue, and its
+// lower returns the compiled ir.Flag for c: its data fields copied
+// across, its names decorated the way the command line writes them, with
+// TakesValue derived from whether its Value is a BoolValue, and its
 // behavior -- the Value, the ValidateFunc and the CompleteFunc -- copied
-// into the fields only Compile has any business setting. Flag
-// configuration is not checked here; see ir.Flag's own validation, which
-// Compile runs over the whole lowered tree.
-func (c *Flag) lower() *ir.Flag {
-	// A positional argument is named rather than spelled, so it compiles
-	// with no forms and is shown by its value name alone. Validation
-	// still spells its name to check for collisions: a name means one
-	// flag along a command path whether or not it is spelled with dashes.
-	name := ir.CanonicalName(c.names)
-	var forms []string
-	if !c.positional {
-		forms = argv.FormsOf(c.names)
-	}
-	// Only a flag that takes a value has one to name, and a value name
-	// defaults to the flag's own name: --count takes a COUNT until its
-	// author says otherwise.
+// into the fields only Compile has any business setting.
+//
+// The rules a name itself must keep are checked here, into errs, because
+// this is the last point at which the names are still undecorated. The
+// rest of flag configuration is not checked here; see ir.Flag's own
+// validation, which Compile runs over the whole lowered tree.
+func (c *Flag) lower(errs *[]error) *ir.Flag {
 	takesValue := c.positional || !isBoolValue(c.value)
-	valueName := ""
-	if takesValue {
-		if c.valueName != "" {
-			valueName = argv.ValueNameOf(c.valueName)
-		} else {
-			valueName = argv.ValueNameOf(name)
+	// How a flag is written down is the command line's question rather
+	// than this package's, in both halves of it, so what it declared goes
+	// over and the answers come back whole: which options it has and
+	// which it only answers to, and what its value is called, including
+	// when the answer is none. See ir.Flag.
+	namedOptions, claimedOptions := argv.OptionsFor(c.names, c.positional, takesValue)
+	valueName := argv.ValueNameFor(canonicalName(c.names), c.valueName, c.positional, takesValue)
+	flag := &ir.Flag{
+		NamedOptions:   namedOptions,
+		ClaimedOptions: claimedOptions,
+		ValueName:      valueName,
+		Usage:          c.usage,
+		Default:        c.defValue,
+		ShowDefault:    c.showDefault,
+		Positional:     c.positional,
+		Hidden:         c.hidden,
+		MinCount:       c.minCount,
+		MaxCount:       c.maxCount,
+		EnvVar:         c.envVar,
+		Choices:        slices.Clone(c.choices),
+		TakesValue:     takesValue,
+		HasDefault:     c.hasDefault,
+		Value:          c.value,
+		ValidateFunc:   c.validateFunc,
+		CompleteFunc:   c.completeFunc,
+	}
+	c.validateNames(flag, errs)
+	return flag
+}
+
+// validateNames checks the names c was declared with, undecorated, and
+// records what it finds against the lowered flag so an error can name the
+// flag the way everything else does.
+func (c *Flag) validateNames(flag *ir.Flag, errs *[]error) {
+	// A flag with nothing but empty slots can never be named, and has
+	// nothing for an error to report it by.
+	if canonicalName(c.names) == "" {
+		*errs = append(*errs, ir.NewConfigErrorf(nil, nil, flag,
+			"flag must declare a name"))
+	}
+	// What a name may be, and whether a flag of this shape may have more
+	// than one, are both the command line's questions; see
+	// argv.ValidateNames.
+	for _, err := range argv.ValidateNames(c.names, c.positional) {
+		*errs = append(*errs, ir.NewConfigErrorf(nil, nil, flag, "%s", err))
+	}
+}
+
+// canonicalName returns the first of names that is not empty, which is
+// the name a flag is known by wherever one name has to stand for it: a
+// flag that declares only a short name still has something for its value
+// name to be taken from.
+func canonicalName(names []string) string {
+	for _, name := range names {
+		if name != "" {
+			return name
 		}
 	}
-	return &ir.Flag{
-		Name:         name,
-		Names:        slices.Clone(c.names),
-		Forms:        forms,
-		ValueName:    valueName,
-		Usage:        c.usage,
-		Default:      c.defValue,
-		ShowDefault:  c.showDefault,
-		Positional:   c.positional,
-		Hidden:       c.hidden,
-		MinCount:     c.minCount,
-		MaxCount:     c.maxCount,
-		EnvVar:       c.envVar,
-		Choices:      slices.Clone(c.choices),
-		TakesValue:   takesValue,
-		HasDefault:   c.hasDefault,
-		Value:        c.value,
-		ValidateFunc: c.validateFunc,
-		CompleteFunc: c.completeFunc,
-	}
+	return ""
 }
 
 // FlagGroup is a nominal grouping of flags which affects how the flags are
@@ -449,14 +478,14 @@ func FromFlagSet(name, title string, fs *flag.FlagSet) *FlagGroup {
 }
 
 // lower returns the compiled ir.FlagGroup for c.
-func (c *FlagGroup) lower(mounted bool) *ir.FlagGroup {
+func (c *FlagGroup) lower(mounted bool, errs *[]error) *ir.FlagGroup {
 	group := &ir.FlagGroup{
 		Name:    c.name,
 		Title:   c.title,
 		Mounted: mounted,
 	}
 	for _, flag := range c.flags {
-		group.Flags = append(group.Flags, flag.lower())
+		group.Flags = append(group.Flags, flag.lower(errs))
 	}
 	return group
 }

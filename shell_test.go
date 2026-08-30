@@ -122,7 +122,7 @@ func TestRunCompletionMalformedTreeFallsThrough(t *testing.T) {
 	if stdout != "" {
 		t.Errorf("stdout = %q, want empty", stdout)
 	}
-	want := "Program error: app: flag already declared: --foo\n"
+	want := "Program error: app: flag declared more than once: --foo\n"
 	if got := procErr; got != want {
 		t.Errorf("os.Stderr = %q, want %q", got, want)
 	}

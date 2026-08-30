@@ -1,7 +1,6 @@
 package argv
 
 import (
-	"slices"
 	"unicode/utf8"
 
 	"github.com/cavaliergopher/xflags/ir"
@@ -11,6 +10,35 @@ import (
 // in with ForwardArgs, marks where forwarding begins. Only the first one
 // seen is special; see lex's doc comment.
 const terminator = "--"
+
+// The forms that ask for a command's help message. A command may not
+// declare either name for itself -- validation reserves both -- so the
+// lexer answers them before it consults the option table at all.
+const (
+	helpShortForm = "-h"
+	helpLongForm  = "--help"
+)
+
+func isShortOption(arg string) bool {
+	if len(arg) < 2 {
+		return false
+	}
+	return arg[0] == '-' && arg[1] != '-'
+}
+
+func isLongOption(arg string) bool {
+	if len(arg) < 3 {
+		return false
+	}
+	return arg[0] == '-' && arg[1] == '-'
+}
+
+// isOperand reports whether arg is an operand rather than an option.
+// Guideline 14: if it parses as an option, it is one, so the syntax alone
+// decides -- a token is an operand only when it looks like neither form.
+func isOperand(arg string) bool {
+	return !isShortOption(arg) && !isLongOption(arg)
+}
 
 // instructionKind names what one instruction asks apply to do.
 type instructionKind int
@@ -105,7 +133,7 @@ func lex(root *ir.Command, argv []string) lexResult {
 	}
 }
 
-// lexer holds lex's working state. optionsByKey accumulates across a
+// lexer holds lex's working state. optionsByName accumulates across a
 // descent rather than being rebuilt at each command: a name declared by an
 // ancestor stays matchable after its subcommand is named, which is what
 // lets a parent's flag still bind once the command line has moved past the
@@ -117,7 +145,7 @@ type lexer struct {
 	pos  int // index of the next unread argument in argv
 
 	cmd               *ir.Command
-	optionsByKey      map[string]*ir.Flag
+	optionsByName     map[string]resolvedOption
 	subcommandsByName map[string]*ir.Command
 	positionals       []*ir.Flag
 	posCount          int // set instructions already queued for positionals[0]
@@ -139,8 +167,8 @@ type lexer struct {
 // set as if it were one.
 func (lx *lexer) enterCommand(cmd *ir.Command) {
 	lx.cmd = cmd
-	if lx.optionsByKey == nil {
-		lx.optionsByKey = make(map[string]*ir.Flag)
+	if lx.optionsByName == nil {
+		lx.optionsByName = make(map[string]resolvedOption)
 	}
 	lx.positionals = nil
 	for _, group := range cmd.FlagGroups {
@@ -149,12 +177,7 @@ func (lx *lexer) enterCommand(cmd *ir.Command) {
 				lx.positionals = append(lx.positionals, f)
 				continue
 			}
-			for _, form := range f.Forms {
-				if form == "" {
-					continue
-				}
-				lx.optionsByKey[form] = f
-			}
+			resolvedOptionsInto(lx.optionsByName, f)
 		}
 	}
 	lx.posCount = 0
@@ -213,7 +236,9 @@ func (lx *lexer) lexOne() {
 func (lx *lexer) lexOperand(tok string, idx int) {
 	if len(lx.positionals) > 0 {
 		f := lx.positionals[0]
-		lx.emitSet(f, tok, false, idx)
+		// An operand names no option, so it resolves to the flag alone
+		// and its value is bound as written.
+		lx.emitSet(resolvedOption{flag: f}, tok, false, idx)
 		lx.posCount++
 		if f.MaxCount > 0 && lx.posCount == f.MaxCount {
 			// all done with this positional flag
@@ -256,8 +281,8 @@ func (lx *lexer) lexOption(tok string, idx int) {
 // implicit "true" for a boolean.
 func (lx *lexer) lexLongOption(tok string, idx int) {
 	name, value, attached := splitLongOption(tok)
-	f := lx.optionsByKey[name]
-	if f == nil {
+	o, ok := lx.optionsByName[name]
+	if !ok {
 		lx.unrecognizedOption(name)
 		return
 	}
@@ -266,14 +291,14 @@ func (lx *lexer) lexLongOption(tok string, idx int) {
 	// whatever it looks like and whatever the flag's type. A boolean takes
 	// one here and nowhere else, which is how it is set false.
 	if attached {
-		lx.emitSet(f, value, true, idx)
+		lx.emitSet(o, value, true, idx)
 		return
 	}
-	if !f.TakesValue {
-		lx.emitSet(f, "true", false, idx)
+	if !o.flag.TakesValue {
+		lx.emitSet(o, "true", false, idx)
 		return
 	}
-	lx.lexDetachedValue(f, name, idx)
+	lx.lexDetachedValue(o, name, idx)
 }
 
 // lexShortOptions resolves one argument's worth of short options.
@@ -286,9 +311,11 @@ func (lx *lexer) lexShortOptions(arg string, idx int) {
 		if i == 0 {
 			continue // the delimiter
 		}
-		name := shortForm(r)
-		f := lx.optionsByKey[name]
-		if f == nil {
+		// The one place an option is written from something other than a
+		// declared name: a rune read out of a cluster.
+		name := OptionOf(string(r))
+		o, ok := lx.optionsByName[name]
+		if !ok {
 			// A malformed token consumes only itself: the rest of this
 			// argument is not guessed at, but later arguments still lex.
 			lx.unrecognizedOption(name)
@@ -296,17 +323,17 @@ func (lx *lexer) lexShortOptions(arg string, idx int) {
 		}
 		rest := arg[i+utf8.RuneLen(r):]
 
-		if !f.TakesValue {
+		if !o.flag.TakesValue {
 			// Guideline 5 spends the whole remainder on further names,
 			// which would leave a boolean no short spelling for false. A
 			// short name can never be "=", so reading one as a delimiter
 			// costs no ambiguity; see
 			// docs/adr/posix-argument-conventions.md.
 			if len(rest) > 0 && rest[0] == '=' {
-				lx.emitSet(f, rest[1:], true, idx)
+				lx.emitSet(o, rest[1:], true, idx)
 				return
 			}
-			lx.emitSet(f, "true", false, idx)
+			lx.emitSet(o, "true", false, idx)
 			continue
 		}
 
@@ -314,13 +341,13 @@ func (lx *lexer) lexShortOptions(arg string, idx int) {
 		// no further name is read. A leading "=" is again the delimiter
 		// rather than the value.
 		if rest == "" {
-			lx.lexDetachedValue(f, name, idx)
+			lx.lexDetachedValue(o, name, idx)
 			return
 		}
 		if rest[0] == '=' {
 			rest = rest[1:]
 		}
-		lx.emitSet(f, rest, true, idx)
+		lx.emitSet(o, rest, true, idx)
 		return
 	}
 }
@@ -353,37 +380,42 @@ func (lx *lexer) unrecognizedOption(name string) {
 // there, offering f's value for the word under the cursor, but a mid-line
 // miss has a further token lex will still resolve on its own, so there is
 // nothing for completion to wait on.
-func (lx *lexer) lexDetachedValue(f *ir.Flag, name string, idx int) {
+func (lx *lexer) lexDetachedValue(o resolvedOption, name string, idx int) {
 	if lx.pos >= len(lx.argv) {
-		lx.awaitingValue = f
-		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, f, name,
+		lx.awaitingValue = o.flag
+		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, o.flag, name,
 			"option requires an argument: %s", name))
 		return
 	}
 	if !isOperand(lx.argv[lx.pos]) {
-		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, f, name,
+		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, o.flag, name,
 			"option requires an argument: %s", name))
 		return
 	}
 	valIdx := lx.pos
 	value := lx.argv[valIdx]
 	lx.pos++
-	lx.emitSet(f, value, false, valIdx)
+	lx.emitSet(o, value, false, valIdx)
 }
 
-// emitSet records an instruction binding value to f.
-func (lx *lexer) emitSet(f *ir.Flag, value string, attached bool, argIndex int) {
+// emitSet records an instruction binding value to the flag o names,
+// reading value the way o's claim says to. What that means is the
+// dialect's to decide and this does not ask; the instruction carries the
+// result, so nothing downstream of lex knows a modifier was applied --
+// and, since this rewrites a string rather than calling Set, lexing a
+// half-typed command line still applies nothing.
+func (lx *lexer) emitSet(o resolvedOption, value string, attached bool, argIndex int) {
 	lx.instructions = append(lx.instructions, instruction{
 		kind:     instSet,
-		flag:     f,
-		value:    value,
+		flag:     o.flag,
+		value:    o.valueFor(value),
 		attached: attached,
 		argIndex: argIndex,
 	})
 }
 
-// findDescendantWithFlag returns the first descendant of cmd to declare
-// the option spelled key -- a "--name" or "-s" -- searching depth first in
+// findDescendantWithFlag returns the first descendant of cmd to answer to
+// the option -- a "--name" or "-s" -- searching depth first in
 // declaration order, or nil when none does. A name declared below the
 // current command is legal only once its own command is named, so
 // unrecognizedOption uses this to say where the name would work; see
@@ -393,7 +425,7 @@ func (lx *lexer) emitSet(f *ir.Flag, value string, attached bool, argIndex int) 
 // unadvertised, so the hint must not name it either. The flag stays
 // usable; the error just falls back to the plain "unrecognized option"
 // message.
-func findDescendantWithFlag(cmd *ir.Command, key string) *ir.Command {
+func findDescendantWithFlag(cmd *ir.Command, option string) *ir.Command {
 	for _, sub := range cmd.Subcommands {
 		if sub.Hidden {
 			continue
@@ -403,12 +435,12 @@ func findDescendantWithFlag(cmd *ir.Command, key string) *ir.Command {
 				if flag.Positional {
 					continue
 				}
-				if key != "" && slices.Contains(flag.Forms, key) {
+				if option != "" && flag.Claims(option) {
 					return sub
 				}
 			}
 		}
-		if found := findDescendantWithFlag(sub, key); found != nil {
+		if found := findDescendantWithFlag(sub, option); found != nil {
 			return found
 		}
 	}

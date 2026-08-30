@@ -601,7 +601,7 @@ func TestValidateDuplicatePositionalName(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if got, want := humanMessage(err), "test: operand already declared: FILE"; got != want {
+	if got, want := humanMessage(err), "test: operand declared more than once: FILE"; got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
 }
@@ -622,18 +622,22 @@ func TestConfigErrorNamesGrandchildByPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	want := `app remote add: flag already declared: --name`
+	want := `app remote add: flag declared more than once: --name`
 	if got := humanMessage(err); got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
 }
 
-// TestValidateAncestorShadowing asserts the path-scoped naming rule: a
-// command may not redeclare a name an ancestor already claimed, by either
-// spelling, however far up the path the ancestor is. See
-// docs/adr/path-scoped-flag-names.md. The offending command is named by
-// its full path, since a bare name would not say which "sub" or "leaf"
-// among possibly many.
+// TestValidateAncestorShadowing asserts the path-scoped naming rule: one
+// option may not be claimed twice along an ancestor-descendant chain, by
+// either spelling, however far up the path the ancestor is. See
+// docs/adr/path-scoped-flag-names.md.
+//
+// The error names both commands, since ancestry is what tells a reader
+// which end to change, and neither is called the offender: which was
+// declared first is an accident of mount order. The command the error is
+// reported against is still named by its full path, since a bare "sub" or
+// "leaf" would not say which among possibly many.
 func TestValidateAncestorShadowing(t *testing.T) {
 	for _, tt := range []struct {
 		name string
@@ -647,7 +651,7 @@ func TestValidateAncestorShadowing(t *testing.T) {
 				Subcommands(NewCommand("sub", "").Flags(
 					Bool(new(bool), "force", false, ""),
 				)),
-			want: `root sub: flag already declared by ancestor "root": --force`,
+			want: `root sub: flag declared on both "root" and "sub": --force`,
 		},
 		{
 			name: "ShortName",
@@ -656,7 +660,7 @@ func TestValidateAncestorShadowing(t *testing.T) {
 				Subcommands(NewCommand("sub", "").Flags(
 					String(new(string), "output", "", "").Aliases("f"),
 				)),
-			want: `root sub: flag already declared by ancestor "root": -f`,
+			want: `root sub: flag declared on both "root" and "sub": -f`,
 		},
 		{
 			name: "GrandparentClaim",
@@ -667,7 +671,7 @@ func TestValidateAncestorShadowing(t *testing.T) {
 						Bool(new(bool), "force", false, ""),
 					),
 				)),
-			want: `root mid leaf: flag already declared by ancestor "root": --force`,
+			want: `root mid leaf: flag declared on both "root" and "leaf": --force`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -909,7 +913,7 @@ func TestValidateCollectsAllErrors(t *testing.T) {
 	// the spellings they render to. Order within a batch is not part of
 	// the contract; that every error appears exactly once is.
 	want := "Program error: --bar: short name must be one character from [A-Za-z0-9]: \"!\"\n" +
-		"Program error: test: flag already declared: --foo\n"
+		"Program error: test: flag declared more than once: --foo\n"
 	if got := stderr; got != want {
 		t.Errorf("os.Stderr = %q, want %q", got, want)
 	}
@@ -938,7 +942,7 @@ func TestConfigErrorIgnoresConfiguredStreams(t *testing.T) {
 	if got, want := code, 2; got != want {
 		t.Errorf("exit code = %d, want %d", got, want)
 	}
-	want := "Program error: test sub: flag already declared: --foo\n"
+	want := "Program error: test sub: flag declared more than once: --foo\n"
 	if got := stderr; got != want {
 		t.Errorf("os.Stderr = %q, want %q", got, want)
 	}
@@ -1275,7 +1279,7 @@ func TestRunExitCodes(t *testing.T) {
 					String(new(string), "foo", "", ""),
 				),
 			wantCode:    2,
-			wantProcErr: "Program error: test: flag already declared: --foo\n",
+			wantProcErr: "Program error: test: flag declared more than once: --foo\n",
 		},
 		{
 			// A tree that leads back into itself reports like any other
@@ -1427,7 +1431,7 @@ func TestArgumentErrorsPrintUsage(t *testing.T) {
 		if got, want := code, 2; got != want {
 			t.Errorf("exit code = %d, want %d", got, want)
 		}
-		want := "Program error: test: flag already declared: --foo\n"
+		want := "Program error: test: flag declared more than once: --foo\n"
 		if got := procErr; got != want {
 			t.Errorf("os.Stderr = %q, want %q", got, want)
 		}
@@ -1929,6 +1933,102 @@ func TestValidateFlagWithoutName(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 	if got, want := humanMessage(err), "unknown: flag must declare a name"; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
+// TestNegationCollision asserts what generating a spelling costs: a
+// program can now collide with a name that appears nowhere in its source.
+// The error has to say where the spelling came from, or the author is
+// left looking for a declaration that does not exist.
+func TestNegationCollision(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		cmd  *Command
+		want string
+	}{
+		{
+			name: "GeneratedAgainstDeclared",
+			cmd: NewCommand("app", "").Flags(
+				Bool(new(bool), "cache", false, ""),
+				Bool(new(bool), "no-cache", false, ""),
+			),
+			want: "app: flag declared more than once: --no-cache (generated from --cache)",
+		},
+		{
+			name: "GeneratedAgainstDeclaredValueFlag",
+			cmd: NewCommand("app", "").Flags(
+				Bool(new(bool), "cache", false, ""),
+				String(new(string), "no-cache", "", ""),
+			),
+			want: "app: flag declared more than once: --no-cache (generated from --cache)",
+		},
+		{
+			name: "GeneratedAgainstAncestor",
+			cmd: NewCommand("root", "").
+				Flags(Bool(new(bool), "cache", false, "")).
+				Subcommands(NewCommand("sub", "").Flags(
+					Bool(new(bool), "no-cache", false, ""),
+				)),
+			want: `root sub: flag declared on both "root" and "sub": --no-cache (generated from --cache)`,
+		},
+		{
+			// Two booleans that collide on a declared name collide on its
+			// negation too, but that is one mistake, so it is reported
+			// once and by the name the author actually wrote.
+			name: "ShadowCollisionIsReportedOnce",
+			cmd: NewCommand("app", "").Flags(
+				Bool(new(bool), "force", false, "").Aliases("f"),
+				Bool(new(bool), "force", false, "").Aliases("g"),
+			),
+			want: "app: flag declared more than once: --force",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.cmd.Parse(nil)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if got, want := humanMessage(err), tt.want; got != want {
+				t.Errorf("message = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// TestOperandDoesNotCollideWithOption asserts what a positional stopped
+// claiming when the collision check moved to value names: it answers to
+// no option, so it cannot shadow one. A command taking a SERVICE operand
+// may also declare --service, since the two share no spelling anywhere a
+// reader sees them.
+func TestOperandDoesNotCollideWithOption(t *testing.T) {
+	var operand, option string
+	_, err := NewCommand("test", "").Flags(
+		String(&operand, "service", "", "").Positional(),
+		String(&option, "service", "", ""),
+	).Parse([]string{"web"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := operand, "web"; got != want {
+		t.Errorf("operand = %q, want %q", got, want)
+	}
+}
+
+// TestDuplicateValueNameCollides asserts the collision a positional does
+// still have: two operands shown by the same value name, which no error
+// message could tell apart. An explicit ValueName is enough, since what a
+// reader sees is the whole of the ambiguity.
+func TestDuplicateValueNameCollides(t *testing.T) {
+	var a, b string
+	_, err := NewCommand("test", "").Flags(
+		String(&a, "src", "", "").Positional().ValueName("PATH"),
+		String(&b, "dst", "", "").Positional().ValueName("PATH"),
+	).Parse(nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got, want := humanMessage(err), "test: operand declared more than once: PATH"; got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
 }

@@ -11,37 +11,59 @@ package ir
 // this is one half of, and TestMarshalOmitsBehavior for what enforces the
 // tags.
 type Flag struct {
-	// Name is the flag's canonical name, undecorated: the first of Names
-	// that is not empty. It is what an error reports the flag by, and what
-	// a positional argument is named for.
-	Name string
-
-	// Names is every name the flag answers to, in the order
-	// xflags.Flag.Aliases documents: the canonical name, the short name,
-	// then any further aliases. A slot may be empty, which is how a flag
-	// declares an alias but no short name, so the slice is read by index
-	// rather than compacted.
-	Names []string
-
-	// Forms is how each of Names is spelled on the command line, parallel
-	// to it so that an empty slot stays empty: Forms[0] is the canonical
-	// spelling and Forms[1] the short one, both of which a help formatter
-	// prints, and anything after is an alias it does not. A positional
-	// argument has no forms, being named rather than spelled.
+	// NamedOptions is the option each name the program declared is shown
+	// as: "--verbose" and "-v" rather than "verbose" and "v". It runs
+	// parallel to those names, in the order
+	// xflags.Flag.Aliases documents -- the canonical name, the short
+	// name, then any further aliases -- so a slot a flag left empty stays
+	// empty here rather than closing up, and a help formatter can print
+	// the first two knowing what they are.
 	//
-	// Not every form a parser accepts need appear here, so this is what is
-	// worth showing rather than an exhaustive account of what matches.
-	Forms []string
+	// A positional argument has none. It is an operand rather than an
+	// option, so nothing names it on the command line and ValueName is
+	// how it is shown.
+	//
+	// Not every option a parser accepts appears here, so this is what is
+	// worth showing rather than an exhaustive account of what matches;
+	// see ClaimedOptions.
+	NamedOptions []string
+
+	// ClaimedOptions is every option the flag answers to on the command
+	// line, each mapped to the option it came from: a declared one maps
+	// to itself, and one the convention generated maps to the declared
+	// option it was generated from. Where NamedOptions is what a reader
+	// is shown, this is what a reader may type, and the two differ once
+	// an option is generated: a boolean answers to --no-verbose, mapped
+	// to --verbose, without that belonging beside the flag's synonyms in
+	// help.
+	//
+	// What a generated option does to the value it binds is the
+	// convention's own business and is not recorded here, so a convention
+	// with no generated options leaves nothing meaningless behind. Where
+	// an option came from is not: every convention either generates
+	// options or does not, which is the same thing this field's existence
+	// already says.
+	//
+	// It is the enumerable half of what matches, not the whole of it. A
+	// convention may also match by rule -- every casing of an option, or
+	// every unambiguous prefix of one -- and no map can hold those, so
+	// completion offers from this while the command line still accepts
+	// more. Every entry of NamedOptions appears here; Validate checks it,
+	// since a convention showing an option it will not accept is a bug in
+	// the convention rather than in the program that declared the flag.
+	//
+	// A positional argument claims none, answering to no option at all.
+	ClaimedOptions map[string]string
 
 	// ValueName is how the value the flag takes is written where the flag
 	// is shown to a reader: the "SERVICE" of "Usage: deploy SERVICE" and
 	// of "missing required argument: SERVICE", and the placeholder beside
-	// an option that takes one. Where Forms says what a reader types to
-	// name the flag, this says what they type after it -- so a positional
-	// argument, which is named by nothing and is only its value, is shown
-	// by this alone.
+	// an option that takes one. Where NamedOptions says what a reader
+	// types to name the flag, this says what they type after it -- so a
+	// positional argument, which names no option and is only its value,
+	// is shown by this alone.
 	//
-	// Like Forms it arrives already written, so a formatter prints it as
+	// Like NamedOptions it arrives already written, so a formatter prints it as
 	// given. Both the name it is taken from and the convention it is
 	// written by belong to whatever reads the command line, which is what
 	// lets one convention print SERVICE where another prints <service>. A
@@ -87,37 +109,33 @@ type Flag struct {
 
 // String returns how the flag is shown wherever one string stands for it,
 // which is how the usage line, the help message and every error naming a
-// flag all refer to it: its canonical spelling on the command line, or,
-// for a positional argument that has no spelling, its value name.
+// flag all refer to it: the first option it is shown by, or, for a
+// positional argument that is shown by no option, its value name. A flag
+// that declared no name at all has neither, and is shown as "unknown" so
+// that the error saying so still reads as a sentence.
 //
-// It does not spell a name for itself. How a name is spelled is settled
-// when the tree is compiled, so that everything showing a flag shows the
-// same thing.
+// It writes nothing for itself. How an option is written is settled when
+// the tree is compiled, so that everything showing a flag shows the same
+// thing.
 func (f *Flag) String() string {
-	for _, form := range f.Forms {
-		if form != "" {
-			return form
+	for _, option := range f.NamedOptions {
+		if option != "" {
+			return option
 		}
 	}
-	switch {
-	case f.ValueName != "":
+	if f.ValueName != "" {
 		return f.ValueName
-	case f.Name != "":
-		return f.Name
-	default:
-		return "unknown"
 	}
+	return "unknown"
 }
 
-// CanonicalName returns the first of names that is not empty, which is the
-// name a flag is known by wherever one name has to stand for it.
-func CanonicalName(names []string) string {
-	for _, name := range names {
-		if name != "" {
-			return name
-		}
-	}
-	return ""
+// Claims reports whether naming the option name on the command line
+// reaches this flag. It answers only for the options that can be listed:
+// a convention matching by rule, such as by prefix, accepts more than
+// this reports. See ClaimedOptions.
+func (f *Flag) Claims(name string) bool {
+	_, ok := f.ClaimedOptions[name]
+	return ok
 }
 
 // Set validates s with the flag's ValidateFunc, if it has one, and then

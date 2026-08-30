@@ -217,7 +217,8 @@ for which `-n =value` and `--name==value` both remain available.
 
 The boolean rules have the same shape and one more reason: without them
 there is no way to set a boolean false from argv at all, since a detached
-value is never consumed by a boolean and negated booleans are not settled.
+value is never consumed by a boolean and the negated spelling below is a
+second way to say the same thing rather than the only one.
 `getopt_long` and argparse both reject the long form, so this departure is
 the larger one and belongs in the README's list.
 
@@ -235,6 +236,74 @@ Neither rule touches detached values. Guideline 14 still decides those, so
 `--count -5` is a missing value, `--verbose false` still leaves `false` as
 an operand, and both departures are confined to a single argument that
 already carries its own value.
+
+### Negated booleans are generated, not declared
+
+Every boolean answers to `--no-name`, for each of its long names, and it
+sets the flag false. Nothing declares it and nothing can switch it off.
+
+`getopt_long` generates nothing; a program that wants `--no-cache` declares
+it as an ordinary flag and wires the two together itself. Most parsers that
+do offer it make it per-flag — `pflag` has no negation at all, argparse has
+`BooleanOptionalAction`, Click has `--cache/--no-cache`. The departure is
+that this one is universal.
+
+Two arguments decide it, and neither is ergonomics.
+
+The first is structural. An opt-in needs a field on the compiled flag —
+`ir.Flag.Negatable` — named for a feature only some dialects have, carrying
+one dialect's opinion about what `--no-` means, on the model every dialect
+shares. That is the leak `wip/lexer.md` rejected a `NegatedForm` field for,
+and it drags two validation rules in behind it: *negation declared under a
+dialect that lacks it*, and *negation declared on a non-boolean*, both of
+which exist only to police a field that should not be there. Generating
+instead deletes all of it. `TakesValue == false` already says "boolean",
+and the dialect decides a boolean is spelled `--no-name`; nothing is
+declared, so nothing can be mis-declared, and a dialect without negation
+generates nothing.
+
+The second is that `--verbose=false` already sets every boolean false, as
+the section above ratifies. `--no-verbose` is therefore a second spelling
+of a capability the package already guarantees everywhere, not a new one. A
+capability that is universal should not need per-flag enablement, and a
+user should not have to discover which of a program's booleans happen to
+have it.
+
+Long names only, aliases included. A short `-v` gets no `-no-v`: nobody
+types it, `-v=false` is already the short spelling for false, and
+generating one would widen the collision surface below for nothing. Every
+long name is negated, including aliases, since `--loud` and `--no-loud`
+disagreeing would be exactly the asymmetry between one flag's own names
+that the attached-value departures were ratified to avoid.
+
+The value negates with the flag rather than the spelling replacing it, so
+`--no-verbose=false` sets true. It is one rule — the key inverts what is
+bound through it — applied uniformly, and a value that does not parse as a
+boolean passes through for the flag's own `Value` to reject, since a
+spelling has no business deciding what counts as a valid boolean.
+
+Three costs, taken deliberately:
+
+- **Collisions widen invisibly, and now everyone pays.** A program
+  declaring both `--cache` and `--no-cache` — a plausible tri-state pair —
+  stops compiling, and the second name appears nowhere in the first flag's
+  source. The error therefore says where the spelling came from: `flag
+  already declared: --no-cache (generated from --cache)`. A collision on a
+  declared name is reported once and by the name the author wrote, not
+  twice with its negation.
+- **Completion would double.** Twenty booleans becoming forty candidates is
+  a real regression, so negated keys are offered only once the word under
+  the cursor reaches `--no`. They match at every point regardless: what a
+  shell offers and what the command line accepts are different questions.
+- **Help says nothing about them.** Under an opt-in the author would at
+  least know. This is documented once — in the package doc and the README —
+  rather than repeated beside every boolean a program declares.
+
+No opt-out either. The worst case found for one was `--no-verify`
+generating `--no-no-verify`, which is silly, hidden and harmless. A
+`NoNegate()` would be a second API answering a question the first one no
+longer asks; it can be added later if a real case appears, whereas removing
+an opt-in after v1 cannot.
 
 ## Consequences
 

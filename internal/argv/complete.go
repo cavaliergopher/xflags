@@ -74,18 +74,18 @@ func completeCandidates(res lexResult, path []*ir.Command, inv *ir.Invocation, w
 
 	if strings.HasPrefix(word, "-") && !res.optionsEnded {
 		if key, frag, ok := strings.Cut(word, "="); ok {
-			f := optionTable(path)[key]
-			if f == nil {
+			o, ok := optionTable(path)[key]
+			if !ok {
 				return nil, ir.CompNoFileComp
 			}
-			cands, dir := completeValue(f, inv, frag)
+			cands, dir := completeValue(o.flag, inv, frag)
 			prefixed := make([]string, len(cands))
 			for i, cand := range cands {
 				prefixed[i] = key + "=" + cand
 			}
 			return prefixed, dir
 		}
-		return flagForms(path), ir.CompNoFileComp
+		return offeredOptions(path, word), ir.CompNoFileComp
 	}
 
 	active := res.active
@@ -113,50 +113,51 @@ func completeValue(f *ir.Flag, inv *ir.Invocation, word string) ([]string, ir.Co
 }
 
 // optionTable returns every non-positional flag reachable along path,
-// keyed by its long and short spellings -- "--name" and "-s" -- the same
-// accumulation lexer.enterCommand builds while lexing, so a key resolves
-// here exactly as it would resolve on the command line.
-func optionTable(path []*ir.Command) map[string]*ir.Flag {
-	table := make(map[string]*ir.Flag)
+// keyed by every option they answer to, the same accumulation
+// lexer.enterCommand builds while lexing, so an option resolves here
+// exactly as it would resolve on the command line.
+func optionTable(path []*ir.Command) map[string]resolvedOption {
+	table := make(map[string]resolvedOption)
 	for _, cmd := range path {
 		for _, group := range cmd.FlagGroups {
 			for _, f := range group.Flags {
-				if f.Positional {
-					continue
-				}
-				for _, form := range f.Forms {
-					if form == "" {
-						continue
-					}
-					table[form] = f
-				}
+				resolvedOptionsInto(table, f)
 			}
 		}
 	}
 	return table
 }
 
-// flagForms returns every form -- "--name" and "-s" -- of every flag along
-// path that is neither positional nor Hidden, plus "--help", which is
-// never declared as an ordinary flag but is always legal.
-func flagForms(path []*ir.Command) []string {
-	var forms []string
+// offeredOptions returns the options offered for word: every option --
+// "--name" and "-s" -- of every flag along path that is neither positional
+// nor Hidden, plus "--help", which is never declared as an ordinary flag
+// but is always legal.
+//
+// A generated negation is offered only once word reaches for one. Every
+// boolean has one, so offering them always would double the candidate
+// list with spellings most users never type; offering them from "--no"
+// onward puts them in front of the user who is typing one. They match at
+// every point either way -- what a shell offers and what the command line
+// accepts are different questions.
+func offeredOptions(path []*ir.Command, word string) []string {
+	negating := strings.HasPrefix(word, negatedFragment)
+	var names []string
 	for _, cmd := range path {
 		for _, group := range cmd.FlagGroups {
 			for _, f := range group.Flags {
 				if f.Positional || f.Hidden {
 					continue
 				}
-				for _, form := range f.Forms {
-					if form == "" {
+				for option, source := range f.ClaimedOptions {
+					if !negating && option != source {
 						continue
 					}
-					forms = append(forms, form)
+					names = append(names, option)
 				}
 			}
 		}
 	}
-	return append(forms, helpLongForm)
+	return append(names, helpLongForm)
 }
 
 // subcommandNames returns the name of every subcommand of active that is

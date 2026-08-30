@@ -1,15 +1,21 @@
 package argv
 
 import (
+	"errors"
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/cavaliergopher/xflags/ir"
 )
 
-// Validate checks the compiled tree rooted at root for the configuration
-// errors that are facts about a spelling rather than about the model: two
-// flags that would answer to one form, and a flag claiming a form
-// reserved for help. It reports every error found in one run.
+// Validate checks the compiled tree rooted at root for the one
+// configuration error that is a fact about a decorated name rather than
+// about the model: two flags that would answer to the same one. It
+// reports every error found in one run.
 //
 // This is the half of validation that has to ask whatever authority the
 // lexer asks. A collision is a collision only once names are spelled --
@@ -20,13 +26,23 @@ func Validate(root *ir.Command) error {
 	return validateTree(root, nil)
 }
 
+// claimant records who claimed a name: the command that declared it and
+// the flag it reached the name space through. A collision error needs
+// both -- which command a name came from, and, when the name was
+// generated rather than declared, what generated it, since an author
+// cannot see a name that is nowhere in their source.
+type claimant struct {
+	cmd  *ir.Command
+	flag *ir.Flag
+}
+
 // validateTree checks c and, recursively, each of its subcommands.
-// claimed maps each option spelling declared by c's ancestors to the
-// command that declared it: a name may not repeat anywhere along an
-// ancestor-descendant chain, and the check runs here because a command
-// cannot know its ancestors until the whole tree is in view. See
+// claimed maps each option spelling claimed by c's ancestors to who
+// claimed it: a name may not repeat anywhere along an ancestor-descendant
+// chain, and the check runs here because a command cannot know its
+// ancestors until the whole tree is in view. See
 // docs/adr/path-scoped-flag-names.md.
-func validateTree(c *ir.Command, claimed map[string]*ir.Command) error {
+func validateTree(c *ir.Command, claimed map[string]claimant) error {
 	var errs []error
 	if err := validateSelf(c, claimed); err != nil {
 		errs = append(errs, err)
@@ -36,9 +52,9 @@ func validateTree(c *ir.Command, claimed map[string]*ir.Command) error {
 	}
 	// Descendants see c's names claimed in a copy, so sibling subtrees may
 	// still reuse names freely.
-	claims := make(map[string]*ir.Command, len(claimed))
-	for key, cmd := range claimed {
-		claims[key] = cmd
+	claims := make(map[string]claimant, len(claimed))
+	for option, by := range claimed {
+		claims[option] = by
 	}
 	for _, group := range c.FlagGroups {
 		if group.Mounted {
@@ -50,8 +66,8 @@ func validateTree(c *ir.Command, claimed map[string]*ir.Command) error {
 			continue
 		}
 		for _, flag := range group.Flags {
-			for _, form := range claimedForms(flag) {
-				claims[form] = c
+			for option := range flag.ClaimedOptions {
+				claims[option] = claimant{cmd: c, flag: flag}
 			}
 		}
 	}
@@ -63,92 +79,145 @@ func validateTree(c *ir.Command, claimed map[string]*ir.Command) error {
 	return ir.JoinErrors(errs)
 }
 
-// validateSelf checks c's own flags for names already declared -- within
-// c, or by the ancestors whose claims are passed in -- and for names
-// reserved for help. It does not descend into subcommands.
-func validateSelf(c *ir.Command, claimed map[string]*ir.Command) error {
+// validateSelf checks c's own flags for options claimed twice -- within
+// c, or by the ancestors whose claims are passed in. It does not descend
+// into subcommands. Whether a name may be declared at all is settled
+// while it is still undecorated; see ValidateName.
+func validateSelf(c *ir.Command, claimed map[string]claimant) error {
 	var errs []error
 
-	flagsByName := make(map[string]*ir.Flag)
+	claimedHere := make(map[string]*ir.Flag)
 	for _, group := range c.FlagGroups {
 		for _, flag := range group.Flags {
-			if err := validateFlagForms(flag); err != nil {
-				errs = append(errs, err)
-			}
-			// A collision is reported by the colliding form rather than by
-			// the name behind it: it is a fact about a spelling, so the
-			// spelling is what the reader needs.
-			for _, key := range claimedForms(flag) {
-				if _, ok := flagsByName[key]; ok {
-					errs = append(errs, ir.NewConfigErrorf(nil, c, flag, "%s",
-						alreadyDeclaredMessage(flag, key)))
+			// A collision is reported by the colliding option as it is
+			// written rather than by the name behind it: it is a fact
+			// about a decoration, so the written option is what the
+			// reader needs. A positional claims nothing, so this loop
+			// never runs for one.
+			// Sorted, because these errors are batched and joined: map
+			// order would shuffle a multi-collision message between
+			// runs.
+			for _, option := range slices.Sorted(maps.Keys(flag.ClaimedOptions)) {
+				if held, ok := claimedHere[option]; ok {
+					if err := collisionError(c, flag, option, held, ""); err != nil {
+						errs = append(errs, err)
+					}
 				}
-				if ancestor, ok := claimed[key]; ok {
-					errs = append(errs, ir.NewConfigErrorf(nil, c, flag, "%s",
-						alreadyDeclaredByAncestorMessage(flag, key, ancestor.Name)))
+				if a, ok := claimed[option]; ok {
+					if err := collisionError(c, flag, option, a.flag, a.cmd.Name); err != nil {
+						errs = append(errs, err)
+					}
 				}
-				flagsByName[key] = flag
+				claimedHere[option] = flag
 			}
 		}
 	}
 	return ir.JoinErrors(errs)
 }
 
-// validateFlagForms reports each of f's names that spells a form the lexer
-// answers before it ever consults the option table, which a flag
-// declaring one would therefore silently never fire for.
-func validateFlagForms(f *ir.Flag) error {
+// ValidateNames reports every rule the given declared names break under
+// this dialect, reading them undecorated, as the program wrote them.
+// Lowering calls it before decorating them, which is the only point at
+// which the undecorated forms are still in hand. Every violation is
+// returned rather than just the first, so a program sees all of them in
+// one run.
+//
+// positional says the names belong to an operand. An operand answers to
+// no option, so a second name for one could never be matched -- reported
+// rather than ignored, since it is a mistake the program cannot see fail.
+// That rule is here rather than with the caller because whether a name
+// reaches a flag at all is this dialect's to say.
+func ValidateNames(names []string, positional bool) []error {
 	var errs []error
-	for _, name := range f.Names {
-		if name == "" {
-			continue // an empty slot, which xflags.Flag.Aliases documents
-		}
-		if form := FormOf(name); form == helpShortForm || form == helpLongForm {
-			errs = append(errs, ir.NewConfigErrorf(nil, nil, f,
-				"flag name is reserved for help: %s", form))
+	if positional && len(names) > 1 {
+		errs = append(errs, errors.New("positional arguments do not support aliases"))
+	}
+	for _, name := range names {
+		if err := validateName(name); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return ir.JoinErrors(errs)
+	return errs
 }
 
-// alreadyDeclaredMessage reports a name key colliding with one already
-// declared on the same command. A positional flag names itself, since key
-// is a synthetic "--"/"-" spelling it never appears with on the command
-// line; an option is named by that spelling.
-func alreadyDeclaredMessage(flag *ir.Flag, key string) string {
-	if flag.Positional {
-		return fmt.Sprintf("operand already declared: %s", flag)
+// validateName reports the first rule name breaks on its own terms.
+//
+// The rules are this dialect's own. "=" reads as the delimiter of an
+// attached value and whitespace as an argument break, so a name holding
+// either could never be matched; a leading "-" would decorate into
+// something the parser reads as two options; POSIX guideline 3 confines a
+// one-character name to one alphanumeric character, which is what lets a
+// short boolean read "=" as a delimiter; and the names reserved for help
+// are answered before the option table is consulted at all, so a flag
+// declaring one would silently never fire.
+func validateName(name string) error {
+	if name == "" {
+		return nil // an empty slot, which xflags.Flag.Aliases documents
 	}
-	return fmt.Sprintf("flag already declared: %s", key)
+	switch {
+	case strings.HasPrefix(name, "-"):
+		return fmt.Errorf("flag name must not start with '-': %q", name)
+	case strings.ContainsRune(name, '='):
+		return fmt.Errorf("flag name must not contain '=': %q", name)
+	case strings.ContainsFunc(name, unicode.IsSpace):
+		return fmt.Errorf("flag name must not contain whitespace: %q", name)
+	case utf8.RuneCountInString(name) == 1 && !isShortName(name):
+		return fmt.Errorf("short name must be one character from [A-Za-z0-9]: %q", name)
+	}
+	if decorated := OptionOf(name); decorated == helpShortForm || decorated == helpLongForm {
+		return fmt.Errorf("flag name is reserved for help: %s", decorated)
+	}
+	return nil
 }
 
-// alreadyDeclaredByAncestorMessage is alreadyDeclaredMessage's counterpart
-// for a name an ancestor, named by ancestor, already claimed.
-func alreadyDeclaredByAncestorMessage(flag *ir.Flag, key, ancestor string) string {
-	if flag.Positional {
-		return fmt.Sprintf("operand already declared by ancestor %q: %s", ancestor, flag)
+// isShortName reports whether s is a legal short name. POSIX guideline 3
+// confines one to a single character from the portable character set, and
+// the parser leans on that: reading "=" as a delimiter after a short
+// boolean costs no ambiguity only because "=" can never be a name.
+//
+// Measured in characters rather than bytes, so a multi-byte rune is
+// rejected for falling outside the set rather than for its length.
+func isShortName(s string) bool {
+	r, size := utf8.DecodeRuneInString(s)
+	if size != len(s) {
+		return false
 	}
-	return fmt.Sprintf("flag already declared by ancestor %q: %s", ancestor, key)
+	return ('a' <= r && r <= 'z') ||
+		('A' <= r && r <= 'Z') ||
+		('0' <= r && r <= '9')
 }
 
-// claimedForms returns the spellings f claims in the name space that
-// validation checks for collisions. An option claims each of its forms; a
-// positional argument has none, so it claims its canonical name spelled as
-// an option, since a name means one flag along a command path whether or
-// not it is spelled with dashes. See
-// docs/adr/path-scoped-flag-names.md.
-func claimedForms(f *ir.Flag) []string {
-	if f.Positional {
-		if f.Name == "" {
-			return nil
-		}
-		return []string{FormOf(f.Name)}
+// collisionError reports that flag and held both answer to option, or nil
+// when that collision only shadows one already reported. ancestor names
+// the command that also claims it, or is empty when both flags are on the
+// same command.
+//
+// It names no offender. Which of two flags was declared first is an
+// accident of import and mount order, and in a tree composed from several
+// teams it is not something either author can see, so the error states
+// the collision and leaves the fix to whoever can make it. Ancestry is
+// different and is named: it survives any reordering, and it is what
+// tells a reader which end to change.
+//
+// A collision the author cannot find anywhere in their own source is the
+// worst kind, so an option one side generated says where it came from --
+// including when the other side declared it outright, since it is the
+// generated half that is invisible. When both sides generated it from an
+// option they also collide on, it is the same mistake twice: two booleans
+// that both declare --force both generate --no-force, and only --force,
+// the name they actually wrote, is worth reporting.
+func collisionError(c *ir.Command, flag *ir.Flag, option string, held *ir.Flag, ancestor string) error {
+	source := generatedFrom(option, flag, held)
+	if source != "" && flag.Claims(source) && held.Claims(source) {
+		return nil
 	}
-	forms := make([]string, 0, len(f.Forms))
-	for _, form := range f.Forms {
-		if form != "" {
-			forms = append(forms, form)
-		}
+	var from string
+	if source != "" {
+		from = fmt.Sprintf(" (generated from %s)", source)
 	}
-	return forms
+	if ancestor != "" {
+		return ir.NewConfigErrorf(nil, c, flag,
+			"flag declared on both %q and %q: %s%s", ancestor, c.Name, option, from)
+	}
+	return ir.NewConfigErrorf(nil, c, flag, "flag declared more than once: %s%s", option, from)
 }

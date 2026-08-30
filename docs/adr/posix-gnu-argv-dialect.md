@@ -37,13 +37,17 @@ migration is documented, because it is the one place the resemblance
 misleads.
 
 Other dialects are deferred, not refused. Nothing in the model names a
-POSIX category: a flag holds a list of names, and `internal/argv.FormOf`
-is the one place a name becomes a command line spelling, from the shape of
-the name rather than the slot it was declared in. Everything that matches,
-prints or completes a flag reads the spellings it produced, in
-`ir.Flag.Forms` and `ir.Flag.Metavar`, so a second dialect replaces the
-speller and the matcher and nothing else. The design for that seam is in
-`wip/lexer.md`; none of it is built.
+POSIX category: a flag holds a list of names, and `internal/argv.OptionOf`
+is the one place a name becomes something written on the command line,
+from the shape of the name rather than the slot it was declared in.
+Everything that prints a flag reads what it produced, in
+`ir.Flag.NamedOptions` and `ir.Flag.ValueName`; everything that matches or
+completes one reads `ir.Flag.ClaimedOptions`, which is a superset once
+the dialect generates a spelling the program never declared, and which
+maps each spelling back to the declaration it came from so that what a
+generated one *means* can stay inside the dialect. So a second dialect
+replaces the speller and the matcher and nothing else. The
+design for that seam is in `wip/lexer.md`; none of it is built.
 
 The separation is structural rather than conventional. `internal/argv`
 holds spelling, matching and everything that reads a command line;

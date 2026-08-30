@@ -181,7 +181,7 @@ func detailFlagGroup(w io.Writer, group *FlagGroup) error {
 		// slot, so a short spelling stays with the short ones however it
 		// was declared.
 		var name, shortName string
-		for _, form := range flag.Forms[:min(2, len(flag.Forms))] {
+		for _, form := range flag.NamedOptions[:min(2, len(flag.NamedOptions))] {
 			switch {
 			case form == "":
 			case isLongForm(form):
