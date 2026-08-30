@@ -18,8 +18,6 @@ const (
 
 // TODO: mutually exclusive flags?
 // TODO: error handling modes
-// TODO: support aliases
-// TODO: support negated bools
 
 // Flag describes a command line flag that may be specified on the command
 // line.
