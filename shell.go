@@ -44,27 +44,18 @@ func shellFuncName(prog string) string {
 	return b.String()
 }
 
-// completionHook answers c's shell completion environment variable when it
-// is set to a value Run recognizes, reporting handled as false when it is
-// unset or holds anything else, so Run falls through to parsing args as
-// usual. A tree that does not compile answers nothing and reports handled
-// as false, so the fault is reported when Run goes on to compile it. See
-// EnableCompletion and (*Command).Run.
-func completionHook(c *Command) (code int, handled bool) {
-	// Which variable to consult is a question about the tree, since it is
-	// named from the root's name, so the tree compiles before the question
-	// can be asked.
-	//
-	// TODO: this compiles the tree a second time on the path where no
-	// completion is requested, which is every ordinary invocation of a
-	// command that enabled it. It goes away once Run compiles once and
-	// passes the compiled node down instead of each step compiling for
-	// itself.
-	node, err := c.Compile()
-	if err != nil {
-		return 0, false
-	}
-	rootName := node.Root.Name
+// completionHook answers cmd's shell completion environment variable when
+// it is set to a value RunWithArgs recognizes, reporting handled as false
+// when it is unset or holds anything else, so the caller falls through to
+// parsing args as usual.
+//
+// Which variable to consult is a question about the tree, since it is
+// named from the root's name, so cmd is the compiled tree that
+// RunWithArgs already lowered rather than the configuration it was
+// lowered from. A tree that does not compile never reaches here: its
+// fault is reported first. See EnableCompletion and RunWithArgs.
+func completionHook(cmd *ir.Command) (code int, handled bool) {
+	rootName := cmd.Root.Name
 	varName := completionEnvVar(rootName)
 	val, ok := os.LookupEnv(varName)
 	if !ok {
@@ -73,13 +64,13 @@ func completionHook(c *Command) (code int, handled bool) {
 
 	switch val {
 	case "bash_source":
-		fmt.Fprint(node.Stdout, bashSourceScript(rootName, varName))
+		fmt.Fprint(cmd.Stdout, bashSourceScript(rootName, varName))
 		return ExitCodeSuccess, true
 	case "zsh_source":
-		fmt.Fprint(node.Stdout, zshSourceScript(rootName, varName))
+		fmt.Fprint(cmd.Stdout, zshSourceScript(rootName, varName))
 		return ExitCodeSuccess, true
 	case "bash_complete", "zsh_complete":
-		writeCompletionReply(node, node.Stdout)
+		writeCompletionReply(cmd, cmd.Stdout)
 		return ExitCodeSuccess, true
 	default:
 		return 0, false

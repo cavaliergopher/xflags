@@ -455,17 +455,12 @@ func missingSubcommand(cmd *ir.Command) HandlerFunc {
 // If EnableCompletion was called, Run first checks the shell completion
 // environment variable it names and, when it carries a value Run
 // recognizes, answers it directly instead of parsing args at all; see
-// EnableCompletion. RunWithArgs shares this behavior, being built on Run.
+// EnableCompletion.
 //
 // ctx is passed to the handler unchanged. See NotifyContext for a context
 // that is canceled on SIGINT or SIGTERM.
 func (c *Command) Run(ctx context.Context, args []string) int {
-	if c.completionEnabled {
-		if code, handled := completionHook(c); handled {
-			return code
-		}
-	}
-	return c.handleErr(c.Dispatch(ctx, args))
+	return RunWithArgs(ctx, c, args...)
 }
 
 // Dispatch compiles the whole command tree c belongs to (see Compile),
@@ -492,7 +487,14 @@ func (c *Command) Dispatch(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	inv, err := argv.Parse(node, args)
+	return dispatch(ctx, node, args)
+}
+
+// dispatch is Command.Dispatch against a tree that is already compiled,
+// which is what lets RunWithArgs lower the tree once and hand the same
+// node to everything below it. See runCompiled.
+func dispatch(ctx context.Context, cmd *ir.Command, args []string) error {
+	inv, err := argv.Parse(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -500,6 +502,14 @@ func (c *Command) Dispatch(ctx context.Context, args []string) error {
 		return inv.Cmd.Usage(inv.Stdout)
 	}
 	return inv.Cmd.Handler(ctx, inv)
+}
+
+// runCompiled runs an already-compiled command tree and returns the exit
+// code the program should terminate with. It is Run's whole body past the
+// compile, and the seam a precompiled entry point would be exported at if
+// one is ever wanted; see RunWithArgs.
+func runCompiled(ctx context.Context, cmd *ir.Command, args ...string) int {
+	return report(cmd, dispatch(ctx, cmd, args))
 }
 
 // Complete resolves shell completion candidates for a command line that is
@@ -519,39 +529,30 @@ func (c *Command) Complete(args []string, word string) ([]string, ir.CompDirecti
 	return argv.Complete(node, args, word)
 }
 
-// handleErr reports err and returns the exit code the program should
-// terminate with. A joined error -- validation reports every
-// configuration error in one run -- prints one prefixed line per error.
+// report reports err against cmd, an already-compiled tree, and returns
+// the exit code the program should terminate with. A joined error -- a
+// wrong command line can report more than one fault -- prints one
+// prefixed line per error.
 //
-// Where a line goes turns on whether the tree compiled. A config error
-// means it did not, and the stream overrides are part of what failed to
-// validate -- the parent links a stream is inherited along are themselves
-// something Compile checks -- so nothing the tree says about its streams
-// decides where the line goes, and it goes to os.Stderr. Every other
-// error is reported after a successful Compile, so it goes to the stderr
-// of the command the error names, or the receiver's when it names none.
-//
-// An argument error is followed by that command's usage, so the reader
-// who mistyped sees what to type instead; a config error is not, because
-// a malformed tree cannot describe itself. See
+// A line goes to the stderr of the command the error names, or to cmd's
+// when it names none. An argument error is followed by that command's
+// usage, so the reader who mistyped sees what to type instead; see
 // docs/adr/argument-errors-print-usage.md.
-func (c *Command) handleErr(err error) int {
+//
+// A configuration error is the exception, and reaches here only from a
+// tree that compiled and then failed anyway -- restoring a default
+// through Set is the one way that happens. The fault is the program's
+// rather than the user's, so it goes to os.Stderr whatever the tree
+// configured and prints no usage. A tree that failed to compile at all
+// never reaches here; see reportConfigError.
+func report(cmd *ir.Command, err error) int {
 	if err == nil {
 		return ExitCodeSuccess
 	}
 
-	// Only a compiled command knows its streams, so the tree is compiled
-	// here to find them and, where the error names no command, to describe
-	// itself. A config error is the case where that fails, and it is the
-	// one error that does not consult the tree at all.
-	node, cerr := c.Compile()
-
 	for _, e := range ir.FlattenErrors(err) {
 		errTypeName := "Error"
-		var stderr io.Writer = os.Stderr
-		if cerr == nil {
-			stderr = node.Stderr
-		}
+		stderr := cmd.Stderr
 
 		var argErr *ir.ArgumentError
 		var cfgErr *ir.ConfigError
@@ -563,11 +564,8 @@ func (c *Command) handleErr(err error) int {
 			}
 
 		case errors.As(e, &cfgErr):
-			// The tree is malformed, so the fault is the program's rather than
-			// the user's. Both exit 2, so the prefix is all that says which.
-			//
-			// Its streams are part of what failed to validate, so they
-			// do not get to say where this goes. See handleErr.
+			// Both exit 2, so the prefix is all that says whether the
+			// fault was the user's or the program's.
 			errTypeName = "Program error"
 			stderr = os.Stderr
 		}
@@ -581,19 +579,36 @@ func (c *Command) handleErr(err error) int {
 			return fallbackToStderr(werr)
 		}
 		if argErr != nil {
-			cmd := argErr.Cmd
-			if cmd == nil {
-				// The error names no command, so the receiver describes
-				// itself instead.
-				if cerr != nil {
-					return fallbackToStderr(cerr)
-				}
-				cmd = node
+			usageCmd := argErr.Cmd
+			if usageCmd == nil {
+				// The error names no command, so the command that was run
+				// describes itself instead.
+				usageCmd = cmd
 			}
-			if werr := cmd.Usage(stderr); werr != nil {
+			if werr := usageCmd.Usage(stderr); werr != nil {
 				return fallbackToStderr(werr)
 			}
 		}
+	}
+	return ExitCode(err)
+}
+
+// reportConfigError reports a command tree that failed to compile and
+// returns the exit code the program should terminate with.
+//
+// It is the one report that does not consult the tree, because the tree
+// is what failed: a command's stream overrides are inherited along the
+// parent links Compile checks, so nothing it says about where its output
+// goes can be trusted, and the message goes to os.Stderr whatever it
+// configured. No usage follows, because a malformed tree cannot describe
+// itself. Compile reports the same faults as an ordinary error value,
+// which is where a program is best served catching them.
+func reportConfigError(err error) int {
+	for _, e := range ir.FlattenErrors(err) {
+		// A failure to write here has nowhere left to go: os.Stderr is
+		// already where the fallback would write, and it must not cost
+		// the exit code that says the program is malformed.
+		fmt.Fprintf(os.Stderr, "Program error: %s\n", humanMessage(e))
 	}
 	return ExitCode(err)
 }

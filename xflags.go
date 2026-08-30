@@ -28,7 +28,19 @@ func Run(ctx context.Context, cmd *Command) int {
 //	    os.Exit(xflags.RunWithArgs(context.Background(), cmd, "--foo", "--bar"))
 //	}
 func RunWithArgs(ctx context.Context, cmd *Command, args ...string) int {
-	return cmd.Run(ctx, args)
+	// The one place an ordinary invocation compiles the tree. Everything
+	// below takes the compiled node, so lowering happens once however
+	// many steps consult it.
+	node, err := cmd.Compile()
+	if err != nil {
+		return reportConfigError(err)
+	}
+	if cmd.completionEnabled {
+		if code, handled := completionHook(node); handled {
+			return code
+		}
+	}
+	return runCompiled(ctx, node, args...)
 }
 
 // NotifyContext returns a copy of parent that is canceled when the program

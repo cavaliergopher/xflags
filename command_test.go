@@ -2163,3 +2163,49 @@ func TestAncestryIsResolvedAtCompileTime(t *testing.T) {
 		t.Errorf("first of Ancestry = %v, want the root", got)
 	}
 }
+
+// TestRunCompilesOnce pins that an ordinary invocation lowers the tree
+// exactly once, on both the success and the failure path. Before Run
+// compiled once and passed the node down, the completion hook and the
+// error reporter each compiled again for themselves.
+//
+// The count comes from a middleware, because Compile applies every
+// wrapper on a command's path while lowering it, so one application per
+// command is one compile. That is the contract Command.Middleware
+// documents, which is what makes it a fair probe rather than a trick.
+func TestRunCompilesOnce(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want int
+	}{
+		// EnableCompletion is what made an ordinary invocation compile a
+		// second time, for a variable that is not even set.
+		{name: "success", args: nil, want: ExitCodeSuccess},
+		// The error path compiled again to find the stream to report on.
+		{name: "argument error", args: []string{"--nope"}, want: ExitCodeUsage},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			applied := 0
+			app := NewCommand("app", "").
+				EnableCompletion().
+				Stdout(io.Discard).
+				Stderr(io.Discard).
+				Middleware(func(next HandlerFunc) HandlerFunc {
+					applied++
+					return next
+				}).
+				HandleFunc(func(ctx context.Context, inv *Invocation) error {
+					return nil
+				})
+
+			if code := RunWithArgs(context.Background(), app, tt.args...); code != tt.want {
+				t.Errorf("exit code = %d, want %d", code, tt.want)
+			}
+			if applied != 1 {
+				t.Errorf("tree lowered %d times, want 1", applied)
+			}
+		})
+	}
+}
