@@ -46,6 +46,15 @@ set `ORBITAL_ACTOR`. `--help` does not.
 | `Command.Description` | root command in `main.go`; `internal/deploy` |
 | Shell completion (`EnableCompletion`, `Flag.Complete`) | root in `main.go`; `internal/logscmd` `SERVICE` completes from the fleet client |
 
+## Tests
+
+`main_test.go` runs the program as a child process, asserting on real stdout,
+stderr and exit codes: the help message in full, the exit-code contract
+(0, 1, 2 and a handler's own 4), operand and terminator handling, the
+unrecognized-option hint, and the shell completion protocol including a
+dynamic callback. An example whose output has drifted is worse than no
+example, and only running it end to end catches that.
+
 ## Layout
 
 ```
