@@ -405,7 +405,7 @@ func TestPositionalIsShownByItsValueName(t *testing.T) {
 				t.Errorf("String() = %q, want %q", got, tt.want)
 			}
 			var sb strings.Builder
-			if err := node.WriteUsage(&sb); err != nil {
+			if err := node.Usage(&sb); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if want := "Usage: test " + tt.want + "\n"; !strings.HasPrefix(sb.String(), want) {
@@ -465,7 +465,7 @@ func TestAliasIsMatchedButNotPrinted(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var sb strings.Builder
-	if err := ir.Format(&sb, node); err != nil {
+	if err := ir.Usage(&sb, node); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if help := sb.String(); !strings.Contains(help, "--colour") ||

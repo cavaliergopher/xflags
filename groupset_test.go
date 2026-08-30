@@ -108,9 +108,9 @@ func TestGroupSetsDuplicateFlagNames(t *testing.T) {
 	})
 }
 
-// TestWriteUsageGroupSets asserts that mounted groups appear in help
+// TestUsageGroupSets asserts that mounted groups appear in help
 // output under their own headings, after the command's own groups.
-func TestWriteUsageGroupSets(t *testing.T) {
+func TestUsageGroupSets(t *testing.T) {
 	set := new(GroupSet)
 	set.FlagGroup(NewFlagGroup("logging", "Logging options",
 		String(new(string), "log-level", "", "Set log verbosity"),
@@ -122,8 +122,12 @@ func TestWriteUsageGroupSets(t *testing.T) {
 		Flags(Bool(new(bool), "verbose", false, "Print more")).
 		GroupSets(set)
 
+	node, err := cmd.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf strings.Builder
-	if err := cmd.WriteUsage(&buf); err != nil {
+	if err := node.Usage(&buf); err != nil {
 		t.Fatal(err)
 	}
 	want := strings.Join([]string{
@@ -140,7 +144,7 @@ func TestWriteUsageGroupSets(t *testing.T) {
 		"",
 	}, "\n")
 	if got := buf.String(); got != want {
-		t.Errorf("WriteUsage = %q, want %q", got, want)
+		t.Errorf("Usage = %q, want %q", got, want)
 	}
 }
 

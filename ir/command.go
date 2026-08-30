@@ -68,7 +68,7 @@ type HandlerFunc func(ctx context.Context, inv *Invocation) error
 //
 // Every field marshals except those tagged json:"-". Parent and Root are
 // derivable from the tree's shape and would make it self-referential;
-// Handler, FormatFunc and the three streams are behavior a formatter, a
+// Handler, UsageFunc and the three streams are behavior a formatter, a
 // completion engine or any other marshaler has no use for, so they are
 // excluded by tag rather than by staying unexported. See the package doc
 // for the two-type model this is one half of, and
@@ -106,10 +106,10 @@ type Command struct {
 	// its subcommands: invoking it directly is a usage error.
 	Handler HandlerFunc `json:"-"`
 
-	// FormatFunc, if set, overrides Format for rendering this command's
-	// help message. WriteUsage resolves it through ancestors before
-	// falling back to Format.
-	FormatFunc FormatFunc `json:"-"`
+	// UsageFunc, if set, renders this command's help message in place of
+	// the default. The Usage method resolves it through ancestors before
+	// falling back to the default renderer, Usage.
+	UsageFunc UsageFunc `json:"-"`
 
 	// Stdin, Stdout and Stderr are the streams resolved for this command
 	// when the tree was compiled, and are never nil: each defaults to the
@@ -150,8 +150,9 @@ func (c *Command) Validate() error {
 	return validateTree(c.rootOrSelf())
 }
 
-// WriteUsage prints a help message for c to w, using the nearest
-// FormatFunc set on c or one of its ancestors, or Format if none set one.
-func (c *Command) WriteUsage(w io.Writer) error {
+// Usage prints a help message for c to w, using the nearest UsageFunc set
+// on c or one of its ancestors, or the default renderer, Usage, if none
+// set one.
+func (c *Command) Usage(w io.Writer) error {
 	return writeUsage(c, w)
 }

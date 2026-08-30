@@ -50,7 +50,7 @@ type Command struct {
 	flagGroups  []*FlagGroup
 	groupSets   []*GroupSet
 	subcommands []*Command
-	formatFunc  ir.FormatFunc
+	usageFunc   ir.UsageFunc
 	handlerFunc HandlerFunc
 	stdin       io.Reader
 	stdout      io.Writer
@@ -63,7 +63,7 @@ type Command struct {
 
 	// defaultGroup is the implicit "options" flag group that Flags appends
 	// to. NewCommand creates it eagerly, so every command carries one from
-	// construction; it stays out of help output regardless, since Format
+	// construction; it stays out of help output regardless, since Usage
 	// skips a group with no flags in it.
 	defaultGroup *FlagGroup
 }
@@ -208,7 +208,7 @@ func (c *Command) lower(parent *ir.Command, nodeMap map[*Command]*ir.Command, er
 		FullName:    fullName,
 		Parent:      parent,
 		Handler:     c.handlerFunc,
-		FormatFunc:  c.formatFunc,
+		UsageFunc:   c.usageFunc,
 		Stdin:       c.getStdin(),
 		Stdout:      c.getStdout(),
 		Stderr:      c.getStderr(),
@@ -329,7 +329,7 @@ func (c *Command) Run(ctx context.Context, args []string) int {
 // printed to the command's stdout and Dispatch returns nil, or the error
 // that kept the help message from being written. Help output is not error
 // reporting, and a caller who wants it formatted differently has
-// FormatFunc.
+// UsageFunc.
 //
 // A command invoked with no handler returns an *ir.ArgumentError, as for
 // any other wrong command line.
@@ -343,7 +343,7 @@ func (c *Command) Dispatch(ctx context.Context, args []string) error {
 		return err
 	}
 	if inv.HelpRequested {
-		return inv.Cmd.WriteUsage(inv.Stdout)
+		return inv.Cmd.Usage(inv.Stdout)
 	}
 	if inv.Cmd.Handler == nil {
 		// The command exists only to group its subcommands, so naming it
@@ -351,20 +351,6 @@ func (c *Command) Dispatch(ctx context.Context, args []string) error {
 		return ir.NewArgumentErrorf(nil, inv.Cmd, nil, "", "missing subcommand")
 	}
 	return inv.Cmd.Handler(ctx, inv)
-}
-
-// WriteUsage prints a help message to the given Writer using the configured
-// Formatter.
-//
-// WriteUsage compiles the command (see Compile) and hands the result to
-// the resolved FormatFunc, so it returns the same configuration errors
-// Parse would if the tree is misconfigured.
-func (c *Command) WriteUsage(w io.Writer) error {
-	node, err := c.Compile()
-	if err != nil {
-		return err
-	}
-	return node.WriteUsage(w)
 }
 
 // Complete resolves shell completion candidates for a command line that is
@@ -401,7 +387,6 @@ func (c *Command) handleErr(err error) int {
 	for _, e := range ir.FlattenErrors(err) {
 		errTypeName := "Error"
 		stderr := c.getStderr()
-		writeUsage := c.WriteUsage
 
 		var argErr *ir.ArgumentError
 		var cfgErr *ir.ConfigError
@@ -410,7 +395,6 @@ func (c *Command) handleErr(err error) int {
 			errTypeName = "Argument error"
 			if argErr.Cmd != nil {
 				stderr = argErr.Cmd.Stderr
-				writeUsage = argErr.Cmd.WriteUsage
 			}
 
 		case errors.As(e, &cfgErr):
@@ -426,7 +410,17 @@ func (c *Command) handleErr(err error) int {
 			return fallbackToStderr(werr)
 		}
 		if argErr != nil {
-			if werr := writeUsage(stderr); werr != nil {
+			cmd := argErr.Cmd
+			if cmd == nil {
+				// The error names no command, so the receiver describes
+				// itself instead, which means compiling it first.
+				node, cerr := c.Compile()
+				if cerr != nil {
+					return fallbackToStderr(cerr)
+				}
+				cmd = node
+			}
+			if werr := cmd.Usage(stderr); werr != nil {
 				return fallbackToStderr(werr)
 			}
 		}
@@ -519,10 +513,10 @@ func (c *Command) Subcommands(cmds ...*Command) *Command {
 	return c
 }
 
-// FormatFunc specifies a custom FormatFunc for formatting help messages for
-// this command.
-func (c *Command) FormatFunc(fn ir.FormatFunc) *Command {
-	c.formatFunc = fn
+// UsageFunc specifies a custom renderer for this command's help messages,
+// in place of the default.
+func (c *Command) UsageFunc(fn ir.UsageFunc) *Command {
+	c.usageFunc = fn
 	return c
 }
 

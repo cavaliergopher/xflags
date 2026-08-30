@@ -48,9 +48,8 @@ nothing: the usage still follows.
 Two error classes deliberately do not print usage:
 
 - `ConfigError`. The command tree is malformed, so no description of it
-  can be trusted — `WriteUsage` on a misconfigured tree returns the
-  configuration error instead of a help message. The report stays one
-  line.
+  can be trusted — a tree that fails to compile has no compiled form to
+  render a help message from. The report stays one line.
 - A handler's error. The command line was right: the parser accepted it
   and the handler ran, so usage has nothing to correct. A handler that
   discovers an argument problem of its own and wants the full report
@@ -59,7 +58,7 @@ Two error classes deliberately do not print usage:
 
 Help is not error reporting and is untouched: `-h` and `--help` print
 usage on the command's stdout and exit 0, and a caller who wants that
-output formatted differently has `FormatFunc`.
+output formatted differently has `UsageFunc`.
 
 Exit codes and prefixes are untouched. The three-code contract in
 `docs/adr/exit-code-contract.md` and the `Argument error:` /

@@ -7,26 +7,26 @@ import (
 	"text/tabwriter"
 )
 
-// FormatFunc is a function that prints a help message for a compiled
+// UsageFunc is a function that prints a help message for a compiled
 // command.
-type FormatFunc func(w io.Writer, cmd *Command) error
+type UsageFunc func(w io.Writer, cmd *Command) error
 
-// writeUsage implements (*Command).WriteUsage.
+// writeUsage implements (*Command).Usage.
 func writeUsage(c *Command, w io.Writer) error {
 	// TODO: Usage formatting is a function of the chosen argv vocabulary
 	// (POSIX/GNU, Go, Windows, etc.) so we'll need to break this API.
-	f := c.FormatFunc
+	f := c.UsageFunc
 	for p := c; f == nil && p != nil; p = p.Parent {
-		f = p.FormatFunc
+		f = p.UsageFunc
 	}
 	if f == nil {
-		f = Format
+		f = Usage
 	}
 	return f(w, c)
 }
 
-// Format is the default FormatFunc to print help messages for a command.
-func Format(w io.Writer, cmd *Command) error {
+// Usage is the default UsageFunc to print help messages for a command.
+func Usage(w io.Writer, cmd *Command) error {
 	if err := printUsage(w, cmd); err != nil {
 		return err
 	}

@@ -116,8 +116,8 @@ Four departures from `getopt_long` are deliberate, and
 command, flag group and flag, with ancestry resolved and exported fields
 holding everything that marshals. The default help formatter walks it, and
 so can your own tooling. Most programs never need to call Compile
-themselves, or import ir at all -- it is what Parse, Run and WriteUsage use
-internally.
+themselves, or import ir at all -- it is what Parse, Run and the help
+output use internally.
 
 See [the docs](https://pkg.go.dev/github.com/cavaliergopher/xflags) for
 comprehensive examples.

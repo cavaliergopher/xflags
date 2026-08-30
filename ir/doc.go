@@ -21,7 +21,7 @@
 // ValueName, and everything here prints what it was given.
 //
 // A handful of fields still carry behavior a marshaler has no use for --
-// Command's Handler, FormatFunc and three streams, Flag's Value,
+// Command's Handler, UsageFunc and three streams, Flag's Value,
 // ValidateFunc and CompleteFunc -- and each is tagged json:"-" rather
 // than kept unexported,
 // so encoding/json or any other reflection-based marshaler sees exactly
@@ -33,6 +33,6 @@
 // never touches it: xflags compiles a tree internally wherever compiling
 // one is called for. Reach for ir directly only when writing something
 // that operates on the compiled form itself, such as a custom Value, a
-// CompleteFunc, a FormatFunc, or a tool that walks or marshals a command
+// CompleteFunc, a UsageFunc, or a tool that walks or marshals a command
 // tree's description.
 package ir

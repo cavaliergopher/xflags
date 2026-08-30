@@ -62,7 +62,7 @@ package, and the vocabulary said so: we `Compile()` a tree and then
 command line against it.
 
 Every field on an `ir` type is exported. The handful that carry behavior
--- `Command.Handler`, `.FormatFunc` and its three streams, `Flag.Value`
+-- `Command.Handler`, `.UsageFunc` and its three streams, `Flag.Value`
 and `.ValidateFunc` -- are tagged `json:"-"` instead of staying
 unexported, so `encoding/json` skips them the same way it would skip an
 unexported field. The guarantee moves from the type system to
@@ -87,7 +87,7 @@ commands and flags, writes handlers and calls `Run` never imports `ir`.
 `Invocation` and `HandlerFunc` are therefore aliased into the root
 package, since they appear in the signature of every handler. Everything
 else an advanced consumer reaches for -- `ir.Command`, `ir.Value` for a
-custom flag type, `ir.CompleteFunc`, `ir.FormatFunc`, the error types --
+custom flag type, `ir.CompleteFunc`, `ir.UsageFunc`, the error types --
 is reached through the import, which keeps the root package's
 documentation to the surface a standard program uses.
 

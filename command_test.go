@@ -1184,7 +1184,7 @@ func TestRunExitCodes(t *testing.T) {
 
 // assertOutput asserts that a captured stream starts with want, or is empty
 // if want is empty. Only the first line of a help message is worth
-// asserting here; format_test covers the rest.
+// asserting here; usage_test covers the rest.
 func assertOutput(t *testing.T, name, got, want string) bool {
 	t.Helper()
 	if want == "" {
@@ -1544,9 +1544,37 @@ func TestStreamsDefaultToProcess(t *testing.T) {
 	}
 }
 
+// TestUsageFuncIsInherited asserts that a custom renderer set on one
+// command serves its subcommands too, and that the command it is handed is
+// the one being described rather than the one that set it. Compile
+// resolves the renderer the way it resolves the streams, so a subcommand
+// that sets none carries its nearest ancestor's.
+func TestUsageFuncIsInherited(t *testing.T) {
+	var stdout strings.Builder
+	root := NewCommand("root", "Root summary").
+		Stdout(&stdout).
+		UsageFunc(func(w io.Writer, cmd *ir.Command) error {
+			_, err := fmt.Fprintf(w, "custom help for %s\n", cmd.FullName)
+			return err
+		}).
+		Subcommands(
+			NewCommand("child", "Child summary").
+				HandleFunc(func(ctx context.Context, inv *Invocation) error {
+					return nil
+				}),
+		)
+
+	if code := root.Run(context.Background(), []string{"child", "--help"}); code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if got, want := stdout.String(), "custom help for root child\n"; got != want {
+		t.Errorf("stdout = %q, want %q", got, want)
+	}
+}
+
 // TestMarshalOmitsBehavior guards the json:"-" tags on ir.Command's and
 // ir.Flag's behavior fields. It compiles a tree exercising every one of
-// them -- a handler, a custom FormatFunc, all three stream overrides, a
+// them -- a handler, a custom UsageFunc, all three stream overrides, a
 // bound Value, a ValidateFunc, a Choices list, a subcommand and a
 // positional -- and marshals it, so a behavior field added later without
 // its tag fails here, in a test, rather than leaking into a program's
@@ -1589,7 +1617,7 @@ func TestMarshalOmitsBehavior(t *testing.T) {
 			String(&arg, "ARG", "", "positional usage").Positional(),
 		)
 	root := NewCommand("root", "Root summary").
-		FormatFunc(func(w io.Writer, cmd *ir.Command) error { return nil }).
+		UsageFunc(func(w io.Writer, cmd *ir.Command) error { return nil }).
 		Stdin(strings.NewReader("")).
 		Stdout(&strings.Builder{}).
 		Stderr(&strings.Builder{}).
@@ -1615,7 +1643,7 @@ func TestMarshalOmitsBehavior(t *testing.T) {
 
 // behaviorKeys names every field ir.Command and ir.Flag tag json:"-".
 var behaviorKeys = []string{
-	"Handler", "FormatFunc", "Stdin", "Stdout", "Stderr",
+	"Handler", "UsageFunc", "Stdin", "Stdout", "Stderr",
 	"Value", "ValidateFunc", "CompleteFunc",
 }
 
