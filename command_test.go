@@ -821,7 +821,10 @@ func TestValidateCollectsAllErrors(t *testing.T) {
 	if !errors.As(err, &cfgErr) {
 		t.Fatalf("expected a *ConfigError in %v", err)
 	}
-	code, _, stderr := runCaptured(cmd)
+	var code int
+	stderr := captureStderr(t, func() {
+		code = cmd.Run(context.Background(), nil)
+	})
 	if got, want := code, 2; got != want {
 		t.Errorf("exit code = %d, want %d", got, want)
 	}
@@ -832,8 +835,39 @@ func TestValidateCollectsAllErrors(t *testing.T) {
 	want := "Program error: --bar: short name must be one character from [A-Za-z0-9]: \"!\"\n" +
 		"Program error: test: flag already declared: --foo\n"
 	if got := stderr; got != want {
-		t.Errorf("stderr = %q, want %q", got, want)
+		t.Errorf("os.Stderr = %q, want %q", got, want)
 	}
+}
+
+// TestConfigErrorIgnoresConfiguredStreams asserts that a malformed tree is
+// reported on os.Stderr rather than on any stream the tree names, because
+// those streams are part of what failed to validate. The error names a
+// subcommand that redirected its own stderr -- a stream the composer of
+// the binary neither chose nor reads -- which used to swallow the report
+// whole.
+func TestConfigErrorIgnoresConfiguredStreams(t *testing.T) {
+	var rootErr, subErr strings.Builder
+	sub := NewCommand("sub", "").
+		Stderr(&subErr).
+		Flags(
+			String(new(string), "foo", "", ""),
+			String(new(string), "foo", "", ""),
+		)
+	cmd := NewCommand("test", "").Stderr(&rootErr).Subcommands(sub)
+
+	var code int
+	stderr := captureStderr(t, func() {
+		code = cmd.Run(context.Background(), []string{"sub"})
+	})
+	if got, want := code, 2; got != want {
+		t.Errorf("exit code = %d, want %d", got, want)
+	}
+	want := "Program error: test sub: flag already declared: --foo\n"
+	if got := stderr; got != want {
+		t.Errorf("os.Stderr = %q, want %q", got, want)
+	}
+	assertString(t, "", rootErr.String())
+	assertString(t, "", subErr.String())
 }
 
 // TestArgumentErrorWrapsArgumentErrorOnce asserts that an ArgumentError
@@ -1097,6 +1131,9 @@ func TestRunExitCodes(t *testing.T) {
 		wantCode int
 		wantOut  string
 		wantErr  string
+		// wantProcErr is what reaches os.Stderr rather than the command's
+		// own stream, which only a malformed tree does.
+		wantProcErr string
 	}{
 		{
 			name:     "Success",
@@ -1136,8 +1173,8 @@ func TestRunExitCodes(t *testing.T) {
 					String(new(string), "foo", "", ""),
 					String(new(string), "foo", "", ""),
 				),
-			wantCode: 2,
-			wantErr:  "Program error: test: flag already declared: --foo\n",
+			wantCode:    2,
+			wantProcErr: "Program error: test: flag already declared: --foo\n",
 		},
 		{
 			name:     "Exit",
@@ -1172,12 +1209,17 @@ func TestRunExitCodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			code, stdout, stderr := runCaptured(tt.cmd, tt.args...)
+			var code int
+			var stdout, stderr string
+			procErr := captureStderr(t, func() {
+				code, stdout, stderr = runCaptured(tt.cmd, tt.args...)
+			})
 			if got, want := code, tt.wantCode; got != want {
 				t.Errorf("exit code = %d, want %d", got, want)
 			}
 			assertOutput(t, "stdout", stdout, tt.wantOut)
 			assertOutput(t, "stderr", stderr, tt.wantErr)
+			assertOutput(t, "os.Stderr", procErr, tt.wantProcErr)
 		})
 	}
 }
@@ -1263,14 +1305,19 @@ func TestArgumentErrorsPrintUsage(t *testing.T) {
 			String(new(string), "foo", "", ""),
 			String(new(string), "foo", "", ""),
 		)
-		code, _, stderr := runCaptured(cmd)
+		var code int
+		var stderr string
+		procErr := captureStderr(t, func() {
+			code, _, stderr = runCaptured(cmd)
+		})
 		if got, want := code, 2; got != want {
 			t.Errorf("exit code = %d, want %d", got, want)
 		}
 		want := "Program error: test: flag already declared: --foo\n"
-		if got := stderr; got != want {
-			t.Errorf("stderr = %q, want %q", got, want)
+		if got := procErr; got != want {
+			t.Errorf("os.Stderr = %q, want %q", got, want)
 		}
+		assertString(t, "", stderr)
 	})
 }
 

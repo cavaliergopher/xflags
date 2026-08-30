@@ -298,6 +298,11 @@ func (c *Command) getStderr() io.Writer {
 // handler is given the same streams on its Invocation. See Stdin, Stdout
 // and Stderr.
 //
+// A malformed command tree is the exception: it is reported on os.Stderr
+// whatever the tree configured, because the configuration is part of what
+// failed to validate. Compile reports the same faults as an ordinary
+// error value, which is where a program is best served catching them.
+//
 // Run is Dispatch plus this reporting; a program that wants to report
 // errors its own way calls Dispatch instead and keeps the raw error.
 //
@@ -370,14 +375,21 @@ func (c *Command) Complete(args []string, word string) ([]string, ir.CompDirecti
 	return argv.Complete(node, args, word)
 }
 
-// handleErr reports err on the stderr of the command that produced it --
-// named by the error's Cmd field when it carries one, the receiver
-// otherwise -- and returns the exit code the program should terminate
-// with. A joined error -- validation reports every configuration error in
-// one run -- prints one prefixed line per error, each on its own command's
-// stderr. An argument error is followed by that command's usage, so the
-// reader who mistyped sees what to type instead; a config error is not,
-// because a malformed tree cannot describe itself. See
+// handleErr reports err and returns the exit code the program should
+// terminate with. A joined error -- validation reports every
+// configuration error in one run -- prints one prefixed line per error.
+//
+// Where a line goes turns on whether the tree compiled. A config error
+// means it did not, and the stream overrides are part of what failed to
+// validate -- the parent links getStderr walks are themselves something
+// Compile checks -- so nothing the tree says about its streams decides
+// where the line goes, and it goes to os.Stderr. Every other error is
+// reported after a successful Compile, so it goes to the stderr of the
+// command the error names, or the receiver's when it names none.
+//
+// An argument error is followed by that command's usage, so the reader
+// who mistyped sees what to type instead; a config error is not, because
+// a malformed tree cannot describe itself. See
 // docs/adr/argument-errors-print-usage.md.
 func (c *Command) handleErr(err error) int {
 	if err == nil {
@@ -400,13 +412,19 @@ func (c *Command) handleErr(err error) int {
 		case errors.As(e, &cfgErr):
 			// The tree is malformed, so the fault is the program's rather than
 			// the user's. Both exit 2, so the prefix is all that says which.
+			//
+			// Its streams are part of what failed to validate, so they
+			// do not get to say where this goes. See handleErr.
 			errTypeName = "Program error"
-			if cfgErr.Cmd != nil {
-				stderr = cfgErr.Cmd.Stderr
-			}
+			stderr = os.Stderr
 		}
 
-		if _, werr := fmt.Fprintf(stderr, "%s: %s\n", errTypeName, humanMessage(e)); werr != nil {
+		// A config error is already on os.Stderr, which is where the
+		// fallback would write, so a failure there has nowhere left to go
+		// and must not cost the exit code that says the program is
+		// malformed.
+		_, werr := fmt.Fprintf(stderr, "%s: %s\n", errTypeName, humanMessage(e))
+		if werr != nil && cfgErr == nil {
 			return fallbackToStderr(werr)
 		}
 		if argErr != nil {

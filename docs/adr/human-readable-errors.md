@@ -138,8 +138,16 @@ previous, deliberate choice that a refactor had quietly reverted to 1.
   usually not the person who can fix it. It tells them the fault is in the
   program rather than in what they typed, which is the most useful thing
   they can learn from it.
-- `ConfigError`'s audience is whoever composed the binary, not whoever ran
-  it, but it's still written to the command's configured stderr rather than
-  unconditionally to `os.Stderr` like `fallbackToStderr`. The prefix makes
-  it legible, not correctly addressed. That's a separate, still-open
-  question, recorded in `wip/TODO.md`.
+- `ConfigError` is written to `os.Stderr` whatever the tree configured,
+  because a successful `Compile` is what makes a program well-formed and
+  the stream overrides are part of what failed it — `getStderr` resolves
+  by walking the very parent links `Compile` checks. Honoring them would
+  mean reading configuration the library has just declared invalid, and it
+  used to address the report to the offending command's stream, chosen by
+  that command's author rather than by the composer the message is for.
+  Nothing is lost by writing early: `Compile` runs before argv is lexed,
+  so no handler has run and the process exits 2 immediately. A program
+  that wants these faults as values, which is the better place to catch
+  them, calls `Compile` in a test. Everything reported after a successful
+  `Compile` — argument errors, handler errors, help — follows the
+  configured streams as before.
