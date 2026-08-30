@@ -37,7 +37,7 @@ migration is documented, because it is the one place the resemblance
 misleads.
 
 Other dialects are deferred, not refused. Nothing in the model names a
-POSIX category: a flag holds a list of names, and `internal/argv.OptionOf`
+POSIX category: a flag holds a list of names, and `internal/argv.optionOf`
 is the one place a name becomes something written on the command line,
 from the shape of the name rather than the slot it was declared in.
 Everything that prints a flag reads what it produced, in

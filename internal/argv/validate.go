@@ -164,7 +164,7 @@ func validateName(name string) error {
 	case utf8.RuneCountInString(name) == 1 && !isShortName(name):
 		return fmt.Errorf("short name must be one character from [A-Za-z0-9]: %q", name)
 	}
-	if decorated := OptionOf(name); decorated == helpShortForm || decorated == helpLongForm {
+	if decorated := optionOf(name); decorated == helpShortForm || decorated == helpLongForm {
 		return fmt.Errorf("flag name is reserved for help: %s", decorated)
 	}
 	return nil

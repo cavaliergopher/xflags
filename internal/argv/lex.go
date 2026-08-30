@@ -313,7 +313,7 @@ func (lx *lexer) lexShortOptions(arg string, idx int) {
 		}
 		// The one place an option is written from something other than a
 		// declared name: a rune read out of a cluster.
-		name := OptionOf(string(r))
+		name := optionOf(string(r))
 		o, ok := lx.optionsByName[name]
 		if !ok {
 			// A malformed token consumes only itself: the rest of this

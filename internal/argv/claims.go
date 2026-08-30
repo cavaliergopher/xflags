@@ -45,7 +45,7 @@ func OptionsFor(names []string, positional, takesValue bool) (named []string, cl
 	named = make([]string, len(names))
 	claimed = make(map[string]string, 2*len(names))
 	for i, name := range names {
-		named[i] = OptionOf(name)
+		named[i] = optionOf(name)
 		if named[i] == "" {
 			continue // an empty slot, which xflags.Flag.Aliases documents
 		}

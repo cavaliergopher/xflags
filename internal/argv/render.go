@@ -5,7 +5,7 @@ import (
 	"unicode/utf8"
 )
 
-// OptionOf returns the option a flag name is shown as: one character
+// optionOf returns the option a flag name is shown as: one character
 // takes a single dash and anything longer takes two, which is POSIX
 // guideline 3 and the GNU long-option convention between them. The shape
 // of the name decides, not the slot it was declared in.
@@ -19,7 +19,7 @@ import (
 // This is the one place a name gains its decoration, which is what a
 // second argv dialect would replace; see
 // docs/adr/posix-gnu-argv-dialect.md.
-func OptionOf(name string) string {
+func optionOf(name string) string {
 	if name == "" {
 		return ""
 	}

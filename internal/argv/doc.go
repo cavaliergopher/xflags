@@ -19,7 +19,7 @@
 // would have bound.
 //
 // This package also owns how a flag is written down for a reader, in
-// both halves of it. OptionOf turns a declared name into the option it is
+// both halves of it. optionOf turns a declared name into the option it is
 // shown as, one character taking a single dash and anything longer
 // taking two; ValueNameFor writes the name of a flag's value the way a
 // synopsis does, so that "log-level" reads as LOG_LEVEL. Compile calls
