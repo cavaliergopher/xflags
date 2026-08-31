@@ -18,9 +18,8 @@ const (
 // with. Run looks for one in the chain of errors returned by a handler,
 // using errors.As, and exits with 1 if it finds none.
 //
-// TIP: *exec.Error implements ExitCoder, so a handler that shells out to
-// another program can return its error unchanged to exit with the same code
-// as the child process.
+// *exec.ExitError implements ExitCoder, so a handler that shells out can
+// return its error unchanged and exit with the child's code.
 type ExitCoder = ir.ExitCoder
 
 // ExitCode unwraps err until it finds an ExitCoder and returns its exit code.

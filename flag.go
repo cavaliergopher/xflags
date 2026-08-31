@@ -61,11 +61,9 @@ type Flag struct {
 // Var returns a Flag that can be used to define a command line flag with
 // custom value parsing.
 //
-// name becomes the flag's canonical name, and how it is spelled on the
-// command line follows from its shape: one character takes a single dash,
-// so Var(v, "n", usage) declares "-n", and anything longer takes two.
-// Every constructor in this package is built on Var. Add further names
-// with Flag.Aliases.
+// name becomes the flag's canonical name: one character is spelled with a
+// single dash, so Var(v, "n", usage) declares "-n", and anything longer
+// takes two. Add further names with Flag.Aliases.
 func Var(value ir.Value, name, usage string) *Flag {
 	return &Flag{
 		names:    []string{name},
@@ -132,13 +130,11 @@ func Float64(p *float64, name string, value float64, usage string) *Flag {
 	return c
 }
 
-// Func returns a Flag that can used to define a flag with the specified name and usage
-// string.
-// Each time the flag is seen, fn is called with the value of the flag.
-// If fn returns a non-nil error, it will be treated as a flag value parsing error.
+// Func returns a Flag that calls fn with its value each time it is given on
+// the command line. An error from fn is reported as a bad flag value.
 //
-// The flag may be given any number of times, since fn accumulates whatever it
-// likes; constrain it with NArgs.
+// The flag may be given any number of times; constrain it with
+// Flag.NArgs.
 func Func(name, usage string, fn func(s string) error) *Flag {
 	return Var(funcValue(fn), name, usage).NArgs(0, 0)
 }
@@ -230,43 +226,32 @@ func (c *Flag) ShowDefault() *Flag {
 //
 //	Bool(&v, "verbose", false, usage).Aliases("v", "loud")
 //
-// The names carry a convention, which nothing enforces. The first alias is
-// the short name, and help prints it beside the constructor's name.
-// Anything after is matched but left out of help, which is what a
-// compatibility spelling wants. A flag needing one of those but no short
-// name leaves the first alias empty:
+// The first alias is the short name, and help prints it beside the
+// constructor's name. Anything after it is matched but left out of help,
+// which is what a compatibility spelling wants. A flag needing one of
+// those but no short name leaves the first alias empty:
 //
 //	String(&c, "colour", "", usage).Aliases("", "color")
 //
-// A short name is one character from [A-Za-z0-9]. Short names that take no
-// value group into a single argument, so "-a -b" may also be written
-// "-ab". How each name is spelled follows from its shape rather than its
-// position, so a name given out of convention still matches; it is only
-// printed elsewhere.
+// A short name is one character from [A-Za-z0-9].
 func (c *Flag) Aliases(names ...string) *Flag {
 	c.names = append(c.names, names...)
 	return c
 }
 
 // ValueName names the value the flag takes, which stands in for it
-// wherever the flag is shown to a reader: the usage line, the help
-// message, and any error naming the flag. A positional argument is shown
-// by this alone, having no spelling of its own, and an option shows it
-// beside its names.
+// wherever the flag is shown: the usage line, the help message, and any
+// error naming it. A positional argument is shown by this alone.
 //
-// The flag's own name is used when this is not called, so a flag needs it
-// only where that name reads poorly for the value. An option whose only
-// name is a single character is shown as VALUE instead, since the letter
-// says nothing about what it takes; a positional argument keeps its name
-// however short:
+// Without it the flag's own name is used, so this is needed only where
+// that name reads poorly for the value. An option whose only name is a
+// single character is shown as VALUE instead, since the letter says
+// nothing about what it takes:
 //
 //	Strings(&tags, "tags", nil, usage).Positional().ValueName("tag")
 //
-// Give the name alone, undecorated. How it is written for a reader
-// follows the command line conventions this package speaks, which write
-// "tag" as TAG, the same way they decide a name is spelled "--tag". A
-// flag that takes no value, such as a boolean, has nothing to name and
-// ignores this.
+// Give the name undecorated: "tag" is shown as TAG. A flag that takes no
+// value, such as a boolean, ignores this.
 func (c *Flag) ValueName(name string) *Flag {
 	c.valueName = name
 	return c
@@ -280,9 +265,7 @@ func (c *Flag) Positional() *Flag {
 	return c
 }
 
-// NArgs indicates how many times this flag may be specified on the command
-// line. Value.Set will be called once for each instance of the flag specified
-// in the command arguments.
+// NArgs sets how many times this flag may be given on the command line.
 //
 // A count of 0 removes the bound, and so means something different at each
 // end: a min of 0 is no floor, making the flag optional, while a max of 0 is
@@ -454,17 +437,13 @@ func (c *FlagGroup) Flags(flags ...*Flag) *FlagGroup {
 }
 
 // FromFlagSet returns a FlagGroup holding the flags declared on fs, a flag
-// set created with Go's flag package, so a program composed with xflags can
-// carry flags from stdlib-flavored libraries. Mount the group with
-// Command.FlagGroups, or register it with Register. To import the flags
-// declared on the flag package itself, pass flag.CommandLine. Parsing and
-// error handling are taken over by this package; boolean flags keep their
-// no-argument arity via the flag.Value IsBoolFlag convention.
+// set from Go's flag package, so a program can carry flags from
+// stdlib-flavored libraries. Pass flag.CommandLine for the flags declared
+// on the flag package itself. Mount the group with Command.FlagGroups, or
+// register it with Register.
 //
-// The flag set is snapshotted when FromFlagSet is called: each flag's
-// Value is bound directly, and its name, usage text and DefValue are
-// captured for help messages. A flag declared on fs afterwards is not
-// seen.
+// The flag set is read once, here: a flag declared on fs afterwards is not
+// seen. Parsing and error handling are this package's from then on.
 func FromFlagSet(name, title string, fs *flag.FlagSet) *FlagGroup {
 	group := NewFlagGroup(name, title)
 	fs.VisitAll(func(f *flag.Flag) {

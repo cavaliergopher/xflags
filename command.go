@@ -15,29 +15,23 @@ import (
 // streams the handler should read and write.
 type Invocation = ir.Invocation
 
-// A HandlerFunc handles the invocation of a command specified by command
-// line arguments.
+// A HandlerFunc runs a command. Register one with Command.HandleFunc.
 //
 // ctx is the context given to Run, so a handler that does anything
-// cancelable should honor it. See NotifyContext for a context that is
-// canceled on SIGINT or SIGTERM.
+// cancelable should honor it.
 //
-// inv describes the invocation: the command that was named, the path it was
-// reached by, any arguments forwarded past a "--" terminator, and the
-// streams to work with. A handler should read inv.Stdin and write
-// inv.Stdout and inv.Stderr rather than the process streams, so that a
-// caller that redirects the command captures its output too. Nothing
-// enforces it; a handler that reaches for os.Stdout simply escapes the
-// redirection.
+// inv describes how the command was called: which command was named, any
+// arguments forwarded past a "--" terminator, and the streams to use. A
+// handler should write inv.Stdout and inv.Stderr rather than the process
+// streams, so that a caller redirecting the command captures its output.
 //
-// Returning nil exits with code 0 and returning an error exits with code 1,
-// unless the error implements ExitCoder, in which case it names its own
-// code. See RunWithArgs for the whole contract.
+// Returning nil exits 0 and returning an error exits 1, unless the error
+// implements ExitCoder. See RunWithArgs.
 type HandlerFunc = ir.HandlerFunc
 
-// A Middleware wraps a command's handler in another handler, so that the
-// wrapper runs first and decides whether, and with what, to call the one
-// it wrapped:
+// A Middleware wraps a command's handler in another handler, which runs
+// first and decides whether to call the one it wrapped. Declare one with
+// Command.Middleware.
 //
 //	func timing(next xflags.HandlerFunc) xflags.HandlerFunc {
 //	    return func(ctx context.Context, inv *xflags.Invocation) error {
@@ -48,13 +42,8 @@ type HandlerFunc = ir.HandlerFunc
 //	    }
 //	}
 //
-// A Middleware must be a pure function of the handler it is given, doing
-// its work in the handler it returns rather than in the wrapper itself.
-// Compile applies it while lowering, and may lower a tree more than once
-// in a run, so a wrapper that registers a metric or opens a connection
-// before returning does so more often than its author expects.
-//
-// See Command.Middleware for how one is declared and what it wraps.
+// Do the work in the handler returned, not in the wrapper itself: the
+// wrapper may be called more than once per run.
 type Middleware func(HandlerFunc) HandlerFunc
 
 // Command configures a command that users may invoke from the command line.
@@ -152,23 +141,15 @@ func (c *Command) effectiveGroups() []*FlagGroup {
 	return groups
 }
 
-// Compile lowers the whole command tree that c belongs to into its
-// compiled ir.Command form and returns the node corresponding to c's
-// position within it. It is not limited to c: the tree is found by walking
-// to its root, so the returned node carries complete ancestry via
-// ir.Command.Ancestry as well as its own subcommands, and configuration
-// errors anywhere in the tree are reported -- including in commands
-// unrelated to c. This is what makes a compiled command correct: a
-// subcommand's usage line, inherited flags and environment variables are
-// all meaningless without its ancestors.
+// Compile validates the whole command tree c belongs to and returns c in
+// its compiled ir.Command form, with its ancestry, inherited flags and
+// resolved streams filled in.
 //
-// The errors returned are the same configuration errors Parse returns,
-// which likewise compiles from the root wherever it is called.
+// Reach for it to check a tree for configuration errors before running it,
+// or to walk or marshal a program's whole command line surface. Errors
+// anywhere in the tree are reported, not only those in c.
 //
-// Compile is pure: it does not mutate the command tree or the variables
-// flags are bound to, so it is safe to call at any time, including while
-// parsed values are live. There is no caching, so every call lowers,
-// validates and returns the tree afresh.
+// It mutates nothing, so it is safe to call at any time.
 func (c *Command) Compile() (*ir.Command, error) {
 	root, err := c.root()
 	if err != nil {
@@ -421,34 +402,21 @@ func (c *Command) HandleFunc(handler HandlerFunc) *Command {
 }
 
 // Middleware wraps the handler of this command, and of every command
-// beneath it, in each of the given wrappers. It is where whatever a whole
-// subtree has to do belongs -- an authorization check, a timing trace,
-// opening a resource and closing it again -- written once instead of at
+// beneath it, in each of the given wrappers -- an authorization check, a
+// timing trace, a resource opened and closed -- written once instead of at
 // the top of every handler.
 //
 //	var App = xflags.NewCommand("myapp", "Do things").
 //	    Middleware(authorize, trace).
 //	    Subcommands(GetCommand, DeleteCommand)
 //
-// Middleware is inherited down the command path, and the outermost
-// wrapper is the one declared highest in the tree: a middleware on the
-// root runs before one a subcommand declared, and within one command they
-// run in the order given here. Repeated calls append.
+// The outermost wrapper is the one declared highest in the tree, and
+// within one command they run in the order given here. Repeated calls
+// append.
 //
-// A wrapper runs only around a handler, and only once the command line
-// has parsed, so flag values are set by the time it is called and it may
-// read them. Neither -h nor --help, an unparsable command line, nor
-// naming a command that only groups subcommands reaches one, because none
-// of them runs a handler.
-//
-// A wrapper decides whether to call the handler it wrapped, so returning
-// an error without calling it is how one refuses an invocation, and Run
-// maps that error to an exit code as it would the handler's own.
-//
-// Each wrapper must be a pure function of the handler it is given, doing
-// its work in the handler it returns: Compile applies them while lowering
-// the tree, and lowers a tree more than once in a run. See Middleware for
-// a worked wrapper, and Command.HandleFunc for the handler itself.
+// A wrapper runs only around a handler, and only once the command line has
+// parsed, so it may read the flags the user set. Returning an error
+// without calling the handler refuses the invocation. See Middleware.
 func (c *Command) Middleware(mw ...Middleware) *Command {
 	c.middleware = append(c.middleware, mw...)
 	return c
@@ -480,17 +448,15 @@ func (c *Command) FlagGroups(groups ...*FlagGroup) *Command {
 	return c
 }
 
-// GroupSets mounts every flag group registered in each of the given sets
-// on this command, in the order given, after the command's own groups.
-// Mount CommandLine to pick up everything the program's libraries
-// registered:
+// GroupSets mounts every flag group registered in each of the given sets on
+// this command, after the command's own groups. Mount CommandLine to pick
+// up everything the program's libraries registered:
 //
 //	var App = xflags.NewCommand("myapp", "").GroupSets(xflags.CommandLine)
 //
-// A set is read when the tree is parsed or compiled, not when GroupSets
-// is called, so a group registered afterwards is still seen. Mounted
-// flags validate, parse and print exactly like the command's own, each
-// group under its own heading in help messages.
+// A group registered after this call is still picked up. Mounted flags
+// behave exactly like the command's own, each group under its own heading
+// in help messages.
 func (c *Command) GroupSets(sets ...*GroupSet) *Command {
 	c.groupSets = append(c.groupSets, sets...)
 	return c
@@ -519,18 +485,16 @@ func (c *Command) UsageFunc(fn ir.UsageFunc) *Command {
 }
 
 // EnableCompletion opts this command into shell completion. Call it on the
-// command Run or RunWithArgs will be called on -- typically the root --
-// since that is where the environment variable it enables is named from.
+// command Run is given, typically the root, since the environment variable
+// it enables is named from that command.
 //
-// Without EnableCompletion, Run's behavior is unchanged. With it, Run
-// checks one environment variable before doing anything else: the
-// command's own name, uppercased, with every rune that is not a letter or
-// digit replaced by "_", followed by "_COMPLETE" -- "myapp" becomes
-// MYAPP_COMPLETE, "my-app" becomes MY_APP_COMPLETE. A recognized value
-// answers a shell's request directly: printing a completion script, or a
-// completion reply, without invoking any handler or examining args. Any
-// other value, including the variable being unset, leaves Run's behavior
-// exactly as if EnableCompletion had not been called.
+// The variable is the command's name, uppercased, with every rune that is
+// not a letter or digit replaced by "_", and "_COMPLETE" appended: "myapp"
+// answers to MYAPP_COMPLETE. A user enables completion in their shell with
+//
+//	source <(MYAPP_COMPLETE=bash_source myapp 2>/dev/null)
+//
+// Run is otherwise unchanged, including when the variable is unset.
 func (c *Command) EnableCompletion() *Command {
 	c.completionEnabled = true
 	return c
@@ -540,10 +504,8 @@ func (c *Command) EnableCompletion() *Command {
 // processing, and that everything after it reaches the handler unparsed as
 // Invocation.Forwarded rather than binding to positional flags.
 //
-// This is for a command that hands arguments on to something else -- a
-// subprocess, or another parser -- which is why they are kept apart from
-// the operands it consumes itself. A command that has not opted in gives
-// "--" no meaning. See docs/adr/posix-argument-conventions.md.
+// This is for a command that hands arguments on to something else, such as
+// a subprocess. Without it, "--" has no special meaning.
 func (c *Command) ForwardArgs() *Command {
 	c.forwardArgs = true
 	return c

@@ -5,11 +5,9 @@ package xflags
 // mounts every group in the set with Command.GroupSets, so the library's
 // flags bind to variables it owns without a global flag namespace.
 //
-// Registration is eager and append-only, while the set is read only when a
-// command tree that mounts it is parsed or described. Deferring the read
-// is what makes registration order safe: writes during package
-// initialization land before any parse, in any order, so a var declaration
-// never snapshots the set before a same-package init function has run.
+// A set is read when a command that mounts it runs, not when the group is
+// registered, so registration order never matters and a group registered
+// during package initialization is always seen.
 type GroupSet struct {
 	groups []*FlagGroup
 }
@@ -19,9 +17,8 @@ type GroupSet struct {
 //
 //	var logFlags = xflags.Register(settings.FlagGroup())
 //
-// FlagGroup never validates. A duplicate flag name surfaces as the usual
-// configuration error once a command mounting the set is parsed or
-// described, where the whole tree is in view.
+// Nothing is validated here. A duplicate flag name is reported as a
+// configuration error when a command that mounts the set runs.
 func (s *GroupSet) FlagGroup(g *FlagGroup) *FlagGroup {
 	s.groups = append(s.groups, g)
 	return g

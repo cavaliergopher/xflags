@@ -12,60 +12,35 @@ import (
 	"github.com/cavaliergopher/xflags/ir"
 )
 
-// Run parses the arguments provided by os.Args and executes the handler for
-// the command or subcommand specified by the arguments. It returns the exit
-// code the program should terminate with; see RunWithArgs for the contract.
+// Run runs the command or subcommand named by the command line in os.Args
+// and returns the exit code the program should terminate with.
 //
 //	func main() {
 //	    ctx, stop := xflags.NotifyContext(context.Background())
 //	    defer stop()
 //	    os.Exit(xflags.Run(ctx, cmd))
 //	}
+//
+// See RunWithArgs for the exit codes and what gets printed.
 func Run(ctx context.Context, cmd *Command) int {
 	return RunWithArgs(ctx, cmd, os.Args[1:]...)
 }
 
-// RunWithArgs parses the given set of command line arguments and calls the
-// handler for the command or subcommand specified by the arguments. It
-// returns the exit code the program should terminate with, which follows a
-// three-value contract:
+// RunWithArgs runs the command or subcommand named by args and returns the
+// exit code the program should terminate with:
 //
 //	0  the handler returned nil, or -h or --help was given
 //	1  the handler returned an error
-//	2  the command line or the command tree was wrong, or there is no handler
+//	2  the command line or the command tree was wrong
 //
-// A handler may name its own exit code by returning an error that implements
-// ExitCoder; see Exit and Exitf.
+// A handler names its own exit code by returning an error that implements
+// ExitCoder. See Exit and Exitf.
 //
-// If -h or --help are specified, usage information is printed to the
-// command's stdout. Errors are reported on the stderr of the command the
-// error names, or of cmd when the error names none, and an argument error
-// -- a wrong command line, including a command invoked with no handler --
-// is followed by that command's usage. The handler is given the same
-// streams on its Invocation. See Command.Stdin, Command.Stdout and
-// Command.Stderr.
+// Help is printed to the command's stdout. An error is printed to its
+// stderr, followed by the command's usage when the command line was at
+// fault. See Command.Stdout and Command.Stderr.
 //
-// A malformed command tree is the exception: it is reported on os.Stderr
-// whatever the tree configured, because the configuration is part of what
-// failed to validate. Command.Compile reports the same faults as an
-// ordinary error value, which is where a program is best served catching
-// them.
-//
-// RunWithArgs is Dispatch plus this reporting; a program that wants to
-// report errors its own way calls Dispatch instead and keeps the raw
-// error.
-//
-// If EnableCompletion was called on cmd, RunWithArgs first checks the shell
-// completion environment variable it names and, when it carries a value
-// RunWithArgs recognizes, answers it directly instead of parsing args at
-// all; see Command.EnableCompletion.
-//
-// ctx is passed to the handler unchanged. See NotifyContext for a context
-// that is canceled on SIGINT or SIGTERM.
-//
-//	func main() {
-//	    os.Exit(xflags.RunWithArgs(context.Background(), cmd, "--foo", "--bar"))
-//	}
+// ctx reaches the handler unchanged. See NotifyContext.
 func RunWithArgs(ctx context.Context, cmd *Command, args ...string) int {
 	// The one place an ordinary invocation compiles the tree. Everything
 	// below takes the compiled node, so lowering happens once however
@@ -82,26 +57,14 @@ func RunWithArgs(ctx context.Context, cmd *Command, args ...string) int {
 	return runCompiled(ctx, node, args...)
 }
 
-// Dispatch compiles the whole command tree cmd belongs to (see
-// Command.Compile), parses the given set of command line arguments against
-// it, and calls the handler for the command or subcommand specified by the
-// arguments. The handler's error, or the error that stopped the command
-// line from being parsed, is returned raw: Dispatch prints no error text,
-// so a program that wants to report errors its own way calls Dispatch
-// directly. RunWithArgs is Dispatch plus the reporting and the mapping to
-// an exit code.
+// Dispatch runs the command or subcommand named by args and returns the
+// handler's error, or the error that stopped the command line from being
+// read. It prints nothing and maps nothing to an exit code.
 //
-// If -h or --help are specified, no handler runs: usage information is
-// printed to the command's stdout and Dispatch returns nil, or the error
-// that kept the help message from being written. Help output is not error
-// reporting, and a caller who wants it formatted differently has
-// Command.UsageFunc.
-//
-// A command invoked with no handler returns an *ir.ArgumentError, as for
-// any other wrong command line, and no middleware runs: there is no
-// handler for it to wrap. Otherwise the handler runs inside every
-// middleware declared on the command and its ancestors, outermost first,
-// compiling having wrapped it while lowering. See Command.Middleware.
+// Reach for it in a program that reports errors its own way, or embeds
+// xflags in a larger command loop: RunWithArgs is Dispatch plus the
+// reporting and the exit code. Asking for help is not an error, and still
+// prints the usage.
 func Dispatch(ctx context.Context, cmd *Command, args ...string) error {
 	node, err := cmd.Compile()
 	if err != nil {
@@ -110,20 +73,16 @@ func Dispatch(ctx context.Context, cmd *Command, args ...string) error {
 	return dispatch(ctx, node, args)
 }
 
-// Parse compiles the whole command tree cmd belongs to (see
-// Command.Compile) and parses the given set of command line arguments
-// against it, storing the value of each argument in each command flag's
-// target. The rules for each flag are checked and any errors are returned.
+// Parse reads args into the flags cmd and its subcommands declare and
+// returns an Invocation naming the command the arguments reached. No
+// handler runs.
 //
-// Parse resets every flag to its default before reading any arguments, so
-// parsing the same tree twice yields the same result.
+// Reach for it in a test, or in a program that wants the parsed result
+// without dispatching. Every flag is reset to its default first, so
+// parsing the same tree twice gives the same result.
 //
-// The returned Invocation names cmd, or one of its subcommands if the
-// arguments specified one.
-//
-// If -h or --help are specified, parsing stops there and the returned
-// Invocation has HelpRequested set. That is not an error: it is for the
-// caller to report the command's usage. See RunWithArgs.
+// If -h or --help was given, the returned Invocation has HelpRequested set
+// and nothing after it was checked.
 func Parse(cmd *Command, args ...string) (*Invocation, error) {
 	node, err := cmd.Compile()
 	if err != nil {
@@ -132,15 +91,13 @@ func Parse(cmd *Command, args ...string) (*Invocation, error) {
 	return argv.Parse(node, args)
 }
 
-// Complete resolves shell completion candidates for a command line that is
-// still being typed. args is the command line so far, excluding the
-// program name and the word currently under the cursor; word is that
-// fragment, possibly empty.
+// Complete returns the shell completion candidates for a command line that
+// is still being typed. args is the line so far, without the program name
+// or the word under the cursor; word is that word, possibly empty.
 //
-// Complete compiles cmd (see Command.Compile) and delegates to the compiled
-// tree. On a configuration error it returns no candidates and
-// ir.CompNoFileComp, the same best-effort contract as a broken command
-// line: a misconfigured tree cannot say what would complete it.
+// Reach for it to test completion without a shell in the loop: it is the
+// engine behind the reply Run sends one. A command tree that does not
+// compile completes nothing.
 func Complete(cmd *Command, args []string, word string) ([]string, ir.CompDirective) {
 	node, err := cmd.Compile()
 	if err != nil {
@@ -271,14 +228,8 @@ func fallbackToStderr(err error) int {
 // is interrupted, on SIGINT or SIGTERM, and a stop function that releases
 // the signal handler.
 //
-// Unlike signal.NotifyContext, default signal handling is restored once the
-// context is canceled, so a second interrupt terminates the program even if
-// it is wedged. This is the behavior a user expects of a command line
-// program: the first interrupt asks it to stop, and the second insists.
-//
-// Programs that call os.Exit skip deferred calls, so stop may never run.
-// That is harmless -- the process is exiting -- and deferring it keeps the
-// context released if the program later grows another path out of main.
+// Unlike signal.NotifyContext, a second interrupt terminates the program
+// even if it is wedged: the first asks it to stop, and the second insists.
 func NotifyContext(parent context.Context) (ctx context.Context, stop func()) {
 	ctx, cancel := context.WithCancel(parent)
 	ch := make(chan os.Signal, 1)
