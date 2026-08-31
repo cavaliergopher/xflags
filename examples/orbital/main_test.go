@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -181,6 +182,49 @@ func TestOrbitalNegatedBool(t *testing.T) {
 	}
 }
 
+// TestOrbitalRedirectsOutput exercises the Output middleware, which
+// replaces Invocation.Stdout with a file. It is declared on the root, so
+// --out works on any command in the tree without that command knowing:
+// each case below writes to inv.Stdout as it always does, and nothing on
+// the process stdout is left behind.
+func TestOrbitalRedirectsOutput(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "Logs",
+			args: []string{"logs", "api"},
+			want: "api: showing log lines from the last 10m0s\n",
+		},
+		{
+			name: "DeployStatus",
+			args: []string{"deploy", "status", "api"},
+			want: "api: healthy (region=us-west-2)\n",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "out.txt")
+			args := append([]string{"--out", path}, tt.args...)
+			stdout, stderr, code := run(t, []string{actor}, args...)
+			if got, want := code, 0; got != want {
+				t.Errorf("exit code = %d, want %d (stderr: %s)", got, want, stderr)
+			}
+			if stdout != "" {
+				t.Errorf("stdout = %q, want nothing left on the process stream", stdout)
+			}
+			b, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("reading redirected output: %v", err)
+			}
+			if got, want := string(b), tt.want; got != want {
+				t.Errorf("%s = %q, want %q", path, got, want)
+			}
+		})
+	}
+}
+
 // TestOrbitalHelp pins the whole help message. It guards the example, and
 // the formatter with it: every section orbital exercises -- imported
 // groups, a registered group, environment variables, the description --
@@ -204,6 +248,7 @@ Deploy and operate services on the fleet
 
 Options:
    --actor  Identity performing this action, recorded for the audit trail
+   --out    Write command output to FILE instead of stdout
 
 Legacy options (deprecated):
    --legacy-metrics-addr  Address the legacy metrics sidecar listens on (superseded by --trace)
@@ -262,7 +307,7 @@ func TestOrbitalCompletion(t *testing.T) {
 			name:  "NegationsAreNotOfferedUnprompted",
 			words: []string{"orbital", "--"}, cword: "1",
 			want: "plain,--actor\nplain,--help\nplain,--legacy-metrics-addr\n" +
-				"plain,--log-level\nplain,--trace\nnofiles,\n",
+				"plain,--log-level\nplain,--out\nplain,--trace\nnofiles,\n",
 		},
 		{
 			// Once the word reaches for one they arrive. --trace is the

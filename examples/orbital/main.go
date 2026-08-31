@@ -27,9 +27,10 @@ func main() {
 	root := xflags.NewCommand("orbital", "Deploy and operate services on the fleet").
 		EnableCompletion().
 		// Declared once here and inherited by every command in the tree,
-		// so --trace times whichever one runs. The audit check is not:
-		// only the commands that change fleet state declare it.
-		Middleware(middleware.Timing).
+		// so --trace times whichever one runs and --out redirects it. The
+		// audit check is not: only the commands that change fleet state
+		// declare it.
+		Middleware(middleware.Timing, middleware.Output).
 		Description(
 			"orbital is the platform team's command line front end to the\n"+
 				"fleet API. Each subcommand below is owned and versioned by the\n"+
@@ -42,6 +43,7 @@ func main() {
 			xflags.String(&identity.Actor, "actor", "", "Identity performing this action, recorded for the audit trail").
 				Required().
 				Env("ORBITAL_ACTOR"),
+			middleware.OutputFlag(),
 		).
 		Subcommands(
 			config.Command(),

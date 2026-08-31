@@ -1,10 +1,12 @@
 // Package middleware holds the wrappers orbital puts around its handlers:
-// a timing trace that every command in the binary runs inside, and an
-// audit check that only the commands changing fleet state do.
+// a timing trace and an --out redirection that every command in the
+// binary runs inside, and an audit check that only the commands changing
+// fleet state do.
 //
-// Both are xflags.Middleware, so neither is registered by the handler it
-// wraps. main.go declares Timing on the root, which inherits it down the
-// whole tree, and each mutating command declares Audit on itself; a
+// All three are xflags.Middleware, so none is registered by the handler
+// it wraps. main.go declares Timing and Output on the root, which inherit
+// down the whole tree, and each mutating command declares Audit on
+// itself; a
 // read-only command such as "deploy status" declares nothing and so is
 // not audited. That is the point of the mechanism here: the platform team
 // owns what wraps a handler without touching the team that wrote it.
@@ -13,6 +15,7 @@ package middleware
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/cavaliergopher/xflags"
@@ -50,6 +53,55 @@ func Timing(next xflags.HandlerFunc) xflags.HandlerFunc {
 		if telemetry.Flags.Trace {
 			fmt.Fprintf(inv.Stderr, "trace: %s took %s\n",
 				inv.Cmd.FullName, time.Since(start))
+		}
+		return err
+	}
+}
+
+// outFile is set by the --out flag below. It is read at call time for the
+// same reason identity.Actor is: the flag is not applied until the
+// command line parses, long after the tree was built.
+var outFile string
+
+// OutputFlag returns the --out flag Output reads. The flag ships with the
+// middleware because neither is any use without the other; main.go
+// declares both on the root, so every command in the tree can be
+// redirected.
+func OutputFlag() *xflags.Flag {
+	return xflags.String(&outFile, "out", "",
+		"Write command output to FILE instead of stdout").
+		ValueName("file")
+}
+
+// Output sends whatever the handler writes to inv.Stdout to the file
+// named by --out, and closes it once the handler returns. Replacing a
+// stream on inv is how a middleware changes what the handler it wraps
+// works with: the handler writes inv.Stdout as it always does and never
+// learns it is writing a file.
+//
+// Help is not redirected, because asking for help does not run a handler
+// and so runs no middleware either.
+func Output(next xflags.HandlerFunc) xflags.HandlerFunc {
+	return func(ctx context.Context, inv *xflags.Invocation) error {
+		if outFile == "" {
+			return next(ctx, inv)
+		}
+		f, err := os.Create(outFile)
+		if err != nil {
+			return err
+		}
+		// The invocation outlives this wrapper, so the stream goes back
+		// as it was rather than leaving a closed file behind for whatever
+		// declared Output to write to.
+		stdout := inv.Stdout
+		inv.Stdout = f
+		defer func() { inv.Stdout = stdout }()
+
+		err = next(ctx, inv)
+		if cerr := f.Close(); err == nil {
+			// A handler that succeeded but whose output did not reach the
+			// disk has still failed the caller.
+			err = cerr
 		}
 		return err
 	}
