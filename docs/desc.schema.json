@@ -89,7 +89,7 @@
           "description": "How the value the flag takes is written where the flag is shown to a reader, such as the \"SERVICE\" of \"Usage: deploy SERVICE\". A positional argument, which names no option, is shown by this alone."
         },
         "kind": {
-          "description": "The kind of value the flag takes. Absent for an interrupt, which binds no value and so has none to classify.",
+          "description": "The kind of value the flag takes. Absent for an interrupt, which binds no value and so has none to classify. A duration is written in Go's duration syntax: a decimal number with a unit suffix, such as 30s, 250ms or 1h30m.",
           "enum": ["bool", "string", "int", "uint", "float", "duration", "opaque"]
         },
         "usage": {
