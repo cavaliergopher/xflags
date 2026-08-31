@@ -16,6 +16,11 @@ const (
 	// negatedFragment is the shortest word that is visibly reaching for a
 	// negation, which is when completion starts offering them.
 	negatedFragment = "--no"
+
+	// effectNegate is the word this dialect writes into a Claim's Effect
+	// for an option it generated as a boolean's opposite. It is this
+	// package's own vocabulary: ir stores it and compares it to nothing.
+	effectNegate = "negate"
 )
 
 // OptionsFor returns both halves of how a flag with the given declared
@@ -38,23 +43,23 @@ const (
 // be something a program remembers to switch on. Compile calls this once,
 // while lowering, so the result is what everything downstream reads;
 // nothing rebuilds it.
-func OptionsFor(names []string, positional, takesValue, interrupts bool) (named []string, claimed map[string]string) {
+func OptionsFor(names []string, positional, takesValue, interrupts bool) (named []string, claimed map[string]ir.Claim) {
 	if positional || len(names) == 0 {
 		return nil, nil
 	}
 	named = make([]string, len(names))
-	claimed = make(map[string]string, 2*len(names))
+	claimed = make(map[string]ir.Claim, 2*len(names))
 	for i, name := range names {
 		named[i] = optionOf(name)
 		if named[i] == "" {
 			continue // an empty slot, which xflags.Flag.Aliases documents
 		}
-		claimed[named[i]] = named[i]
+		claimed[named[i]] = ir.Claim{Source: named[i]}
 	}
 	if negatable(positional, takesValue, interrupts) {
 		for _, option := range named {
 			if negation := negationOf(option); negation != "" {
-				claimed[negation] = option
+				claimed[negation] = ir.Claim{Source: option, Effect: effectNegate}
 			}
 		}
 	}
@@ -88,7 +93,7 @@ func negatable(positional, takesValue, interrupts bool) bool {
 // generated side, or "" when both declared it outright.
 func generatedFrom(option string, a, b *ir.Flag) string {
 	for _, f := range []*ir.Flag{a, b} {
-		if source := f.ClaimedOptions[option]; source != "" && source != option {
+		if source := f.ClaimedOptions[option].Source; source != "" && source != option {
 			return source
 		}
 	}
@@ -140,10 +145,10 @@ func (o resolvedOption) valueFor(s string) string {
 // against that source -- never by taking the prefix back off, which would
 // be a second rule free to disagree with the first.
 func resolvedOptionsInto(table map[string]resolvedOption, f *ir.Flag) {
-	for option, source := range f.ClaimedOptions {
+	for option, claim := range f.ClaimedOptions {
 		table[option] = resolvedOption{
 			flag:    f,
-			negated: negationOf(source) == option,
+			negated: negationOf(claim.Source) == option,
 		}
 	}
 }

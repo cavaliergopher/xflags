@@ -1,15 +1,32 @@
 package ir
 
+// Claim is what naming a flag by one option on the command line means:
+// Source is the declared option the parser resolves it to -- itself, if
+// the option was declared outright, or the option a convention generated
+// it from -- and Effect is what the convention says naming it this way
+// does to the value, such as "negate" for the boolean opposite
+// getopt_long-style conventions write. Absent, the effect is the
+// ordinary one: naming the flag this way sets it.
+//
+// Effect is a word the convention that wrote it defines and a reader
+// consumes; nothing in this package or the root package may compare it
+// against a value either knows. The parser derives what it needs to know
+// about a claim, such as negation, by running its own generating rule
+// forward against Source instead; see internal/argv's
+// resolvedOptionsInto.
+type Claim struct {
+	Source string
+	Effect string
+}
+
 // Flag is the compiled, implementation form of a command line flag or
 // positional argument, produced by lowering a configuration tree with
 // (*xflags.Command).Compile.
 //
-// Every field marshals except Value, ValidateFunc, CompleteFunc and
-// Handler, tagged json:"-": they are behavior a formatter, a completion
-// engine or any other marshaler has no use for, so they are excluded by
-// tag rather than by staying unexported. See the package doc for the
-// two-type model this is one half of, and TestMarshalOmitsBehavior for
-// what enforces the tags.
+// Every field is exported, including Value, ValidateFunc, CompleteFunc
+// and Handler, which carry behavior: ir is never encoded, so nothing has
+// to be hidden from an encoder to keep it out of a document. See the
+// package doc for the two-type model this is one half of.
 type Flag struct {
 	// NamedOptions is the option each name the program declared is shown
 	// as: "--verbose" and "-v" rather than "verbose" and "v". It runs
@@ -29,20 +46,12 @@ type Flag struct {
 	NamedOptions []string
 
 	// ClaimedOptions is every option the flag answers to on the command
-	// line, each mapped to the option it came from: a declared one maps
-	// to itself, and one the convention generated maps to the declared
-	// option it was generated from. Where NamedOptions is what a reader
-	// is shown, this is what a reader may type, and the two differ once
-	// an option is generated: a boolean answers to --no-verbose, mapped
-	// to --verbose, without that belonging beside the flag's synonyms in
-	// help.
-	//
-	// What a generated option does to the value it binds is the
-	// convention's own business and is not recorded here, so a convention
-	// with no generated options leaves nothing meaningless behind. Where
-	// an option came from is not: every convention either generates
-	// options or does not, which is the same thing this field's existence
-	// already says.
+	// line, each mapped to a Claim naming the option it came from and
+	// what naming the flag that way means. Where NamedOptions is what a
+	// reader is shown, this is what a reader may type, and the two differ
+	// once an option is generated: a boolean answers to --no-verbose,
+	// claimed with Source "--verbose", without that belonging beside the
+	// flag's synonyms in help.
 	//
 	// It is the enumerable half of what matches, not the whole of it. A
 	// convention may also match by rule -- every casing of an option, or
@@ -53,7 +62,16 @@ type Flag struct {
 	// the convention rather than in the program that declared the flag.
 	//
 	// A positional argument claims none, answering to no option at all.
-	ClaimedOptions map[string]string
+	ClaimedOptions map[string]Claim
+
+	// Name is the flag's declared canonical name, undecorated by any
+	// dialect: "force" rather than "--force". A positional argument's
+	// Name is the name it was declared with, same as any other flag.
+	//
+	// It identifies the flag independent of how any one option is
+	// spelled or ordered, which NamedOptions and ClaimedOptions are not:
+	// both are keyed, or ordered, by a dialect's decoration.
+	Name string
 
 	// ValueName is how the value the flag takes is written where the flag
 	// is shown to a reader: the "SERVICE" of "Usage: deploy SERVICE" and
@@ -69,6 +87,10 @@ type Flag struct {
 	// lets one convention print SERVICE where another prints <service>. A
 	// flag that takes no value has none.
 	ValueName string
+
+	// Kind classifies the value the flag takes; see Kind. It is empty for
+	// an interrupt, which binds no value and so has none to classify.
+	Kind Kind
 
 	Usage       string
 	Default     string
@@ -96,15 +118,15 @@ type Flag struct {
 	// Value is the flag's bound value: Set writes to it once for each
 	// argument the flag is given on the command line, after ValidateFunc,
 	// if any, approves the argument.
-	Value Value `json:"-"`
+	Value Value
 
 	// ValidateFunc, if set, validates an argument before Set writes it to
 	// Value.
-	ValidateFunc ValidateFunc `json:"-"`
+	ValidateFunc ValidateFunc
 
 	// CompleteFunc, if set, completes the flag's value for a shell. See
 	// xflags.Complete.
-	CompleteFunc CompleteFunc `json:"-"`
+	CompleteFunc CompleteFunc
 
 	// Handler, if set, makes the flag an interrupt: naming it on the
 	// command line ends the parse there and runs this in place of the
@@ -120,7 +142,7 @@ type Flag struct {
 	// An interrupt binds no value: it takes none on the command line, so
 	// it has no Value, no default to restore, and no opposite for the
 	// command line to spell.
-	Handler HandlerFunc `json:"-"`
+	Handler HandlerFunc
 }
 
 // String returns how the flag is shown wherever one string stands for it,

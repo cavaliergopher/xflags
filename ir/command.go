@@ -69,13 +69,11 @@ type HandlerFunc func(ctx context.Context, inv *Invocation) error
 // invoke from the command line, produced by lowering a configuration tree
 // with (*xflags.Command).Compile.
 //
-// Every field marshals except those tagged json:"-". Ancestry and Root
-// are derivable from the tree's shape and would make it self-referential;
-// Handler, UsageFunc and the three streams are behavior a formatter, a
-// completion engine or any other marshaler has no use for, so they are
-// excluded by tag rather than by staying unexported. See the package doc
-// for the two-type model this is one half of, and
-// TestMarshalOmitsBehavior for what enforces the tags.
+// Every field is exported, including Ancestry and Root, which would make
+// an encoded tree self-referential, and Handler, UsageFunc and the three
+// streams, which carry behavior: ir is never encoded, so nothing has to
+// be hidden from an encoder to keep any of it out of a document. See the
+// package doc for the two-type model this is one half of.
 type Command struct {
 	Name        string
 	Summary     string
@@ -100,17 +98,17 @@ type Command struct {
 	//
 	// Compile builds it top down while lowering, so nothing reading a
 	// compiled tree has to walk back up to reconstruct it. It is
-	// derivable from the tree's shape and is not marshaled; the command
-	// that mounted this one is Ancestry's second to last entry.
-	Ancestry []*Command `json:"-"`
+	// derivable from the tree's shape; the command that mounted this one
+	// is Ancestry's second to last entry.
+	Ancestry []*Command
 
 	// Root is the command at the top of the tree this command belongs to,
 	// and is the command itself at the root. Whole-tree work -- validation,
 	// and restoring defaults before a parse -- starts here, so that calling
 	// Parse on a subcommand still governs the tree it belongs to, and is
 	// what requires it to be set. Like Ancestry, it is derivable from the
-	// tree's shape and is not marshaled.
-	Root *Command `json:"-"`
+	// tree's shape.
+	Root *Command
 
 	// Handler runs the command once its command line parses
 	// successfully, and is never nil: it is the whole of what a command
@@ -119,7 +117,7 @@ type Command struct {
 	// it, and a command that declared no handler of its own gets one
 	// reporting a usage error, since such a command exists only to group
 	// its subcommands. Calling it is how a command is run.
-	Handler HandlerFunc `json:"-"`
+	Handler HandlerFunc
 
 	// UsageFunc renders this command's help message in place of the
 	// default, and is inherited from the nearest ancestor that set one.
@@ -127,7 +125,7 @@ type Command struct {
 	// renderer it will actually be printed with rather than one the Usage
 	// method has to go looking for; it is nil only when no command on the
 	// path set one, and Usage falls back to the default renderer.
-	UsageFunc UsageFunc `json:"-"`
+	UsageFunc UsageFunc
 
 	// Stdin, Stdout and Stderr are the streams resolved for this command
 	// when the tree was compiled, and are never nil: each defaults to the
@@ -135,9 +133,9 @@ type Command struct {
 	// fresh tree on every call, nothing observable changes, though a
 	// caller holding a compiled tree across a reassignment of os.Stdout
 	// keeps the stream it compiled with.
-	Stdin  io.Reader `json:"-"`
-	Stdout io.Writer `json:"-"`
-	Stderr io.Writer `json:"-"`
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // String returns the command's own name, unqualified by its ancestry. See

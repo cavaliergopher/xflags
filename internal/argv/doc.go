@@ -46,13 +46,14 @@
 // two flags collide when their forms are equal, which only this package
 // can say.
 //
-// What a generated option means for the value it binds stays here too,
-// and is not recorded on the compiled flag. ir maps each option a flag
-// answers to back to the option it came from, which every convention can
-// answer; this package recognizes which of them it wrote by running its
-// own generator forward against that source, so a convention with no
-// negation -- or with some other modifier -- leaves no field named for
-// this one lying dead.
+// What a generated option means for the value it binds is written onto
+// the compiled flag, as a Claim's Effect, for a document to read -- but
+// this package never reads it back. ir maps each option a flag answers
+// to onto a Claim naming the option it came from, which every convention
+// can answer; this package recognizes which of them it wrote by running
+// its own generator forward against that source, so a convention with no
+// negation -- or with some other modifier -- leaves no comparison
+// against a word this package does not own.
 //
 // The import graph is what keeps that honest. argv imports ir and ir
 // cannot import argv, so ir has no way to reach a dialect's opinion about

@@ -400,6 +400,84 @@ func TestCompileValueName(t *testing.T) {
 	}
 }
 
+// TestCompileName asserts that a flag's Name is its declared canonical
+// name: undecorated by the dialect, unaffected by any alias, and, for a
+// positional argument, the name it was declared with like any other flag.
+func TestCompileName(t *testing.T) {
+	var s, arg string
+	cmd := NewCommand("test", "").Flags(
+		String(&s, "name", "", "").Aliases("n", "alias"),
+		String(&arg, "ARG", "", "").Positional(),
+	)
+	node, err := cmd.Compile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := node.FlagGroups[0].Flags[0].Name, "name"; got != want {
+		t.Errorf("Flags[0].Name = %q, want %q", got, want)
+	}
+	if got, want := node.FlagGroups[0].Flags[1].Name, "ARG"; got != want {
+		t.Errorf("Flags[1].Name = %q, want %q", got, want)
+	}
+}
+
+// kindStringValue implements ir.KindValue, so a fixture can assert that
+// Var recovers a custom value's declared Kind instead of defaulting to
+// ir.KindOpaque.
+type kindStringValue string
+
+func (v *kindStringValue) Set(s string) error { *v = kindStringValue(s); return nil }
+func (v *kindStringValue) Kind() ir.Kind      { return ir.KindString }
+
+// TestCompileKind asserts what ir.Flag.Kind is set to by each typed
+// constructor, that Var yields ir.KindOpaque unless its value implements
+// ir.KindValue, and that an interrupt, binding no value, has none.
+func TestCompileKind(t *testing.T) {
+	var (
+		bo  bool
+		bf  uint64
+		du  time.Duration
+		fl  float64
+		in  int
+		i64 int64
+		s   string
+		ss  []string
+		u   uint
+		u64 uint64
+		ks  kindStringValue
+		ip  net.IP
+	)
+	cmd := NewCommand("test", "").Flags(
+		Bool(&bo, "bool", false, ""),
+		BitField(&bf, 0x1, "bitfield", false, ""),
+		Duration(&du, "duration", 0, ""),
+		Float64(&fl, "float", 0, ""),
+		Func("func", "", func(string) error { return nil }),
+		Int(&in, "int", 0, ""),
+		Int64(&i64, "int64", 0, ""),
+		String(&s, "string", "", ""),
+		Strings(&ss, "strings", nil, ""),
+		Uint(&u, "uint", 0, ""),
+		Uint64(&u64, "uint64", 0, ""),
+		Var(&ks, "kind-var", ""),
+		IPVar(&ip, "opaque-var", nil, ""),
+		Interrupt("stop", "", func(ctx context.Context, inv *Invocation) error { return nil }),
+	)
+	node, err := cmd.Compile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for i, want := range []ir.Kind{
+		ir.KindBool, ir.KindBool, ir.KindDuration, ir.KindFloat, ir.KindOpaque,
+		ir.KindInt, ir.KindInt, ir.KindString, ir.KindString, ir.KindUint,
+		ir.KindUint, ir.KindString, ir.KindOpaque, "",
+	} {
+		if got := node.FlagGroups[0].Flags[i].Kind; got != want {
+			t.Errorf("Flags[%d].Kind = %q, want %q", i, got, want)
+		}
+	}
+}
+
 // TestPositionalIsShownByItsValueName asserts that a positional argument,
 // having no spelling of its own, is shown by its value name wherever a
 // flag is named -- and that the name is displayed as a synopsis shows

@@ -21,13 +21,11 @@
 // NamedOptions and ValueName, along with everything it answers to in
 // ClaimedOptions, and everything here prints what it was given.
 //
-// A handful of fields still carry behavior a marshaler has no use for --
-// Command's Handler, UsageFunc and three streams, Flag's Value,
-// ValidateFunc and CompleteFunc -- and each is tagged json:"-" rather
-// than kept unexported,
-// so encoding/json or any other reflection-based marshaler sees exactly
-// the description of the tree. TestMarshalOmitsBehavior guards the tags:
-// a behavior field added later without one fails that test, not silently.
+// A handful of fields still carry behavior -- Command's Handler,
+// UsageFunc and three streams, Flag's Value, ValidateFunc and
+// CompleteFunc -- and none of them is hidden to keep it out of anything:
+// ir is never encoded, so nothing reads one of these fields by walking
+// the type, only by asking for it by name.
 //
 // Most programs never import this package. Building and running a command
 // tree -- xflags.NewCommand, xflags.Run, xflags.Dispatch --

@@ -58,6 +58,11 @@ type Flag struct {
 	completeFunc ir.CompleteFunc
 	value        ir.Value
 
+	// kind classifies the value being bound, set by whichever typed
+	// constructor built this flag, or recovered from a flag.Getter for
+	// one imported with FromFlagSet. See ir.Kind.
+	kind ir.Kind
+
 	// handlerFunc is what an interrupt runs, and is nil for every flag
 	// that binds a value instead. See Interrupt.
 	handlerFunc HandlerFunc
@@ -69,6 +74,10 @@ type Flag struct {
 // name becomes the flag's canonical name: one character is spelled with a
 // single dash, so Var(v, "n", usage) declares "-n", and anything longer
 // takes two. Add further names with Flag.Aliases.
+//
+// The flag's Kind is ir.KindOpaque unless value implements
+// ir.KindValue, which lets a custom value describe what it accepts as
+// precisely as a typed constructor such as String or Int already does.
 func Var(value ir.Value, name, usage string) *Flag {
 	return &Flag{
 		names:    []string{name},
@@ -76,6 +85,7 @@ func Var(value ir.Value, name, usage string) *Flag {
 		minCount: defaultMinNArgs,
 		maxCount: defaultMaxNArgs,
 		value:    value,
+		kind:     kindOf(value),
 	}
 }
 
@@ -98,6 +108,7 @@ func BitField(p *uint64, mask uint64, name string, value bool, usage string) *Fl
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
 	c.hasDefault = true
+	c.kind = ir.KindBool
 	return c
 }
 
@@ -109,6 +120,7 @@ func Bool(p *bool, name string, value bool, usage string) *Flag {
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
 	c.hasDefault = true
+	c.kind = ir.KindBool
 	return c
 }
 
@@ -121,6 +133,7 @@ func Duration(p *time.Duration, name string, value time.Duration, usage string) 
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
 	c.hasDefault = true
+	c.kind = ir.KindDuration
 	return c
 }
 
@@ -132,6 +145,7 @@ func Float64(p *float64, name string, value float64, usage string) *Flag {
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
 	c.hasDefault = true
+	c.kind = ir.KindFloat
 	return c
 }
 
@@ -139,9 +153,12 @@ func Float64(p *float64, name string, value float64, usage string) *Flag {
 // the command line. An error from fn is reported as a bad flag value.
 //
 // The flag may be given any number of times; constrain it with
-// Flag.NArgs.
+// Flag.NArgs. Its Kind is ir.KindOpaque: fn may parse its argument as
+// anything, so the flag is not described as text the way String is.
 func Func(name, usage string, fn func(s string) error) *Flag {
-	return Var(funcValue(fn), name, usage).NArgs(0, 0)
+	c := Var(funcValue(fn), name, usage).NArgs(0, 0)
+	c.kind = ir.KindOpaque
+	return c
 }
 
 // Int returns a Flag that can be used to define an int flag with
@@ -152,6 +169,7 @@ func Int(p *int, name string, value int, usage string) *Flag {
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
 	c.hasDefault = true
+	c.kind = ir.KindInt
 	return c
 }
 
@@ -163,6 +181,7 @@ func Int64(p *int64, name string, value int64, usage string) *Flag {
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
 	c.hasDefault = true
+	c.kind = ir.KindInt
 	return c
 }
 
@@ -174,6 +193,7 @@ func String(p *string, name, value, usage string) *Flag {
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
 	c.hasDefault = true
+	c.kind = ir.KindString
 	return c
 }
 
@@ -185,6 +205,7 @@ func Strings(p *[]string, name string, value []string, usage string) *Flag {
 	c := Var(v, name, usage).NArgs(0, 0)
 	c.defValue = stringifyDefault(v)
 	c.hasDefault = true
+	c.kind = ir.KindString
 	return c
 }
 
@@ -196,6 +217,7 @@ func Uint(p *uint, name string, value uint, usage string) *Flag {
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
 	c.hasDefault = true
+	c.kind = ir.KindUint
 	return c
 }
 
@@ -207,6 +229,7 @@ func Uint64(p *uint64, name string, value uint64, usage string) *Flag {
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
 	c.hasDefault = true
+	c.kind = ir.KindUint
 	return c
 }
 
@@ -443,7 +466,9 @@ func (c *Flag) lower(errs *[]error) *ir.Flag {
 	flag := &ir.Flag{
 		NamedOptions:   namedOptions,
 		ClaimedOptions: claimedOptions,
+		Name:           canonicalName(c.names),
 		ValueName:      valueName,
+		Kind:           c.kind,
 		Usage:          c.usage,
 		Default:        c.defValue,
 		ShowDefault:    c.showDefault,
@@ -532,14 +557,51 @@ func (c *FlagGroup) Flags(flags ...*Flag) *FlagGroup {
 //
 // The flag set is read once, here: a flag declared on fs afterwards is not
 // seen. Parsing and error handling are this package's from then on.
+//
+// A flag whose Value implements flag.Getter is described as precisely as
+// a native one: its Kind is recovered from the concrete type Get
+// returns, and is ir.KindOpaque for a Value that does not implement
+// flag.Getter or whose concrete type matches none of the flag package's
+// own.
 func FromFlagSet(name, title string, fs *flag.FlagSet) *FlagGroup {
 	group := NewFlagGroup(name, title)
 	fs.VisitAll(func(f *flag.Flag) {
 		flg := Var(f.Value, f.Name, f.Usage)
 		flg.defValue = f.DefValue
+		flg.kind = kindFromGetter(f.Value)
 		group.Flags(flg)
 	})
 	return group
+}
+
+// kindFromGetter recovers the Kind of a value imported from a
+// flag.FlagSet by inspecting the concrete type flag.Getter's Get
+// returns, so a value declared with the flag package's own constructors
+// -- flag.Bool, flag.Int and the rest -- is described as precisely as one
+// declared with xflags's. A value that does not implement flag.Getter, or
+// whose concrete type matches none of the flag package's own, compiles
+// to ir.KindOpaque.
+func kindFromGetter(v flag.Value) ir.Kind {
+	g, ok := v.(flag.Getter)
+	if !ok {
+		return ir.KindOpaque
+	}
+	switch g.Get().(type) {
+	case bool:
+		return ir.KindBool
+	case string:
+		return ir.KindString
+	case int, int64:
+		return ir.KindInt
+	case uint, uint64:
+		return ir.KindUint
+	case float64:
+		return ir.KindFloat
+	case time.Duration:
+		return ir.KindDuration
+	default:
+		return ir.KindOpaque
+	}
 }
 
 // lower returns the compiled ir.FlagGroup for c.

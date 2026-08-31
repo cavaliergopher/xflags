@@ -31,6 +31,38 @@ type BoolValue interface {
 	IsBoolFlag() bool
 }
 
+// Kind classifies the value a flag or positional argument takes, coarser
+// than the Go type behind it: a command line accepts a decimal integer
+// whether the variable it is bound to is an int or an int64, and Kind
+// names what a program means by the flag rather than how it is built. It
+// is written as its own string, so a kind added later is a new constant
+// rather than a change to how one already written is read.
+type Kind string
+
+const (
+	KindBool     Kind = "bool"
+	KindString   Kind = "string"
+	KindInt      Kind = "int"
+	KindUint     Kind = "uint"
+	KindFloat    Kind = "float"
+	KindDuration Kind = "duration"
+
+	// KindOpaque is every value with no narrower kind to report: one bound
+	// with Var whose type does not implement KindValue.
+	KindOpaque Kind = "opaque"
+)
+
+// KindValue is an optional interface for a Value that reports what Kind
+// it is, in the manner BoolValue reports IsBoolFlag.
+//
+// A value bound with Var compiles to KindOpaque unless it implements
+// this, which lets a custom Value describe what it accepts as precisely
+// as one of the typed constructors, such as String or Int, already does.
+type KindValue interface {
+	Value
+	Kind() Kind
+}
+
 // Resetter is an optional interface for a Value whose Set method cannot
 // restore its default: one that accumulates each value it is given, or one
 // that shares state with other values. Parse restores every flag to its

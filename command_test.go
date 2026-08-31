@@ -2,7 +2,6 @@ package xflags
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cavaliergopher/xflags/ir"
 )
@@ -174,6 +174,56 @@ func TestFromFlagSet(t *testing.T) {
 	assertString(t, "bar", bar)
 	assertBool(t, true, baz)
 	assertBool(t, true, qux)
+}
+
+// opaqueFlagValue implements flag.Value but not flag.Getter, the way a
+// hand-written stdlib flag often does, so FromFlagSet has no concrete
+// type to recover a narrower Kind from.
+type opaqueFlagValue struct{ s string }
+
+func (v *opaqueFlagValue) String() string     { return v.s }
+func (v *opaqueFlagValue) Set(s string) error { v.s = s; return nil }
+
+// TestFromFlagSetRecoversKind asserts that a flag imported from a
+// flag.FlagSet is described as precisely as a native one: its Kind is
+// recovered from the concrete type its Value's Get returns, and a Value
+// that does not implement flag.Getter at all compiles to ir.KindOpaque.
+func TestFromFlagSetRecoversKind(t *testing.T) {
+	var s string
+	var b bool
+	var i int
+	var i64 int64
+	var u uint
+	var u64 uint64
+	var f float64
+	var d time.Duration
+	flagSet := flag.NewFlagSet("native", flag.ContinueOnError)
+	flagSet.BoolVar(&b, "b", false, "")
+	flagSet.DurationVar(&d, "d", 0, "")
+	flagSet.Float64Var(&f, "f", 0, "")
+	flagSet.IntVar(&i, "i", 0, "")
+	flagSet.Int64Var(&i64, "i64", 0, "")
+	flagSet.Var(&opaqueFlagValue{}, "opaque", "")
+	flagSet.StringVar(&s, "s", "", "")
+	flagSet.UintVar(&u, "u", 0, "")
+	flagSet.Uint64Var(&u64, "u64", 0, "")
+
+	cmd := NewCommand("test", "").FlagGroups(FromFlagSet("native", "Native options", flagSet))
+	node, err := cmd.Compile()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// The implicit "options" group is first, empty here; the mounted
+	// group follows. VisitAll, which FromFlagSet reads, visits in
+	// lexicographical order.
+	for i, want := range []ir.Kind{
+		ir.KindBool, ir.KindDuration, ir.KindFloat, ir.KindInt, ir.KindInt,
+		ir.KindOpaque, ir.KindString, ir.KindUint, ir.KindUint,
+	} {
+		if got := node.FlagGroups[1].Flags[i].Kind; got != want {
+			t.Errorf("Flags[%d].Kind = %q, want %q", i, got, want)
+		}
+	}
 }
 
 func TestCommandLineage(t *testing.T) {
@@ -1952,86 +2002,6 @@ func TestParseFromSubcommandResetsTheTree(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertString(t, "info", level)
-}
-
-// TestMarshalOmitsBehavior guards the json:"-" tags on ir.Command's and
-// ir.Flag's behavior fields. It compiles a tree exercising every one of
-// them -- a handler, a custom UsageFunc, all three stream overrides, a
-// bound Value, a ValidateFunc, a Choices list, a subcommand and a
-// positional -- and marshals it, so a behavior field added later without
-// its tag fails here, in a test, rather than leaking into a program's
-// machine-readable output. A middleware is declared too, to pin that
-// wrapping a handler adds nothing to the description, and a help flag, so
-// that a Flag's own Handler is in the tree as well.
-func TestMarshalOmitsBehavior(t *testing.T) {
-	var name, arg string
-	sub := NewCommand("sub", "Sub summary").
-		HandleFunc(func(ctx context.Context, inv *Invocation) error {
-			return nil
-		}).
-		Flags(
-			String(&name, "name", "", "usage").
-				Validate(func(s string) error { return nil }).
-				Choices("a", "b").
-				Complete(func(inv *Invocation, word string) ([]string, ir.CompDirective) {
-					return nil, ir.CompDefault
-				}),
-			String(&arg, "ARG", "", "positional usage").Positional(),
-		)
-	root := NewCommand("root", "Root summary").
-		HelpFlag().
-		UsageFunc(func(w io.Writer, cmd *ir.Command) error { return nil }).
-		Middleware(func(next HandlerFunc) HandlerFunc { return next }).
-		Stdin(strings.NewReader("")).
-		Stdout(&strings.Builder{}).
-		Stderr(&strings.Builder{}).
-		Subcommands(sub)
-
-	node, err := root.Compile()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	data, err := json.Marshal(node)
-	if err != nil {
-		t.Fatalf("json.Marshal: %v", err)
-	}
-
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-
-	assertNoBehaviorKeys(t, m)
-}
-
-// behaviorKeys names every field ir.Command and ir.Flag tag json:"-".
-var behaviorKeys = []string{
-	"Handler", "UsageFunc", "Stdin", "Stdout", "Stderr",
-	"Value", "ValidateFunc", "CompleteFunc",
-}
-
-// assertNoBehaviorKeys walks a value decoded from JSON -- maps and slices,
-// since a compiled tree nests flags inside groups and subcommands inside
-// subcommands -- and fails t if any behaviorKeys entry appears as a key
-// anywhere in it.
-func assertNoBehaviorKeys(t *testing.T, v any) {
-	t.Helper()
-	switch val := v.(type) {
-	case map[string]any:
-		for _, key := range behaviorKeys {
-			if _, ok := val[key]; ok {
-				t.Errorf("marshaled JSON contains behavior field %q", key)
-			}
-		}
-		for _, child := range val {
-			assertNoBehaviorKeys(t, child)
-		}
-	case []any:
-		for _, child := range val {
-			assertNoBehaviorKeys(t, child)
-		}
-	}
 }
 
 func ExampleInvocation() {

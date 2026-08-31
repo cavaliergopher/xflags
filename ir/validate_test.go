@@ -19,17 +19,21 @@ func TestValidateNamedOptionsAreMatchable(t *testing.T) {
 		{
 			name: "Matchable",
 			flag: &Flag{
-				NamedOptions:   []string{"--verbose", "-v"},
-				ClaimedOptions: map[string]string{"--verbose": "--verbose", "-v": "-v", "--no-verbose": "--verbose"},
-				Value:          stubValue{},
-				MaxCount:       1,
+				NamedOptions: []string{"--verbose", "-v"},
+				ClaimedOptions: map[string]Claim{
+					"--verbose":    {Source: "--verbose"},
+					"-v":           {Source: "-v"},
+					"--no-verbose": {Source: "--verbose", Effect: "negate"},
+				},
+				Value:    stubValue{},
+				MaxCount: 1,
 			},
 		},
 		{
 			name: "ShownButUnmatchable",
 			flag: &Flag{
 				NamedOptions:   []string{"--verbose", "-v"},
-				ClaimedOptions: map[string]string{"--verbose": "--verbose"},
+				ClaimedOptions: map[string]Claim{"--verbose": {Source: "--verbose"}},
 				Value:          stubValue{},
 				MaxCount:       1,
 			},
@@ -40,10 +44,13 @@ func TestValidateNamedOptionsAreMatchable(t *testing.T) {
 			// name, so it names no option and claims nothing.
 			name: "EmptySlotIsNotAnOption",
 			flag: &Flag{
-				NamedOptions:   []string{"--verbose", "", "--loud"},
-				ClaimedOptions: map[string]string{"--verbose": "--verbose", "--loud": "--loud"},
-				Value:          stubValue{},
-				MaxCount:       1,
+				NamedOptions: []string{"--verbose", "", "--loud"},
+				ClaimedOptions: map[string]Claim{
+					"--verbose": {Source: "--verbose"},
+					"--loud":    {Source: "--loud"},
+				},
+				Value:    stubValue{},
+				MaxCount: 1,
 			},
 		},
 	} {
@@ -99,7 +106,7 @@ func TestValidateOperandDoesNotCollideWithOption(t *testing.T) {
 			{ValueName: "SERVICE", Positional: true, TakesValue: true, Value: stubValue{}, MaxCount: 1},
 			{
 				NamedOptions:   []string{"--service"},
-				ClaimedOptions: map[string]string{"--service": "--service"},
+				ClaimedOptions: map[string]Claim{"--service": {Source: "--service"}},
 				ValueName:      "SERVICE",
 				TakesValue:     true,
 				Value:          stubValue{},

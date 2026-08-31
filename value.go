@@ -18,6 +18,15 @@ func isBoolValue(v ir.Value) bool {
 	return false
 }
 
+// kindOf returns the ir.Kind v declares for itself by implementing
+// ir.KindValue, or ir.KindOpaque when it does not.
+func kindOf(v ir.Value) ir.Kind {
+	if kv, ok := v.(ir.KindValue); ok {
+		return kv.Kind()
+	}
+	return ir.KindOpaque
+}
+
 type bitFieldValue struct {
 	p    *uint64
 	mask uint64

@@ -135,8 +135,8 @@ func offeredOptions(ancestry []*ir.Command, word string) []string {
 				if f.Positional || f.Hidden {
 					continue
 				}
-				for option, source := range f.ClaimedOptions {
-					if !negating && option != source {
+				for option, claim := range f.ClaimedOptions {
+					if !negating && option != claim.Source {
 						continue
 					}
 					names = append(names, option)
