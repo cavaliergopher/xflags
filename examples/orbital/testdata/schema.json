@@ -1,0 +1,509 @@
+{
+  "schemaVersion": 1,
+  "command": {
+    "name": "orbital",
+    "fullName": "orbital",
+    "summary": "Deploy and operate services on the fleet",
+    "description": "orbital is the platform team's command line front end to the\nfleet API. Each subcommand below is owned and versioned by the\nteam named in its help text; orbital itself only assembles\nthem into one binary.",
+    "flagGroups": [
+      {
+        "name": "options",
+        "title": "Options",
+        "flags": [
+          {
+            "name": "help",
+            "usage": "Show this help message and exit",
+            "maxCount": 1,
+            "options": [
+              {
+                "option": "--help"
+              },
+              {
+                "option": "-h"
+              }
+            ]
+          },
+          {
+            "name": "version",
+            "usage": "Show the version and exit",
+            "maxCount": 1,
+            "options": [
+              {
+                "option": "--version"
+              }
+            ]
+          },
+          {
+            "name": "actor",
+            "valueName": "ACTOR",
+            "kind": "string",
+            "usage": "Identity performing this action, recorded for the audit trail",
+            "minCount": 1,
+            "maxCount": 1,
+            "envVar": "ORBITAL_ACTOR",
+            "takesValue": true,
+            "options": [
+              {
+                "option": "--actor"
+              }
+            ]
+          },
+          {
+            "name": "out",
+            "valueName": "FILE",
+            "kind": "string",
+            "usage": "Write command output to FILE instead of stdout",
+            "maxCount": 1,
+            "takesValue": true,
+            "options": [
+              {
+                "option": "--out"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "legacy",
+        "title": "Legacy options (deprecated)",
+        "flags": [
+          {
+            "name": "legacy-metrics-addr",
+            "valueName": "LEGACY_METRICS_ADDR",
+            "kind": "string",
+            "usage": "Address the legacy metrics sidecar listens on (superseded by --trace)",
+            "default": ":9090",
+            "maxCount": 1,
+            "takesValue": true,
+            "options": [
+              {
+                "option": "--legacy-metrics-addr"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "telemetry",
+        "title": "Telemetry options",
+        "mounted": true,
+        "flags": [
+          {
+            "name": "log-level",
+            "valueName": "LOG_LEVEL",
+            "kind": "string",
+            "usage": "Set the log verbosity",
+            "default": "info",
+            "showDefault": true,
+            "maxCount": 1,
+            "choices": [
+              "debug",
+              "info",
+              "warn",
+              "error"
+            ],
+            "takesValue": true,
+            "options": [
+              {
+                "option": "--log-level"
+              }
+            ]
+          },
+          {
+            "name": "trace",
+            "kind": "bool",
+            "usage": "Emit a timing trace for every command",
+            "default": "false",
+            "maxCount": 1,
+            "envVar": "ORBITAL_TRACE",
+            "options": [
+              {
+                "option": "--trace"
+              },
+              {
+                "option": "--no-trace",
+                "effect": "negate"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "subcommands": [
+      {
+        "name": "config",
+        "fullName": "orbital config",
+        "summary": "Read and write orbital's local configuration",
+        "flagGroups": [
+          {
+            "name": "options",
+            "title": "Options"
+          }
+        ],
+        "subcommands": [
+          {
+            "name": "get",
+            "fullName": "orbital config get",
+            "summary": "Print the value of a configuration key",
+            "flagGroups": [
+              {
+                "name": "options",
+                "title": "Options",
+                "flags": [
+                  {
+                    "name": "KEY",
+                    "valueName": "KEY",
+                    "kind": "string",
+                    "usage": "Configuration key to read",
+                    "positional": true,
+                    "minCount": 1,
+                    "maxCount": 1,
+                    "takesValue": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "set",
+            "fullName": "orbital config set",
+            "summary": "Set a configuration key to a value",
+            "flagGroups": [
+              {
+                "name": "options",
+                "title": "Options",
+                "flags": [
+                  {
+                    "name": "KEY",
+                    "valueName": "KEY",
+                    "kind": "string",
+                    "usage": "Configuration key to set",
+                    "positional": true,
+                    "minCount": 1,
+                    "maxCount": 1,
+                    "takesValue": true
+                  },
+                  {
+                    "name": "VALUE",
+                    "valueName": "VALUE",
+                    "kind": "string",
+                    "usage": "New value",
+                    "positional": true,
+                    "minCount": 1,
+                    "maxCount": 1,
+                    "takesValue": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "deploy",
+        "fullName": "orbital deploy",
+        "summary": "Deploy and inspect services running on the fleet",
+        "description": "Subcommands here talk to the fleet API on behalf of the caller\nnamed by --actor. \"run\" changes what is deployed and declares\nan audit middleware; \"status\" only reads and does not.",
+        "flagGroups": [
+          {
+            "name": "options",
+            "title": "Options"
+          }
+        ],
+        "subcommands": [
+          {
+            "name": "status",
+            "fullName": "orbital deploy status",
+            "summary": "Show the rollout status of a service",
+            "flagGroups": [
+              {
+                "name": "options",
+                "title": "Options",
+                "flags": [
+                  {
+                    "name": "SERVICE",
+                    "valueName": "SERVICE",
+                    "kind": "string",
+                    "usage": "Service to inspect",
+                    "positional": true,
+                    "minCount": 1,
+                    "maxCount": 1,
+                    "takesValue": true
+                  },
+                  {
+                    "name": "timeout",
+                    "valueName": "TIMEOUT",
+                    "kind": "duration",
+                    "usage": "How long to wait for the fleet API",
+                    "default": "5s",
+                    "showDefault": true,
+                    "maxCount": 1,
+                    "takesValue": true,
+                    "options": [
+                      {
+                        "option": "--timeout"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "run",
+            "fullName": "orbital deploy run",
+            "summary": "Roll out a new version of a service",
+            "flagGroups": [
+              {
+                "name": "options",
+                "title": "Options",
+                "flags": [
+                  {
+                    "name": "service",
+                    "valueName": "SERVICE",
+                    "kind": "string",
+                    "usage": "Service to deploy",
+                    "minCount": 1,
+                    "maxCount": 1,
+                    "takesValue": true,
+                    "options": [
+                      {
+                        "option": "--service"
+                      },
+                      {
+                        "option": "-s"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "release",
+                    "valueName": "RELEASE",
+                    "kind": "string",
+                    "usage": "Release to deploy, such as a git SHA",
+                    "minCount": 1,
+                    "maxCount": 1,
+                    "takesValue": true,
+                    "options": [
+                      {
+                        "option": "--release"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "env",
+                    "valueName": "ENV",
+                    "kind": "string",
+                    "usage": "Environment to deploy to",
+                    "default": "staging",
+                    "showDefault": true,
+                    "maxCount": 1,
+                    "choices": [
+                      "staging",
+                      "production"
+                    ],
+                    "takesValue": true,
+                    "options": [
+                      {
+                        "option": "--env"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "strategy",
+                    "valueName": "STRATEGY",
+                    "kind": "string",
+                    "usage": "Rollout strategy",
+                    "default": "rolling",
+                    "showDefault": true,
+                    "maxCount": 1,
+                    "choices": [
+                      "rolling",
+                      "blue-green",
+                      "canary"
+                    ],
+                    "takesValue": true,
+                    "options": [
+                      {
+                        "option": "--strategy"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "tag",
+                    "valueName": "TAG",
+                    "kind": "string",
+                    "usage": "Metadata tag to attach to this rollout (repeatable)",
+                    "default": "[]",
+                    "maxCount": 5,
+                    "takesValue": true,
+                    "options": [
+                      {
+                        "option": "--tag"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "confirm",
+                    "kind": "bool",
+                    "usage": "Confirm a deploy to production",
+                    "default": "false",
+                    "maxCount": 1,
+                    "options": [
+                      {
+                        "option": "--confirm"
+                      },
+                      {
+                        "option": "--no-confirm",
+                        "effect": "negate"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "unsafe-skip-health-checks",
+                    "kind": "bool",
+                    "usage": "Skip post-deploy health checks",
+                    "default": "false",
+                    "hidden": true,
+                    "maxCount": 1,
+                    "options": [
+                      {
+                        "option": "--unsafe-skip-health-checks"
+                      },
+                      {
+                        "option": "--no-unsafe-skip-health-checks",
+                        "effect": "negate"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "logs",
+        "fullName": "orbital logs",
+        "summary": "Print recent log lines for one or more services",
+        "flagGroups": [
+          {
+            "name": "options",
+            "title": "Options",
+            "flags": [
+              {
+                "name": "SERVICE",
+                "valueName": "SERVICE",
+                "kind": "string",
+                "usage": "Services to tail",
+                "default": "[]",
+                "positional": true,
+                "minCount": 1,
+                "maxCount": 0,
+                "takesValue": true
+              },
+              {
+                "name": "follow",
+                "kind": "bool",
+                "usage": "Keep streaming until interrupted",
+                "default": "false",
+                "maxCount": 1,
+                "options": [
+                  {
+                    "option": "--follow"
+                  },
+                  {
+                    "option": "-f"
+                  },
+                  {
+                    "option": "--no-follow",
+                    "effect": "negate"
+                  }
+                ]
+              },
+              {
+                "name": "since",
+                "valueName": "SINCE",
+                "kind": "duration",
+                "usage": "How far back to start showing logs",
+                "default": "10m0s",
+                "showDefault": true,
+                "maxCount": 1,
+                "takesValue": true,
+                "options": [
+                  {
+                    "option": "--since"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "exec",
+        "fullName": "orbital exec",
+        "summary": "Run a one-off command inside a service's container",
+        "forwardArgs": true,
+        "flagGroups": [
+          {
+            "name": "options",
+            "title": "Options",
+            "flags": [
+              {
+                "name": "service",
+                "valueName": "SERVICE",
+                "kind": "string",
+                "usage": "Service whose container to exec into",
+                "minCount": 1,
+                "maxCount": 1,
+                "takesValue": true,
+                "options": [
+                  {
+                    "option": "--service"
+                  },
+                  {
+                    "option": "-s"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "debug",
+        "fullName": "orbital debug",
+        "summary": "Internal diagnostics, not for regular use",
+        "hidden": true,
+        "flagGroups": [
+          {
+            "name": "options",
+            "title": "Options"
+          }
+        ]
+      },
+      {
+        "name": "version",
+        "fullName": "orbital version",
+        "summary": "Show the version",
+        "flagGroups": [
+          {
+            "name": "options",
+            "title": "Options"
+          }
+        ]
+      },
+      {
+        "name": "schema",
+        "fullName": "orbital schema",
+        "summary": "Describe this program as JSON",
+        "flagGroups": [
+          {
+            "name": "options",
+            "title": "Options"
+          }
+        ]
+      }
+    ]
+  }
+}

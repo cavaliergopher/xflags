@@ -2,10 +2,12 @@ package xflags
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"slices"
 
+	"github.com/cavaliergopher/xflags/desc"
 	"github.com/cavaliergopher/xflags/internal/argv"
 	"github.com/cavaliergopher/xflags/ir"
 )
@@ -117,6 +119,27 @@ func NewCommand(name, summary string) *Command {
 func VersionCommand(version string) *Command {
 	c := NewCommand("version", "Show the version").
 		HandleFunc(printVersion(version))
+	c.interrupt = true
+	return c
+}
+
+// SchemaCommand returns a Command named "schema" that writes a JSON
+// description of the program it is mounted in to standard output. The
+// name is fixed by convention, so tooling can find it without being
+// told.
+//
+// Like VersionCommand, it ends the program before any handlers run.
+//
+// Mount it like any other subcommand. Command.SchemaCommand is the
+// shorthand, and this is the way to mount it somewhere that shorthand
+// cannot -- under a subcommand rather than the root, or renamed.
+func SchemaCommand() *Command {
+	c := NewCommand("schema", "Describe this program as JSON").
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+			enc := json.NewEncoder(inv.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(desc.NewDocument(inv.Cmd.Root.Describe()))
+		})
 	c.interrupt = true
 	return c
 }
@@ -511,6 +534,13 @@ func (c *Command) VersionFlag(version string, names ...string) *Command {
 // without one. See VersionFlag for the same thing spelled as a flag.
 func (c *Command) VersionCommand(version string) *Command {
 	return c.Subcommands(VersionCommand(version))
+}
+
+// SchemaCommand adds a subcommand named "schema" that writes a JSON
+// description of the program to standard output. Like VersionCommand,
+// it ends the program before any handlers run.
+func (c *Command) SchemaCommand() *Command {
+	return c.Subcommands(SchemaCommand())
 }
 
 // FlagGroups adds groups of command line flags, built with NewFlagGroup or

@@ -294,6 +294,7 @@ Commands:
   logs     Print recent log lines for one or more services
   exec     Run a one-off command inside a service's container
   version  Show the version
+  schema   Describe this program as JSON
 
 Environment variables:
   ORBITAL_ACTOR  Identity performing this action, recorded for the audit trail
@@ -304,6 +305,29 @@ fleet API. Each subcommand below is owned and versioned by the
 team named in its help text; orbital itself only assembles
 them into one binary.
 `
+
+// TestOrbitalSchema pins the whole document "orbital schema" writes
+// against a golden file, and asserts it works without --actor: like
+// --version and "version", "schema" is an interrupt, so it answers a
+// command line that is otherwise incomplete -- the CLI Spec's requirement
+// that a schema command "works before anything else does".
+func TestOrbitalSchema(t *testing.T) {
+	stdout, stderr, code := run(t, nil, "schema")
+	if got, want := code, 0; got != want {
+		t.Errorf("exit code = %d, want %d", got, want)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty", stderr)
+	}
+
+	want, err := os.ReadFile(filepath.Join("testdata", "schema.json"))
+	if err != nil {
+		t.Fatalf("reading golden file: %v", err)
+	}
+	if got, want := stdout, string(want); got != want {
+		t.Errorf("schema output:\n%s\nwant:\n%s", got, want)
+	}
+}
 
 // TestOrbitalCompletion drives the shell completion protocol the way a
 // generated script does: the request arrives in the environment and the

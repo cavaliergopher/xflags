@@ -64,6 +64,9 @@ func main() {
 			// answers without --actor the same way "orbital --version"
 			// does.
 			xflags.VersionCommand(version),
+			// Also an interrupt, so tooling can ask "orbital schema" for
+			// the whole tree without an identity to hand it.
+			xflags.SchemaCommand(),
 		)
 
 	ctx, stop := xflags.NotifyContext(context.Background())
