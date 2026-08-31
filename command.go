@@ -59,6 +59,15 @@ type Command struct {
 	description string
 	hidden      bool
 	forwardArgs bool
+
+	// interrupt marks a command as an interrupt, the way HelpFlag and
+	// VersionFlag mark a flag: invoking it skips the checks an ordinary
+	// command line must pass. There is no chained setter for it -- a
+	// program wanting one of its own reaches for the same constructors
+	// this package's own interrupts are built with, such as
+	// VersionCommand.
+	interrupt bool
+
 	flagGroups  []*FlagGroup
 	groupSets   []*GroupSet
 	subcommands []*Command
@@ -97,12 +106,19 @@ func NewCommand(name, summary string) *Command {
 // VersionCommand returns a Command named "version" that prints version,
 // alongside the name of the program it is mounted in.
 //
+// It is an interrupt, so it answers a command line that is otherwise
+// incomplete: a program with a required flag still reports its version
+// from "app version" without one, the same as "app --version" already
+// does. See VersionFlag for the same thing spelled as a flag.
+//
 // Mount it like any other subcommand. Command.VersionCommand is the
 // shorthand, and this is the way to mount it somewhere that shorthand
 // cannot -- under a subcommand rather than the root, or renamed.
 func VersionCommand(version string) *Command {
-	return NewCommand("version", "Show the version").
+	c := NewCommand("version", "Show the version").
 		HandleFunc(printVersion(version))
+	c.interrupt = true
+	return c
 }
 
 func (c *Command) String() string { return c.name }
@@ -206,7 +222,8 @@ func (c *Command) Compile() (*ir.Command, error) {
 // as inherited because it is scaffolding for building Handler rather than
 // anything a compiled command carries. A command that declared no handler
 // gets missingSubcommand's instead, so Handler is never nil and nothing
-// downstream needs to know either mechanism exists.
+// downstream needs to know either mechanism exists. An interrupt wraps in
+// neither: see where middleware is applied below.
 //
 // It records the node for c in nodeMap so Compile can look up the node
 // for any source *Command after lowering from the root.
@@ -244,6 +261,7 @@ func (c *Command) lower(parent *ir.Command, inherited Middleware, nodeMap map[*C
 		Description: c.description,
 		Hidden:      c.hidden,
 		ForwardArgs: c.forwardArgs,
+		Interrupt:   c.interrupt,
 		FullName:    fullName,
 		Handler:     c.handlerFunc,
 		UsageFunc:   c.usageFunc,
@@ -295,9 +313,13 @@ func (c *Command) lower(parent *ir.Command, inherited Middleware, nodeMap map[*C
 	// downstream has to know that middleware exists. The fallback is not
 	// wrapped: there is no handler for a wrapper to wrap, and a command
 	// that only groups subcommands must not run its ancestors' wrappers.
+	// An interrupt is not wrapped either, own or inherited, the way an
+	// interrupt flag's Handler never is: middleware is written against a
+	// command line that parsed, and an interrupt answers one that may
+	// not have.
 	if node.Handler == nil {
 		node.Handler = missingSubcommand(node)
-	} else if middleware != nil {
+	} else if middleware != nil && !c.interrupt {
 		node.Handler = middleware(node.Handler)
 	}
 
@@ -484,9 +506,9 @@ func (c *Command) VersionFlag(version string, names ...string) *Command {
 // VersionCommand adds a subcommand named "version" that prints version,
 // alongside the name of the program it is mounted in.
 //
-// It is an ordinary command, so the tree's rules still apply to it: a
-// required flag declared on an ancestor must be given here too. See
-// VersionFlag for the spelling that answers without one.
+// It is an interrupt, so it answers a command line that is otherwise
+// incomplete: a program with a required flag still reports its version
+// without one. See VersionFlag for the same thing spelled as a flag.
 func (c *Command) VersionCommand(version string) *Command {
 	return c.Subcommands(VersionCommand(version))
 }

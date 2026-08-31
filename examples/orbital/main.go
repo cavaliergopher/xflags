@@ -60,9 +60,9 @@ func main() {
 			logscmd.Command(client),
 			execcmd.Command(),
 			debug.Command(),
-			// An ordinary command, unlike the flag above, so the tree's
-			// rules still apply: "orbital version" wants --actor where
-			// "orbital --version" does not.
+			// An interrupt too, like the flag above: "orbital version"
+			// answers without --actor the same way "orbital --version"
+			// does.
 			xflags.VersionCommand(version),
 		)
 

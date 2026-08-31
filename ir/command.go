@@ -27,10 +27,12 @@ type Invocation struct {
 	// something else.
 	Forwarded []string
 
-	// Interrupt is the flag that ended the parse, and is nil when the
-	// whole command line was read. Its Handler runs in place of Cmd's,
-	// which is the command that was active when the flag was given -- the
-	// one whose help is printed when the flag is the one asking for it.
+	// Interrupt is the flag that ended the parse, and is nil both when
+	// the whole command line was read and when Cmd is itself an
+	// interrupt command; see Command.Interrupt. Its Handler runs in
+	// place of Cmd's, which is the command that was active when the flag
+	// was given -- the one whose help is printed when the flag is the
+	// one asking for it.
 	//
 	// The rest of the command line is not parsed and the flag rules are
 	// not checked, so an interrupt answers even on an otherwise incomplete
@@ -82,6 +84,14 @@ type Command struct {
 	Description string
 	Hidden      bool
 	ForwardArgs bool
+
+	// Interrupt reports that invoking this command ends the parse the
+	// way an interrupt flag does: a check that would otherwise fail the
+	// command line -- a required flag missing, an argument count unmet,
+	// an option nothing recognizes -- does not stop this command from
+	// running, and no middleware wraps its handler. See
+	// xflags.VersionCommand.
+	Interrupt bool
 
 	// FullName is the command's name joined with each ancestor's, from the
 	// root down, so a deep subcommand reads as "app remote add" rather

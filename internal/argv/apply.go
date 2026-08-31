@@ -76,6 +76,13 @@ func applyDefaults(c *ir.Command) error {
 // so flags given before it take effect -- and stops there: env vars are
 // not read and NArgs is not checked.
 //
+// A command that is itself an interrupt (ir.Command.Interrupt) is
+// answered the same way once it is the command the line named, even
+// though nothing in res marks the point the way an instInterrupt
+// instruction does for a flag: every recorded lex error is discarded and
+// env vars and NArgs are not checked, but there is no earlier point to
+// stop the walk at, so every Set and Dispatch instruction still runs.
+//
 // Otherwise, any recorded lex error stops apply before it starts: nothing
 // is mutated unless every argument in argv resolved. An error from Set or
 // a ValidateFunc can still stop apply partway through, since undoing a
@@ -89,7 +96,12 @@ func apply(root *ir.Command, res lexResult) (*ir.Invocation, error) {
 			break
 		}
 	}
-	if interruptAt == -1 && len(res.errs) > 0 {
+	// res.active is the command lex ended on, which is also the command
+	// the walk below ends on whenever no flag interrupt cuts it short --
+	// checking it here, before the walk, is what lets a command interrupt
+	// win over a recorded lex error the same way a flag interrupt does.
+	cmdInterrupt := interruptAt == -1 && res.active.Interrupt
+	if interruptAt == -1 && !cmdInterrupt && len(res.errs) > 0 {
 		return nil, res.errs[0]
 	}
 
@@ -119,6 +131,9 @@ func apply(root *ir.Command, res lexResult) (*ir.Invocation, error) {
 
 	if interruptAt != -1 {
 		return invocationFor(interrupt.cmd, forwarded, interrupt.flag), nil
+	}
+	if cmdInterrupt {
+		return invocationFor(active, forwarded, nil), nil
 	}
 	if err := applyEnvVars(scope, counts); err != nil {
 		return nil, err

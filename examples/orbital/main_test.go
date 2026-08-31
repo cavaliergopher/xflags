@@ -226,9 +226,11 @@ func TestOrbitalRedirectsOutput(t *testing.T) {
 }
 
 // TestOrbitalVersion exercises the two spellings of one version string,
-// and what separates them. The flag is an interrupt, so it answers before
-// the root's required --actor is missed; the subcommand is an ordinary
-// command, so the same rule applies to it as to any other.
+// and confirms both are interrupts: "orbital version" now answers without
+// the root's required --actor exactly as "orbital --version" already
+// does, and, unlike an ordinary subcommand, runs no middleware -- passing
+// --trace and finding no trace line on stderr is what pins that the
+// timing trace declared on the root never wrapped its handler.
 func TestOrbitalVersion(t *testing.T) {
 	const want = "orbital 1.4.2\n"
 
@@ -240,21 +242,15 @@ func TestOrbitalVersion(t *testing.T) {
 		t.Errorf("stdout = %q, want %q", got, want)
 	}
 
-	stdout, stderr, code = run(t, []string{actor}, "version")
+	stdout, stderr, code = run(t, nil, "version", "--trace")
 	if got := code; got != 0 {
 		t.Errorf("exit code = %d, want 0 (stderr: %s)", got, stderr)
 	}
 	if got := stdout; got != want {
 		t.Errorf("stdout = %q, want %q", got, want)
 	}
-
-	// The subcommand is subject to the tree's rules, and the flag is not.
-	_, stderr, code = run(t, nil, "version")
-	if got, want := code, 2; got != want {
-		t.Errorf("exit code = %d, want %d", got, want)
-	}
-	if want := "Argument error: missing required argument: --actor\n"; !strings.HasPrefix(stderr, want) {
-		t.Errorf("stderr = %q, want it to start with %q", stderr, want)
+	if stderr != "" {
+		t.Errorf("stderr = %q, want nothing: middleware must not wrap an interrupt command", stderr)
 	}
 }
 
