@@ -1,5 +1,12 @@
 package ir
 
+import (
+	"maps"
+	"slices"
+
+	"github.com/cavaliergopher/xflags/desc"
+)
+
 // Claim is what naming a flag by one option on the command line means:
 // Source is the declared option the parser resolves it to -- itself, if
 // the option was declared outright, or the option a convention generated
@@ -187,6 +194,58 @@ func (f *Flag) Set(s string) error {
 	return f.Value.Set(s)
 }
 
+// Describe returns f's description: its declared name, the kind of value
+// it takes, and every option that reaches it. Behavior -- Value,
+// ValidateFunc, CompleteFunc and Handler -- carries nothing to describe
+// and is absent from the result.
+func (f *Flag) Describe() *desc.Flag {
+	return &desc.Flag{
+		Name:        f.Name,
+		ValueName:   f.ValueName,
+		Kind:        string(f.Kind),
+		Usage:       f.Usage,
+		Default:     f.Default,
+		ShowDefault: f.ShowDefault,
+		Positional:  f.Positional,
+		Hidden:      f.Hidden,
+		MinCount:    f.MinCount,
+		MaxCount:    f.MaxCount,
+		EnvVar:      f.EnvVar,
+		Choices:     slices.Clone(f.Choices),
+		TakesValue:  f.TakesValue,
+		Options:     f.describeOptions(),
+	}
+}
+
+// describeOptions returns every option that reaches f, in the order
+// desc.Flag.Options documents: NamedOptions in order, skipping any empty
+// slot, then every option ClaimedOptions holds that is not already named,
+// sorted. A positional argument claims no option and so describes none.
+func (f *Flag) describeOptions() []desc.Option {
+	named := make(map[string]struct{}, len(f.NamedOptions))
+	var options []desc.Option
+	for _, name := range f.NamedOptions {
+		if name == "" {
+			continue // an empty slot, which xflags.Flag.Aliases documents
+		}
+		named[name] = struct{}{}
+		options = append(options, desc.Option{
+			Option: name,
+			Effect: f.ClaimedOptions[name].Effect,
+		})
+	}
+	for _, option := range slices.Sorted(maps.Keys(f.ClaimedOptions)) {
+		if _, ok := named[option]; ok {
+			continue
+		}
+		options = append(options, desc.Option{
+			Option: option,
+			Effect: f.ClaimedOptions[option].Effect,
+		})
+	}
+	return options
+}
+
 // CompDirective tells a shell how to treat the candidates a CompleteFunc
 // returns.
 type CompDirective int
@@ -232,4 +291,17 @@ type FlagGroup struct {
 	Mounted bool
 
 	Flags []*Flag
+}
+
+// Describe returns g's description, and every flag in it.
+func (g *FlagGroup) Describe() *desc.FlagGroup {
+	group := &desc.FlagGroup{
+		Name:    g.Name,
+		Title:   g.Title,
+		Mounted: g.Mounted,
+	}
+	for _, flag := range g.Flags {
+		group.Flags = append(group.Flags, flag.Describe())
+	}
+	return group
 }

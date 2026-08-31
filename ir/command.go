@@ -3,6 +3,8 @@ package ir
 import (
 	"context"
 	"io"
+
+	"github.com/cavaliergopher/xflags/desc"
 )
 
 // An Invocation is the result of parsing a command line. It records which
@@ -161,4 +163,30 @@ func (c *Command) Validate() error {
 // renderer, Usage, when no command on the path did.
 func (c *Command) Usage(w io.Writer) error {
 	return writeUsage(c, w)
+}
+
+// Describe returns c's description, and, recursively, every subcommand
+// beneath it. Behavior -- Handler, UsageFunc and the three streams --
+// carries nothing to describe and is absent from the result.
+//
+// The document a program publishes should be rooted at c.Root. Describing
+// a subtree is legal but understates what it accepts: a flag is in scope
+// for a command from the point its own command is named onward, so a
+// command's ancestors hold flags it accepts that are not beneath it here.
+func (c *Command) Describe() *desc.Command {
+	cmd := &desc.Command{
+		Name:        c.Name,
+		FullName:    c.FullName,
+		Summary:     c.Summary,
+		Description: c.Description,
+		Hidden:      c.Hidden,
+		ForwardArgs: c.ForwardArgs,
+	}
+	for _, group := range c.FlagGroups {
+		cmd.FlagGroups = append(cmd.FlagGroups, group.Describe())
+	}
+	for _, sub := range c.Subcommands {
+		cmd.Subcommands = append(cmd.Subcommands, sub.Describe())
+	}
+	return cmd
 }
