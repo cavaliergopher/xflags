@@ -1151,6 +1151,39 @@ func TestValidateRunsOverSubcommands(t *testing.T) {
 // so a handler that shells out can return its error unchanged.
 var _ ExitCoder = (*exec.ExitError)(nil)
 
+// exitErrorHelperEnv asks the test binary re-executed by
+// TestRunExitsWithChildProcessCode to exit with a known code rather than
+// run the test suite.
+const exitErrorHelperEnv = "XFLAGS_TEST_EXIT_HELPER"
+
+// TestRunExitsWithChildProcessCode asserts the claim ExitCoder documents,
+// against a real child process rather than the type assertion above: a
+// handler that shells out can return the *exec.ExitError unchanged, and Run
+// terminates with the child's exit code.
+func TestRunExitsWithChildProcessCode(t *testing.T) {
+	if os.Getenv(exitErrorHelperEnv) != "" {
+		os.Exit(3) // this process is the child; see below
+	}
+	child := exec.Command(os.Args[0], "-test.run=^"+t.Name()+"$")
+	child.Env = append(os.Environ(), exitErrorHelperEnv+"=1")
+	childErr := child.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(childErr, &exitErr) {
+		t.Fatalf("child process error = %v, want an *exec.ExitError", childErr)
+	}
+
+	cmd := NewCommand("test", "").
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+			return childErr
+		})
+	code, stdout, stderr := runCaptured(cmd)
+	if got, want := code, 3; got != want {
+		t.Errorf("exit code = %d, want %d", got, want)
+	}
+	assertOutput(t, "stdout", stdout, "")
+	assertOutput(t, "stderr", stderr, "Error: exit status 3\n")
+}
+
 // TestInvocationPath asserts that Parse reports the whole path of commands
 // named by the arguments, root first, and the command they reached.
 func TestInvocationPath(t *testing.T) {

@@ -70,7 +70,7 @@ func FlattenErrors(err error) []error {
 // with. Run looks for one in the chain of errors returned by a handler,
 // using errors.As, and exits with 1 if it finds none.
 //
-// TIP: *exec.Error implements ExitCoder, so a handler that shells out to
+// TIP: *exec.ExitError implements ExitCoder, so a handler that shells out to
 // another program can return its error unchanged to exit with the same code
 // as the child process.
 type ExitCoder interface {
