@@ -27,4 +27,9 @@
 // package's current version does not enumerate. A consumer that meets an
 // effect it does not recognize must not offer that option, having no way
 // to know what typing it does.
+//
+// # Schema
+//
+// The format is also published as a JSON Schema document, at
+// docs/desc.schema.json.
 package desc

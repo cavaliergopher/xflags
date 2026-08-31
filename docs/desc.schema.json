@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/cavaliergopher/xflags/main/docs/desc.schema.json",
+  "title": "xflags description document",
+  "description": "A command tree described by github.com/cavaliergopher/xflags, at schema version 1. See docs/adr/machine-readable-schema.md for the design this specifies.",
+  "type": "object",
+  "required": ["schemaVersion", "command"],
+  "properties": {
+    "schemaVersion": {
+      "description": "Identifies the shape of this document. This schema covers version 1.",
+      "const": 1
+    },
+    "command": {
+      "$ref": "#/$defs/command"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "command": {
+      "type": "object",
+      "description": "A command users may invoke: its own name, the flags it accepts and every subcommand beneath it. Does not repeat a flag inherited from an ancestor. May gain further properties in a later document at this schema version.",
+      "required": ["name", "fullName"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The command's own name, unqualified by its ancestry: \"add\" rather than \"orbital remote add\"."
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Name joined with each ancestor's, from the root down: \"orbital remote add\"."
+        },
+        "summary": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "hidden": {
+          "type": "boolean",
+          "description": "The command is omitted from help output."
+        },
+        "forwardArgs": {
+          "type": "boolean",
+          "description": "Arguments following a \"--\" terminator are passed through to the command rather than rejected."
+        },
+        "flagGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/flagGroup" }
+        },
+        "subcommands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "flagGroup": {
+      "type": "object",
+      "description": "A nominal grouping of flags, which affects how the flags are shown in help messages. May gain further properties in a later document at this schema version.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "mounted": {
+          "type": "boolean",
+          "description": "The command took this group from a shared set of flags contributed by another package, rather than declaring it itself."
+        },
+        "flags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/flag" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "flag": {
+      "type": "object",
+      "description": "A command line flag or positional argument: what it is called, what options reach it, and what kind of value it takes. May gain further properties in a later document at this schema version.",
+      "required": ["name", "maxCount"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The flag's declared canonical name, undecorated by any dialect: \"force\" rather than \"--force\". A positional argument's name is the name it was declared with, same as any other flag."
+        },
+        "valueName": {
+          "type": "string",
+          "description": "How the value the flag takes is written where the flag is shown to a reader, such as the \"SERVICE\" of \"Usage: deploy SERVICE\". A positional argument, which names no option, is shown by this alone."
+        },
+        "kind": {
+          "description": "The kind of value the flag takes. Absent for an interrupt, which binds no value and so has none to classify.",
+          "enum": ["bool", "string", "int", "uint", "float", "duration", "opaque"]
+        },
+        "usage": {
+          "type": "string"
+        },
+        "default": {
+          "type": "string",
+          "description": "The flag's default value, already rendered as a string."
+        },
+        "showDefault": {
+          "type": "boolean",
+          "description": "A formatter should print default beside usage."
+        },
+        "positional": {
+          "type": "boolean",
+          "description": "The flag is an operand rather than an option: named by position on the command line rather than by any of options."
+        },
+        "hidden": {
+          "type": "boolean",
+          "description": "The flag is omitted from help output."
+        },
+        "minCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The most times the flag may be given, or 0 for no limit."
+        },
+        "envVar": {
+          "type": "string",
+          "description": "The name of the environment variable that supplies the flag's value when it is not given on the command line. The variable's own value never appears here."
+        },
+        "choices": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The only values the flag accepts, or absent when any value is accepted."
+        },
+        "takesValue": {
+          "type": "boolean",
+          "description": "Naming the flag on the command line consumes a value. A boolean flag omits this: naming it alone stands for true."
+        },
+        "options": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/option" },
+          "description": "Every option that reaches the flag: the canonical name's option, then the short name's, then any further aliases, then every option a dialect generated, in that order. A positional argument has none."
+        }
+      },
+      "additionalProperties": true
+    },
+    "option": {
+      "type": "object",
+      "description": "One spelling a flag answers to on the command line, and what naming it that way means for the value. May gain further properties in a later document at this schema version.",
+      "required": ["option"],
+      "properties": {
+        "option": {
+          "type": "string",
+          "description": "The option as a reader would type it: \"--force\" or \"-f\"."
+        },
+        "effect": {
+          "type": "string",
+          "description": "What typing this option does to the flag's value, such as \"negate\". The vocabulary is open and grows over time: a consumer that meets an effect it does not recognize must not offer that option, having no way to know what typing it does. Absent means the ordinary case: naming the flag this way sets it."
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
