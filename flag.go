@@ -568,40 +568,41 @@ func FromFlagSet(name, title string, fs *flag.FlagSet) *FlagGroup {
 	fs.VisitAll(func(f *flag.Flag) {
 		flg := Var(f.Value, f.Name, f.Usage)
 		flg.defValue = f.DefValue
-		flg.kind = kindFromGetter(f.Value)
+		flg.kind = kindFromFlagValue(f.Value)
 		group.Flags(flg)
 	})
 	return group
 }
 
-// kindFromGetter recovers the Kind of a value imported from a
-// flag.FlagSet by inspecting the concrete type flag.Getter's Get
-// returns, so a value declared with the flag package's own constructors
-// -- flag.Bool, flag.Int and the rest -- is described as precisely as one
-// declared with xflags's. A value that does not implement flag.Getter, or
-// whose concrete type matches none of the flag package's own, compiles
-// to ir.KindOpaque.
-func kindFromGetter(v flag.Value) ir.Kind {
-	g, ok := v.(flag.Getter)
-	if !ok {
-		return ir.KindOpaque
+// kindFromFlagValue recovers the Kind of a value imported from a
+// flag.FlagSet, so a flag declared with any of the flag package's own
+// constructors is described as precisely as one declared with xflags's.
+// The concrete type flag.Getter's Get returns classifies the eight
+// value-carrying constructors, flag.Bool through flag.Duration; a value
+// answering IsBoolFlag, which is how flag.BoolFunc marks itself, is a
+// boolean whatever it returns. Anything else -- flag.Func, flag.TextVar,
+// or a custom flag.Value -- compiles to ir.KindOpaque.
+func kindFromFlagValue(v flag.Value) ir.Kind {
+	if g, ok := v.(flag.Getter); ok {
+		switch g.Get().(type) {
+		case bool:
+			return ir.KindBool
+		case string:
+			return ir.KindString
+		case int, int64:
+			return ir.KindInt
+		case uint, uint64:
+			return ir.KindUint
+		case float64:
+			return ir.KindFloat
+		case time.Duration:
+			return ir.KindDuration
+		}
 	}
-	switch g.Get().(type) {
-	case bool:
+	if b, ok := v.(ir.BoolValue); ok && b.IsBoolFlag() {
 		return ir.KindBool
-	case string:
-		return ir.KindString
-	case int, int64:
-		return ir.KindInt
-	case uint, uint64:
-		return ir.KindUint
-	case float64:
-		return ir.KindFloat
-	case time.Duration:
-		return ir.KindDuration
-	default:
-		return ir.KindOpaque
 	}
+	return ir.KindOpaque
 }
 
 // lower returns the compiled ir.FlagGroup for c.

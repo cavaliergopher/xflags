@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"os/exec"
 	"slices"
@@ -198,13 +199,17 @@ func TestFromFlagSetRecoversKind(t *testing.T) {
 	var f float64
 	var d time.Duration
 	flagSet := flag.NewFlagSet("native", flag.ContinueOnError)
+	var txt big.Float
 	flagSet.BoolVar(&b, "b", false, "")
+	flagSet.BoolFunc("bf", "", func(string) error { return nil })
 	flagSet.DurationVar(&d, "d", 0, "")
 	flagSet.Float64Var(&f, "f", 0, "")
+	flagSet.Func("fn", "", func(string) error { return nil })
 	flagSet.IntVar(&i, "i", 0, "")
 	flagSet.Int64Var(&i64, "i64", 0, "")
 	flagSet.Var(&opaqueFlagValue{}, "opaque", "")
 	flagSet.StringVar(&s, "s", "", "")
+	flagSet.TextVar(&txt, "txt", &big.Float{}, "")
 	flagSet.UintVar(&u, "u", 0, "")
 	flagSet.Uint64Var(&u64, "u64", 0, "")
 
@@ -217,8 +222,9 @@ func TestFromFlagSetRecoversKind(t *testing.T) {
 	// group follows. VisitAll, which FromFlagSet reads, visits in
 	// lexicographical order.
 	for i, want := range []ir.Kind{
-		ir.KindBool, ir.KindDuration, ir.KindFloat, ir.KindInt, ir.KindInt,
-		ir.KindOpaque, ir.KindString, ir.KindUint, ir.KindUint,
+		ir.KindBool, ir.KindBool, ir.KindDuration, ir.KindFloat,
+		ir.KindOpaque, ir.KindInt, ir.KindInt, ir.KindOpaque,
+		ir.KindString, ir.KindOpaque, ir.KindUint, ir.KindUint,
 	} {
 		if got := node.FlagGroups[1].Flags[i].Kind; got != want {
 			t.Errorf("Flags[%d].Kind = %q, want %q", i, got, want)
