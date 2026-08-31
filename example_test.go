@@ -85,7 +85,7 @@ func Example() {
 	//     func main() {
 	//         ctx, stop := xflags.NotifyContext(context.Background())
 	//         defer stop()
-	//         os.Exit(xflags.Run(ctx, App))
+	//         os.Exit(RunWithArgs(ctx, xflags, App...))
 	//     }
 	//
 	fmt.Println()

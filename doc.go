@@ -226,7 +226,7 @@ from the Invocation parsed so far -- what completes one flag's value often
 depends on another already given, as the ref argument to `git checkout`
 depends on which repository is checked out.
 
-Command.Complete is the engine behind the reply, and answers the same
+Complete is the engine behind the reply, and answers the same
 question programmatically: given the command line so far and the word
 being completed, which candidates apply. It is exported so it can be
 tested and driven directly, without a shell in the loop.

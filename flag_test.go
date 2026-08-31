@@ -14,13 +14,15 @@ import (
 
 func TestBitField(t *testing.T) {
 	var v uint64
-	_, err := NewCommand("test", "").
-		Flags(
-			BitField(&v, 0x01, "foo", false, ""),
-			BitField(&v, 0x02, "bar", false, ""),
-			BitField(&v, 0x04, "baz", true, ""),
-		).
-		Parse([]string{"--foo"})
+	_, err := Parse(
+		NewCommand("test", "").
+			Flags(
+				BitField(&v, 0x01, "foo", false, ""),
+				BitField(&v, 0x02, "bar", false, ""),
+				BitField(&v, 0x04, "baz", true, ""),
+			),
+		"--foo",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +236,7 @@ func TestFlagGroupStandalone(t *testing.T) {
 	)
 	cmd := NewCommand("test", "").FlagGroups(group)
 
-	if _, err := cmd.Parse([]string{"--log-level=debug", "--log-format=json"}); err != nil {
+	if _, err := Parse(cmd, "--log-level=debug", "--log-format=json"); err != nil {
 		t.Fatal(err)
 	}
 	assertString(t, "debug", level)
@@ -411,7 +413,7 @@ func TestPositionalIsShownByItsValueName(t *testing.T) {
 			if want := "Usage: test " + tt.want + "\n"; !strings.HasPrefix(sb.String(), want) {
 				t.Errorf("usage = %q, want prefix %q", sb.String(), want)
 			}
-			_, err = cmd.Parse(nil)
+			_, err = Parse(cmd)
 			if want := "missing required argument: " + tt.want; err == nil ||
 				!strings.Contains(err.Error(), want) {
 				t.Errorf("error = %v, want one containing %q", err, want)
@@ -454,7 +456,7 @@ func TestAliasIsMatchedButNotPrinted(t *testing.T) {
 	cmd := NewCommand("test", "").Flags(
 		String(&s, "colour", "", "which colour").Aliases("", "color"),
 	)
-	if _, err := cmd.Parse([]string{"--color", "red"}); err != nil {
+	if _, err := Parse(cmd, "--color", "red"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got, want := s, "red"; got != want {

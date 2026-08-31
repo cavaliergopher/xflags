@@ -30,7 +30,7 @@
 // a behavior field added later without one fails that test, not silently.
 //
 // Most programs never import this package. Building and running a command
-// tree -- xflags.NewCommand, xflags.Run, (*xflags.Command).Dispatch --
+// tree -- xflags.NewCommand, xflags.Run, xflags.Dispatch --
 // never touches it: xflags compiles a tree internally wherever compiling
 // one is called for. Reach for ir directly only when writing something
 // that operates on the compiled form itself, such as a custom Value, a

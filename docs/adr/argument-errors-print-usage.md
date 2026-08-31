@@ -14,7 +14,7 @@ type but was never told what was wrong with what they typed. Neither
 report was complete, and they disagreed about which half to keep.
 
 Splitting dispatch from error reporting forced the question.
-`Command.Run` is now `Command.Dispatch` — resolve the path, parse, call
+`Run` is now `Dispatch` — resolve the path, parse, call
 the handler, return the raw error — plus error reporting, and anything
 `Dispatch` cannot do, because it must not print error text, has to become
 a returned error. That turned the no-handler case from a usage dump

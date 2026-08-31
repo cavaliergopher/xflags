@@ -60,7 +60,7 @@ func TestShortOptionGrouping(t *testing.T) {
 				String(&f, "foxtrot", "", "").Aliases("f"),
 				String(&operand, "OPERAND", "", "").Positional(),
 			)
-			_, err := cmd.Parse(tt.args)
+			_, err := Parse(cmd, tt.args...)
 			if tt.err {
 				if err == nil {
 					t.Fatalf("expected an error, got a=%v b=%v f=%q", a, b, f)
@@ -124,7 +124,7 @@ func TestAttachedValues(t *testing.T) {
 				Bool(&verbose, "verbose", false, ""),
 				String(&name, "name", "", "").Aliases("n"),
 			)
-			_, err := cmd.Parse(tt.args)
+			_, err := Parse(cmd, tt.args...)
 			if tt.err {
 				if err == nil {
 					t.Fatalf("expected an error, got count=%d verbose=%v name=%q", count, verbose, name)
@@ -155,7 +155,7 @@ func TestEmptyAttachedValue(t *testing.T) {
 		cmd := NewCommand("test", "").Flags(
 			String(&name, "name", "unset", "").Aliases("n"),
 		)
-		if _, err := cmd.Parse([]string{arg}); err != nil {
+		if _, err := Parse(cmd, arg); err != nil {
 			t.Fatal(err)
 		}
 		return name
@@ -167,7 +167,7 @@ func TestEmptyAttachedValue(t *testing.T) {
 		cmd := NewCommand("test", "").Flags(
 			Bool(new(bool), "verbose", false, "").Aliases("v"),
 		)
-		_, err := cmd.Parse([]string{arg})
+		_, err := Parse(cmd, arg)
 		return err
 	}
 	errShort, errLong := parseVerbose("-v="), parseVerbose("--verbose=")
@@ -218,7 +218,7 @@ func TestUnrecognizedOptionNamesSubtree(t *testing.T) {
 		{[]string{"--nope"}, "unrecognized option: --nope"},
 	} {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
-			_, err := newApp().Parse(tt.args)
+			_, err := Parse(newApp(), tt.args...)
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
@@ -246,7 +246,7 @@ func TestUnrecognizedOptionSkipsHiddenSubtree(t *testing.T) {
 	}
 
 	t.Run("HiddenSubcommandNoHint", func(t *testing.T) {
-		_, err := newApp().Parse([]string{"--force"})
+		_, err := Parse(newApp(), "--force")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -256,7 +256,7 @@ func TestUnrecognizedOptionSkipsHiddenSubtree(t *testing.T) {
 	})
 
 	t.Run("VisibleSiblingStillHints", func(t *testing.T) {
-		_, err := newApp().Parse([]string{"--tags"})
+		_, err := Parse(newApp(), "--tags")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -267,7 +267,7 @@ func TestUnrecognizedOptionSkipsHiddenSubtree(t *testing.T) {
 	})
 
 	t.Run("HiddenFlagStillUsable", func(t *testing.T) {
-		inv, err := newApp().Parse([]string{"hidden", "--force"})
+		inv, err := Parse(newApp(), "hidden", "--force")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -285,7 +285,7 @@ func TestUnrecognizedOptionSkipsHiddenSubtree(t *testing.T) {
 func TestParseOperandNoSlot(t *testing.T) {
 	t.Run("UnrecognizedSubcommand", func(t *testing.T) {
 		cmd := NewCommand("app", "").Subcommands(NewCommand("sub", ""))
-		_, err := cmd.Parse([]string{"nope"})
+		_, err := Parse(cmd, "nope")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -296,7 +296,7 @@ func TestParseOperandNoSlot(t *testing.T) {
 
 	t.Run("ExtraOperand", func(t *testing.T) {
 		cmd := NewCommand("app", "")
-		_, err := cmd.Parse([]string{"nope"})
+		_, err := Parse(cmd, "nope")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -318,7 +318,7 @@ func TestValidateNArgsSpansThePath(t *testing.T) {
 			Subcommands(NewCommand("sub", ""))
 	}
 
-	_, err := newApp(new(string)).Parse([]string{"sub"})
+	_, err := Parse(newApp(new(string)), "sub")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -329,14 +329,14 @@ func TestValidateNArgsSpansThePath(t *testing.T) {
 	// A parent flag keeps working after the subcommand token, and giving
 	// it there satisfies the requirement.
 	var name string
-	if _, err := newApp(&name).Parse([]string{"sub", "--name=x"}); err != nil {
+	if _, err := Parse(newApp(&name), "sub", "--name=x"); err != nil {
 		t.Fatal(err)
 	}
 	assertString(t, "x", name)
 
 	// Occurrences accumulate across the descent, so the ceiling holds
 	// over the whole path too.
-	_, err = newApp(new(string)).Parse([]string{"--name=x", "sub", "--name=y"})
+	_, err = Parse(newApp(new(string)), "--name=x", "sub", "--name=y")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -394,7 +394,7 @@ func TestTerminatorEndsOptions(t *testing.T) {
 				String(&flag, "flag", "", ""),
 				Strings(&files, "file", nil, "").Positional().NArgs(0, 0),
 			)
-			inv, err := cmd.Parse(tt.args)
+			inv, err := Parse(cmd, tt.args...)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -418,7 +418,7 @@ func TestTerminatorSelectsSubcommand(t *testing.T) {
 		Strings(&files, "file", nil, "").Positional().NArgs(0, 0),
 	)
 	cmd := NewCommand("test", "").Subcommands(sub)
-	inv, err := cmd.Parse([]string{"--", "sub", "-rf"})
+	inv, err := Parse(cmd, "--", "sub", "-rf")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -436,7 +436,7 @@ func TestTerminatorSelectsSubcommand(t *testing.T) {
 // reached --help; see wip/lexer.md and wip/batch-2026-08-27.md.
 func TestHelpWinsOverAnEarlierArgumentError(t *testing.T) {
 	cmd := NewCommand("test", "").Flags(String(new(string), "name", "", ""))
-	inv, err := cmd.Parse([]string{"--bogus", "--help"})
+	inv, err := Parse(cmd, "--bogus", "--help")
 	if err != nil {
 		t.Fatalf("Parse() = %v, want no error", err)
 	}
@@ -456,14 +456,14 @@ func TestPositionalIsNotAnOption(t *testing.T) {
 	cmd := NewCommand("test", "").Flags(
 		String(&src, "src", "", "").Positional(),
 	)
-	_, err := cmd.Parse([]string{"--src=x"})
+	_, err := Parse(cmd, "--src=x")
 	if got, want := humanMessage(err), "unrecognized option: --src"; got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
 	assertString(t, "", src)
 
 	// The operand form still binds it.
-	if _, err := cmd.Parse([]string{"x"}); err != nil {
+	if _, err := Parse(cmd, "x"); err != nil {
 		t.Fatal(err)
 	}
 	assertString(t, "x", src)
@@ -509,7 +509,7 @@ func FuzzParse(f *testing.F) {
 				Strings(&tags, "tag", nil, "").Aliases("t"),
 			).
 			Subcommands(sub, NewCommand("other", ""))
-		inv, err := cmd.Parse([]string{arg1, arg2, arg3})
+		inv, err := Parse(cmd, arg1, arg2, arg3)
 		if (inv == nil) == (err == nil) {
 			t.Fatalf("Parse returned (%v, %v), want exactly one", inv, err)
 		}
@@ -532,7 +532,7 @@ func TestTerminator(t *testing.T) {
 		"--", "-", "",
 	}
 	args := append([]string{"--foo=foo", "--bar", "--"}, tailArgs...)
-	inv, err := cmd.Parse(args)
+	inv, err := Parse(cmd, args...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -555,7 +555,7 @@ func TestUnrecognizedOptionNamesMountedFlags(t *testing.T) {
 	sub := NewCommand("delete", "").GroupSets(set)
 	app := NewCommand("app", "").Subcommands(sub)
 
-	_, err := app.Parse([]string{"--force"})
+	_, err := Parse(app, "--force")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -615,7 +615,7 @@ func TestNegatedBool(t *testing.T) {
 				Bool(&loud, "loud", true, "").Aliases("", "noisy"),
 				String(&name, "name", "", ""),
 			)
-			_, err := cmd.Parse(tt.args)
+			_, err := Parse(cmd, tt.args...)
 			if tt.err {
 				if err == nil {
 					t.Fatalf("expected an error, got verbose=%v loud=%v", verbose, loud)

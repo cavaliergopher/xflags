@@ -60,7 +60,7 @@ func Example_sharedFlagGroups() {
 	// registered one.
 	var isolated logSettings
 	cmd := NewCommand("test", "").FlagGroups(isolated.FlagGroup())
-	if _, err := cmd.Parse([]string{"--log-level=warn"}); err != nil {
+	if _, err := Parse(cmd, "--log-level=warn"); err != nil {
 		panic(err)
 	}
 	fmt.Println()

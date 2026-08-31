@@ -76,7 +76,7 @@ func assertStrings(t *testing.T, expect, actual []string) bool {
 }
 
 func parseFlag(flag *Flag, args ...string) error {
-	_, err := NewCommand("test", "").Flags(flag).Parse(args)
+	_, err := Parse(NewCommand("test", "").Flags(flag), args...)
 	return err
 }
 
@@ -124,7 +124,7 @@ func (w *failAfterWriter) Write(p []byte) (int, error) {
 func runCaptured(cmd *Command, args ...string) (code int, stdout, stderr string) {
 	var out, errOut strings.Builder
 	cmd.Stdout(&out).Stderr(&errOut)
-	code = cmd.Run(context.Background(), args)
+	code = RunWithArgs(context.Background(), cmd, args...)
 	return code, out.String(), errOut.String()
 }
 

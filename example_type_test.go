@@ -54,7 +54,7 @@ func Example_customTypes() {
 	//     func main() {
 	//         ctx, stop := xflags.NotifyContext(context.Background())
 	//         defer stop()
-	//         os.Exit(xflags.Run(ctx, ExampleCommand))
+	//         os.Exit(RunWithArgs(ctx, xflags, ExampleCommand...))
 	//     }
 	//
 	fmt.Println()

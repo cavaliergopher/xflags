@@ -103,7 +103,7 @@ type Flag struct {
 	ValidateFunc ValidateFunc `json:"-"`
 
 	// CompleteFunc, if set, completes the flag's value for a shell. See
-	// (*xflags.Command).Complete.
+	// xflags.Complete.
 	CompleteFunc CompleteFunc `json:"-"`
 }
 

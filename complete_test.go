@@ -146,7 +146,7 @@ func TestComplete(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			cands, dir := tt.build().Complete(tt.args, tt.word)
+			cands, dir := Complete(tt.build(), tt.args, tt.word)
 			assertStrings(t, tt.want, cands)
 			if got, want := dir, tt.dir; got != want {
 				t.Errorf("directive = %v, want %v", got, want)
@@ -163,7 +163,7 @@ func TestCompleteEmptyArgs(t *testing.T) {
 	cmd := NewCommand("app", "").Flags(
 		Bool(new(bool), "verbose", false, "").Aliases("v"),
 	)
-	cands, dir := cmd.Complete(nil, "")
+	cands, dir := Complete(cmd, nil, "")
 	assertStrings(t, nil, cands)
 	if got, want := dir, ir.CompDefault; got != want {
 		t.Errorf("directive = %v, want %v", got, want)
@@ -188,7 +188,7 @@ func TestCompleteFuncSeesEarlierFlag(t *testing.T) {
 		String(new(string), "instance", "", "").Positional().Complete(fn),
 	)
 
-	cands, dir := cmd.Complete([]string{"--region", "us-east"}, "i-")
+	cands, dir := Complete(cmd, []string{"--region", "us-east"}, "i-")
 
 	if gotInv == nil {
 		t.Fatal("CompleteFunc was not called")

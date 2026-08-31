@@ -39,7 +39,7 @@ func TestGroupSetsResolveAtParse(t *testing.T) {
 	set.FlagGroup(NewFlagGroup("late", "Late options",
 		String(&s, "name", "", ""),
 	))
-	if _, err := cmd.Parse([]string{"--name=value"}); err != nil {
+	if _, err := Parse(cmd, "--name=value"); err != nil {
 		t.Fatal(err)
 	}
 	assertString(t, "value", s)
@@ -57,7 +57,7 @@ func TestGroupSetsAreNotWrittenBack(t *testing.T) {
 	))
 	cmd := NewCommand("test", "").GroupSets(set)
 	for i := 1; i <= 2; i++ {
-		if _, err := cmd.Parse([]string{"--name=x"}); err != nil {
+		if _, err := Parse(cmd, "--name=x"); err != nil {
 			t.Fatalf("parse %d: %v", i, err)
 		}
 		if _, err := cmd.Compile(); err != nil {
@@ -70,7 +70,7 @@ func TestGroupSetsAreNotWrittenBack(t *testing.T) {
 // naming the invalid configuration under test in the failure message.
 func assertConfigError(t *testing.T, cmd *Command, reason string) bool {
 	t.Helper()
-	_, err := cmd.Parse(nil)
+	_, err := Parse(cmd)
 	if err == nil {
 		t.Errorf("expected error for %s, got nil", reason)
 		return false
@@ -162,7 +162,7 @@ func TestGroupSetsMountedTwiceInOnePath(t *testing.T) {
 	sub := NewCommand("sub", "").GroupSets(set)
 	cmd := NewCommand("test", "").GroupSets(set).Subcommands(sub)
 
-	if _, err := cmd.Parse([]string{"sub", "--log-level=debug"}); err != nil {
+	if _, err := Parse(cmd, "sub", "--log-level=debug"); err != nil {
 		t.Fatal(err)
 	}
 	assertString(t, "debug", level)

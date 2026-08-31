@@ -45,7 +45,7 @@ type Invocation struct {
 // A HandlerFunc handles the invocation of a command specified by command
 // line arguments.
 //
-// ctx is the context given to (*xflags.Command).Dispatch, so a handler
+// ctx is the context given to xflags.Dispatch, so a handler
 // that does anything cancelable should honor it.
 //
 // inv describes the invocation: the command that was named, the path it was
@@ -127,7 +127,7 @@ type Command struct {
 
 	// Stdin, Stdout and Stderr are the streams resolved for this command
 	// when the tree was compiled, and are never nil: each defaults to the
-	// matching process stream. Because (*xflags.Command).Parse compiles a
+	// matching process stream. Because xflags.Parse compiles a
 	// fresh tree on every call, nothing observable changes, though a
 	// caller holding a compiled tree across a reassignment of os.Stdout
 	// keeps the stream it compiled with.
