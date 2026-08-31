@@ -45,7 +45,7 @@ func Complete(cmd *ir.Command, args []string, word string) ([]string, ir.CompDir
 		return nil, ir.CompDefault
 	}
 
-	inv := invocationFor(res.active, forwarded, false)
+	inv := invocationFor(res.active, forwarded, nil)
 
 	cands, dir := completeCandidates(res, res.active.Ancestry, inv, word)
 	return finalizeCandidates(cands, word), dir
@@ -117,9 +117,8 @@ func optionTable(ancestry []*ir.Command) map[string]resolvedOption {
 }
 
 // offeredOptions returns the options offered for word: every option --
-// "--name" and "-s" -- of every flag along the ancestry that is neither positional
-// nor Hidden, plus "--help", which is never declared as an ordinary flag
-// but is always legal.
+// "--name" and "-s" -- of every flag along the ancestry that is neither
+// positional nor Hidden.
 //
 // A generated negation is offered only once word reaches for one. Every
 // boolean has one, so offering them always would double the candidate
@@ -145,7 +144,7 @@ func offeredOptions(ancestry []*ir.Command, word string) []string {
 			}
 		}
 	}
-	return append(names, helpLongForm)
+	return names
 }
 
 // subcommandNames returns the name of every subcommand of active that is

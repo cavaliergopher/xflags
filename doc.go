@@ -101,6 +101,32 @@ Flags may then be used directly.
 	fmt.Println("ip has value ", ip)
 	fmt.Println("flagvar has value ", flagvar)
 
+# Help and version
+
+Command.HelpFlag adds the flag that prints a command's help message,
+answering to --help and -h. A program that reports a version adds one or
+both spellings of it from the one string a build stamps into a constant:
+
+	var App = xflags.NewCommand("orbital", "Operate the fleet").
+		HelpFlag().              // --help, -h
+		VersionFlag(version).    // --version
+		VersionCommand(version)  // orbital version
+
+Add the flags to the root and every command below answers to them too,
+each printing its own help. Nothing else on the command line is read or
+checked, so they answer a half-typed command line as well.
+
+Declaring them first is a convention rather than a rule: it puts them at
+the head of the options a command lists, which is where argparse puts
+them and roughly where every other convention does. A program that wants
+them elsewhere -- last, hidden, or under a heading of its own -- builds
+them with HelpFlag, VersionFlag and VersionCommand and puts them where it
+likes.
+
+All three flags are interrupts, which is the whole of what makes --help
+special: a flag that ends the parse and runs in place of the command that
+was named. Declare one of your own with Interrupt.
+
 # Middleware
 
 Command.Middleware wraps a command's handler, and every handler beneath
@@ -129,9 +155,9 @@ declared highest in the tree.
 A wrapper decides whether to call the handler it wrapped, so returning an
 error without calling it refuses the invocation, and Run maps that error
 to an exit code as it would the handler's own. It runs only around a
-handler, and only after the command line has parsed: neither --help, an
-unparsable command line, nor a command that exists only to group
-subcommands reaches one.
+handler, and only after the command line has parsed: neither an
+interrupt such as --help, an unparsable command line, nor a command that
+exists only to group subcommands reaches one.
 
 Middleware cannot change what a handler is given, since both sides of it
 are a HandlerFunc.
@@ -146,7 +172,7 @@ connection before returning does so more often than its author expects.
 
 Run returns the exit code the program should terminate with:
 
-	0  the handler returned nil, or -h or --help was given
+	0  the handler returned nil, or an interrupt such as --help ran
 	1  the handler returned an error
 	2  the command line or the command tree was wrong, or there is no handler
 
@@ -182,7 +208,8 @@ a second spelling of --flag=false rather than a feature a flag opts into.
 The value negates with the flag, so --no-flag=false sets true. Short names
 have no negated spelling, since -f=false is already the short way to say
 it, and help does not list the negated spellings, since every boolean has
-one.
+one. An interrupt, such as --help, binds no value and so has none of
+these forms: it is given by name and nothing else.
 
 The detached forms are not permitted for boolean flags because the meaning
 of the command

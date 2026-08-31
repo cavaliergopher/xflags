@@ -10,7 +10,7 @@ into one binary by `main`.
 ```
 go run ./examples/orbital --help
 ORBITAL_ACTOR=alice go run ./examples/orbital deploy status api
-ORBITAL_ACTOR=alice go run ./examples/orbital deploy run --service api --version abcd123
+ORBITAL_ACTOR=alice go run ./examples/orbital deploy run --service api --release abcd123
 ORBITAL_ACTOR=alice go run ./examples/orbital exec --service api -- echo hello
 ```
 

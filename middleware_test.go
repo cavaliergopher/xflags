@@ -162,6 +162,7 @@ func TestMiddlewareSkippedWithoutHandler(t *testing.T) {
 	var stdout strings.Builder
 	app := NewCommand("app", "").
 		Stdout(&stdout).
+		HelpFlag().
 		Middleware(tr.step("root")).
 		Subcommands(NewCommand("sub", "").HandleFunc(tr.handler("handler", nil)))
 

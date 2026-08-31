@@ -8,7 +8,7 @@ import (
 // The exit codes a program should terminate with. A handler may name any
 // other code by returning an error that implements ExitCoder.
 const (
-	ExitCodeSuccess = 0 // A handler returned nil, or help was requested.
+	ExitCodeSuccess = 0 // A handler returned nil, help included.
 	ExitCodeFailure = 1 // A handler returned an error.
 	ExitCodeUsage   = 2 // Nothing ran: the command line or tree was wrong, or no handler.
 )

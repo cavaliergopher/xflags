@@ -159,10 +159,12 @@ job.
 
 **Long options**, in both forms: `--name value` and `--name=value`.
 
-**`--help`, and `-h` with it.** Reserved by the parser, handled before
-flags are looked up, and exiting zero — `docs/adr/exit-code-contract.md`
-says why that is success. Reserved means a command may not declare them;
-that is not checked today, so a declared `-h` is silently shadowed.
+**`--help`, and `-h` with it.** An ordinary flag a program adds with
+`Command.HelpFlag`, ending the parse and printing the help message,
+exiting zero — `docs/adr/exit-code-contract.md` says why that is success.
+Nothing is reserved and nothing is mounted unasked: a command declaring
+either name without the help flag simply owns it, and one declaring it
+alongside collides through the same check any two flags meet.
 
 **Permutation**, covered under guideline 9 above.
 
@@ -175,9 +177,10 @@ show the accepted spellings either, since there are dozens per flag.
 Nothing is lost that completion does not give back.
 
 **`--version` is the program's, not the library's.** The GNU standards ask
-every program to have one; the library has no version string to report and
-no place to put one that would not be a guess. A convenience for declaring
-it is a reasonable thing to add later.
+every program to have one; the library has no version string to report, so
+the program supplies it. `xflags.VersionFlag` and `xflags.VersionCommand`
+declare the two spellings from one constant, and neither is mounted unless
+the program mounts it.
 
 ### Attached values follow Go, not getopt
 

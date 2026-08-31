@@ -25,11 +25,15 @@ type Invocation struct {
 	// something else.
 	Forwarded []string
 
-	// HelpRequested reports that -h or --help was given, in which case Cmd is
-	// the command whose usage was asked for and no handler should run. The
-	// rest of the command line is not parsed and the flag rules are not
-	// checked, so help works even on an otherwise incomplete command line.
-	HelpRequested bool
+	// Interrupt is the flag that ended the parse, and is nil when the
+	// whole command line was read. Its Handler runs in place of Cmd's,
+	// which is the command that was active when the flag was given -- the
+	// one whose help is printed when the flag is the one asking for it.
+	//
+	// The rest of the command line is not parsed and the flag rules are
+	// not checked, so an interrupt answers even on an otherwise incomplete
+	// command line. See Flag.Handler.
+	Interrupt *Flag
 
 	// Stdin, Stdout and Stderr are the streams the handler should use in
 	// place of the process streams, so that whoever composes the binary

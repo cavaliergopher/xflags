@@ -29,7 +29,7 @@ func Run(ctx context.Context, cmd *Command) int {
 // RunWithArgs runs the command or subcommand named by args and returns the
 // exit code the program should terminate with:
 //
-//	0  the handler returned nil, or -h or --help was given
+//	0  the handler returned nil, or an interrupt such as --help ran
 //	1  the handler returned an error
 //	2  the command line or the command tree was wrong
 //
@@ -63,8 +63,9 @@ func RunWithArgs(ctx context.Context, cmd *Command, args ...string) int {
 //
 // Reach for it in a program that reports errors its own way, or embeds
 // xflags in a larger command loop: RunWithArgs is Dispatch plus the
-// reporting and the exit code. Asking for help is not an error, and still
-// prints the usage.
+// reporting and the exit code. An interrupt such as --help is not an
+// error: it runs in place of the command, and what it returns is
+// returned here.
 func Dispatch(ctx context.Context, cmd *Command, args ...string) error {
 	node, err := cmd.Compile()
 	if err != nil {
@@ -81,8 +82,8 @@ func Dispatch(ctx context.Context, cmd *Command, args ...string) error {
 // without dispatching. Every flag is reset to its default first, so
 // parsing the same tree twice gives the same result.
 //
-// If -h or --help was given, the returned Invocation has HelpRequested set
-// and nothing after it was checked.
+// If an interrupt such as --help was given, the returned Invocation names
+// it and nothing after it was checked.
 func Parse(cmd *Command, args ...string) (*Invocation, error) {
 	node, err := cmd.Compile()
 	if err != nil {
@@ -114,8 +115,8 @@ func dispatch(ctx context.Context, cmd *ir.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if inv.HelpRequested {
-		return inv.Cmd.Usage(inv.Stdout)
+	if inv.Interrupt != nil {
+		return inv.Interrupt.Handler(ctx, inv)
 	}
 	return inv.Cmd.Handler(ctx, inv)
 }

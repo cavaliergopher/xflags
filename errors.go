@@ -9,7 +9,7 @@ import (
 // The exit codes Run terminates with. A handler may name any other code by
 // returning an error that implements ExitCoder.
 const (
-	ExitCodeSuccess = ir.ExitCodeSuccess // A handler returned nil, or help was requested.
+	ExitCodeSuccess = ir.ExitCodeSuccess // A handler returned nil, help included.
 	ExitCodeFailure = ir.ExitCodeFailure // A handler returned an error.
 	ExitCodeUsage   = ir.ExitCodeUsage   // Nothing ran: the command line or tree was wrong, or no handler.
 )

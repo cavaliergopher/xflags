@@ -18,9 +18,9 @@ import (
 // The returned Invocation names cmd, or one of its subcommands if the
 // arguments specified one.
 //
-// If -h or --help are specified, parsing stops there and the returned
-// Invocation has HelpRequested set. That is not an error: it is for the
-// caller to report the command's usage.
+// If an interrupt is specified, such as the flag asking for help,
+// parsing stops there and the returned Invocation names it. That is not
+// an error: it is for the caller to run what the interrupt asks for.
 func Parse(cmd *ir.Command, args []string) (*ir.Invocation, error) {
 	if err := applyDefaults(cmd.Root); err != nil {
 		return nil, err
@@ -68,12 +68,12 @@ func applyDefaults(c *ir.Command) error {
 // here decides what argv means -- lex has already done that, before apply
 // ever runs.
 //
-// A help instruction anywhere in res wins over every recorded lex error,
+// An interrupt anywhere in res wins over every recorded lex error,
 // discarding them: this is what lets "cmd --bogus --help" print help
 // instead of failing, since a user who is asking for help does not need
-// their typo reported too. apply walks instructions up to the first help
-// instruction it finds -- earlier Set and Dispatch instructions still run,
-// so flags given before --help take effect -- and stops there: env vars are
+// their typo reported too. apply walks instructions up to the first
+// interrupt it finds -- earlier Set and Dispatch instructions still run,
+// so flags given before it take effect -- and stops there: env vars are
 // not read and NArgs is not checked.
 //
 // Otherwise, any recorded lex error stops apply before it starts: nothing
@@ -81,20 +81,21 @@ func applyDefaults(c *ir.Command) error {
 // a ValidateFunc can still stop apply partway through, since undoing a
 // caller-owned variable it already wrote is not this package's to do.
 func apply(root *ir.Command, res lexResult) (*ir.Invocation, error) {
-	helpAt := -1
+	interruptAt := -1
+	var interrupt instruction
 	for i, instr := range res.instructions {
-		if instr.kind == instHelp {
-			helpAt = i
+		if instr.kind == instInterrupt {
+			interruptAt, interrupt = i, instr
 			break
 		}
 	}
-	if helpAt == -1 && len(res.errs) > 0 {
+	if interruptAt == -1 && len(res.errs) > 0 {
 		return nil, res.errs[0]
 	}
 
 	limit := len(res.instructions)
-	if helpAt != -1 {
-		limit = helpAt
+	if interruptAt != -1 {
+		limit = interruptAt
 	}
 
 	active := root
@@ -116,8 +117,8 @@ func apply(root *ir.Command, res lexResult) (*ir.Invocation, error) {
 		}
 	}
 
-	if helpAt != -1 {
-		return invocationFor(active, forwarded, true), nil
+	if interruptAt != -1 {
+		return invocationFor(interrupt.cmd, forwarded, interrupt.flag), nil
 	}
 	if err := applyEnvVars(scope, counts); err != nil {
 		return nil, err
@@ -125,7 +126,7 @@ func apply(root *ir.Command, res lexResult) (*ir.Invocation, error) {
 	if err := validateNArgs(active, scope, counts); err != nil {
 		return nil, err
 	}
-	return invocationFor(active, forwarded, false), nil
+	return invocationFor(active, forwarded, nil), nil
 }
 
 // setFlag sets f's value to token, wrapping a failure the same way it
@@ -216,13 +217,13 @@ func validateNArgs(active *ir.Command, scope []*ir.Command, counts map[*ir.Flag]
 // invocationFor returns the Invocation apply reports for cmd having become
 // active, naming every command in path from the one Parse was called on to
 // cmd itself.
-func invocationFor(cmd *ir.Command, forwarded []string, helpRequested bool) *ir.Invocation {
+func invocationFor(cmd *ir.Command, forwarded []string, interrupt *ir.Flag) *ir.Invocation {
 	return &ir.Invocation{
-		Cmd:           cmd,
-		Forwarded:     forwarded,
-		HelpRequested: helpRequested,
-		Stdin:         cmd.Stdin,
-		Stdout:        cmd.Stdout,
-		Stderr:        cmd.Stderr,
+		Cmd:       cmd,
+		Forwarded: forwarded,
+		Interrupt: interrupt,
+		Stdin:     cmd.Stdin,
+		Stdout:    cmd.Stdout,
+		Stderr:    cmd.Stderr,
 	}
 }

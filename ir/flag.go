@@ -4,12 +4,12 @@ package ir
 // positional argument, produced by lowering a configuration tree with
 // (*xflags.Command).Compile.
 //
-// Every field marshals except Value, ValidateFunc and CompleteFunc,
-// tagged json:"-": they are behavior a formatter, a completion engine or
-// any other marshaler has no use for, so they are excluded by tag rather
-// than by staying unexported. See the package doc for the two-type model
-// this is one half of, and TestMarshalOmitsBehavior for what enforces the
-// tags.
+// Every field marshals except Value, ValidateFunc, CompleteFunc and
+// Handler, tagged json:"-": they are behavior a formatter, a completion
+// engine or any other marshaler has no use for, so they are excluded by
+// tag rather than by staying unexported. See the package doc for the
+// two-type model this is one half of, and TestMarshalOmitsBehavior for
+// what enforces the tags.
 type Flag struct {
 	// NamedOptions is the option each name the program declared is shown
 	// as: "--verbose" and "-v" rather than "verbose" and "v". It runs
@@ -105,6 +105,22 @@ type Flag struct {
 	// CompleteFunc, if set, completes the flag's value for a shell. See
 	// xflags.Complete.
 	CompleteFunc CompleteFunc `json:"-"`
+
+	// Handler, if set, makes the flag an interrupt: naming it on the
+	// command line ends the parse there and runs this in place of the
+	// handler of the command that was active, which is the command the
+	// resulting Invocation names.
+	//
+	// Nothing after the interrupt is read, and nothing the command line
+	// said is checked -- not the flag rules, not the environment
+	// variables -- so an interrupt answers even a command line that is
+	// otherwise wrong. That is what lets the flag asking for help print
+	// it beside a typo rather than reporting the typo instead.
+	//
+	// An interrupt binds no value: it takes none on the command line, so
+	// it has no Value, no default to restore, and no opposite for the
+	// command line to spell.
+	Handler HandlerFunc `json:"-"`
 }
 
 // String returns how the flag is shown wherever one string stands for it,

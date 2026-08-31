@@ -172,6 +172,23 @@ func ExampleBitField() {
 	// Output: File mode: -rw-r--r--
 }
 
+func ExampleCommand_VersionFlag() {
+	// What a build stamps into the binary. Both spellings print it, so
+	// the two can never disagree.
+	const version = "1.4.2"
+
+	cmd := NewCommand("orbital", "Deploy and operate services").
+		VersionFlag(version).
+		VersionCommand(version)
+
+	ctx := context.Background()
+	RunWithArgs(ctx, cmd, "--version")
+	RunWithArgs(ctx, cmd, "version")
+	// Output:
+	// orbital 1.4.2
+	// orbital 1.4.2
+}
+
 func ExampleFunc() {
 	var ip net.IP
 

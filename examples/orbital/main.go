@@ -21,10 +21,19 @@ import (
 	"github.com/cavaliergopher/xflags/examples/orbital/internal/middleware"
 )
 
+// version is what a build stamps into the binary. Both --version and the
+// "version" subcommand print it, so the two never disagree.
+const version = "1.4.2"
+
 func main() {
 	client := fleet.NewClient("us-west-2")
 
 	root := xflags.NewCommand("orbital", "Deploy and operate services on the fleet").
+		// Declared first, by convention, so both head the list of
+		// options. Both are interrupts, so both answer before --actor is
+		// missed: "orbital --version" works without an identity.
+		HelpFlag().
+		VersionFlag(version).
 		EnableCompletion().
 		// Declared once here and inherited by every command in the tree,
 		// so --trace times whichever one runs and --out redirects it. The
@@ -51,6 +60,10 @@ func main() {
 			logscmd.Command(client),
 			execcmd.Command(),
 			debug.Command(),
+			// An ordinary command, unlike the flag above, so the tree's
+			// rules still apply: "orbital version" wants --actor where
+			// "orbital --version" does not.
+			xflags.VersionCommand(version),
 		)
 
 	ctx, stop := xflags.NotifyContext(context.Background())

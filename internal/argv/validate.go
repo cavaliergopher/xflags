@@ -147,9 +147,7 @@ func ValidateNames(names []string, positional bool) []error {
 // either could never be matched; a leading "-" would decorate into
 // something the parser reads as two options; POSIX guideline 3 confines a
 // one-character name to one alphanumeric character, which is what lets a
-// short boolean read "=" as a delimiter; and the names reserved for help
-// are answered before the option table is consulted at all, so a flag
-// declaring one would silently never fire.
+// short boolean read "=" as a delimiter.
 func validateName(name string) error {
 	if name == "" {
 		return nil // an empty slot, which xflags.Flag.Aliases documents
@@ -163,9 +161,6 @@ func validateName(name string) error {
 		return fmt.Errorf("flag name must not contain whitespace: %q", name)
 	case utf8.RuneCountInString(name) == 1 && !isShortName(name):
 		return fmt.Errorf("short name must be one character from [A-Za-z0-9]: %q", name)
-	}
-	if decorated := optionOf(name); decorated == helpShortForm || decorated == helpLongForm {
-		return fmt.Errorf("flag name is reserved for help: %s", decorated)
 	}
 	return nil
 }

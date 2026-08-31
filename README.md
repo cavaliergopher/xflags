@@ -87,6 +87,33 @@ func Authorize(next xflags.HandlerFunc) xflags.HandlerFunc {
 }
 ```
 
+`Command.HelpFlag` adds the flag that prints a command's help message,
+answering to `--help` and `-h`. A program that reports a version adds one or
+both spellings of it, from the one string a build stamps into a constant:
+
+```go
+const version = "1.4.2"
+
+var App = xflags.NewCommand("orbital", "Operate the fleet").
+	HelpFlag().              // --help, -h
+	VersionFlag(version).    // --version
+	VersionCommand(version)  // orbital version
+```
+
+Add them to the root and every command below answers to them too, each
+printing its own help. They read nothing else on the line and check nothing,
+so they answer a half-typed command as well.
+
+Declaring them first is a convention, not a rule — it heads the list of
+options, which is where argparse puts them. The `HelpFlag`, `VersionFlag`
+and `VersionCommand` constructors build the same things for a program that
+wants them somewhere else: last, hidden, or under a heading of their own.
+
+All three are *interrupts*: a flag that ends the parse and runs in place of
+the command that was named. That is the whole of what makes `--help`
+special, and `xflags.Interrupt` declares one of your own. Nothing is mounted
+that a program did not ask for.
+
 ## Command line syntax
 
 The dialect is the POSIX Utility Syntax Guidelines plus GNU long options —
@@ -139,8 +166,10 @@ Five departures from `getopt_long` are deliberate, and
   `ForwardArgs` instead hands it to the handler unparsed, as
   `Invocation.Forwarded`. POSIX has no subcommands, so it has no case to
   forward arguments to.
-- **`-h` and `--help` are reserved** by the parser, which is GNU practice
-  rather than POSIX.
+- **`-h` and `--help` are mounted**, not reserved, which is GNU practice
+  rather than POSIX. They are an ordinary flag on the root of every tree,
+  so a program may rename or drop them with `Command.HelpFlag`, and a
+  command declaring either name collides with them like any other pair.
 
 ## Compiling a command
 

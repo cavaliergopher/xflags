@@ -43,6 +43,7 @@ func Example_sharedFlagGroups() {
 	// The program mounts every registered group with one line. From
 	// outside this package that line reads GroupSets(xflags.CommandLine).
 	app := NewCommand("myapp", "Do things, with logging").
+		HelpFlag().
 		GroupSets(CommandLine).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Fprintf(inv.Stdout, "level: %s\n", logFlags.Level)
@@ -70,6 +71,9 @@ func Example_sharedFlagGroups() {
 	// Usage: myapp [OPTIONS]
 	//
 	// Do things, with logging
+	//
+	// Options:
+	//   -h, --help  Show this help message and exit
 	//
 	// Logging options:
 	//    --log-level   Set log verbosity

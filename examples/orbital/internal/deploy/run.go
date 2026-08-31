@@ -15,7 +15,7 @@ import (
 func runCommand(client *fleet.Client) *xflags.Command {
 	var (
 		service    string
-		version    string
+		release    string
 		env        string
 		strategy   string
 		tags       []string
@@ -28,9 +28,13 @@ func runCommand(client *fleet.Client) *xflags.Command {
 			xflags.String(&service, "service", "", "Service to deploy").
 				Aliases("s").
 				Required(),
-			xflags.String(&version, "version", "", "Version to deploy, such as a git SHA").
+			// Not "--version": the root mounts one to report orbital's
+			// own, and a name claimed there is claimed for the whole
+			// tree. Compile reports the clash rather than letting a
+			// deploy silently print a version instead.
+			xflags.String(&release, "release", "", "Release to deploy, such as a git SHA").
 				Required().
-				Validate(validVersion),
+				Validate(validRelease),
 			xflags.String(&env, "env", "staging", "Environment to deploy to").
 				Choices("staging", "production").
 				ShowDefault(),
@@ -52,11 +56,11 @@ func runCommand(client *fleet.Client) *xflags.Command {
 					return xflags.Exitf(4,
 						"refusing to deploy %s to production without --confirm", service)
 				}
-				if err := client.Deploy(ctx, service, version); err != nil {
+				if err := client.Deploy(ctx, service, release); err != nil {
 					return err
 				}
 				fmt.Fprintf(inv.Stdout, "%s: deployed %s using the %s strategy (tags: %v)\n",
-					service, version, strategy, tags)
+					service, release, strategy, tags)
 				if skipHealth {
 					fmt.Fprintln(inv.Stderr, "warning: health checks skipped (--unsafe-skip-health-checks)")
 				}
@@ -65,10 +69,10 @@ func runCommand(client *fleet.Client) *xflags.Command {
 		)
 }
 
-// validVersion is a stand-in for real version validation.
-func validVersion(arg string) error {
+// validRelease is a stand-in for real release validation.
+func validRelease(arg string) error {
 	if len(arg) < 4 {
-		return fmt.Errorf("version %q is too short to identify a build", arg)
+		return fmt.Errorf("release %q is too short to identify a build", arg)
 	}
 	return nil
 }

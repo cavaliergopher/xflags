@@ -1,6 +1,7 @@
 package argv
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"slices"
@@ -16,7 +17,7 @@ type lexStep struct {
 	flag      string // how the flag names itself, e.g. "--name" or "OPERAND"
 	value     string
 	attached  bool
-	cmd       string // dispatch, help: the target command's name
+	cmd       string // dispatch, interrupt: the target command's name
 	forwarded []string
 }
 
@@ -89,7 +90,7 @@ func assertLexErrs(t *testing.T, want, got []string) {
 // keeping NamedOptions and ClaimedOptions consistent so that a fixture
 // matches on the command line exactly as a lowered flag does.
 func newOpt(names []string, takesValue bool) *ir.Flag {
-	named, claimed := OptionsFor(names, false, takesValue)
+	named, claimed := OptionsFor(names, false, takesValue, false)
 	return &ir.Flag{
 		NamedOptions:   named,
 		ClaimedOptions: claimed,
@@ -103,10 +104,26 @@ func opt(names ...string) *ir.Flag { return newOpt(names, false) }
 // valueOpt is newOpt for a flag that takes a value.
 func valueOpt(names ...string) *ir.Flag { return newOpt(names, true) }
 
+// interruptOpt is newOpt for an interrupt, the flag that ends the parse.
+// The handler is never called here -- lex only ever reads whether there
+// is one -- but it is what makes the flag an interrupt, so the fixture
+// declares one.
+func interruptOpt(names ...string) *ir.Flag {
+	named, claimed := OptionsFor(names, false, false, true)
+	return &ir.Flag{
+		NamedOptions:   named,
+		ClaimedOptions: claimed,
+		Handler: func(ctx context.Context, inv *ir.Invocation) error {
+			return nil
+		},
+	}
+}
+
 // lexOptTree returns a command with options only: two bare booleans
 // (alpha/bravo), a boolean with a long and short spelling (verbose), a
 // string flag with a long and short spelling (name), a value-taking short
-// (foxtrot), and an int (count). It declares no positionals or
+// (foxtrot), an int (count), and the interrupt that asks for help, which
+// Compile mounts on every root. It declares no positionals or
 // subcommands, so an operand is always "extra".
 func lexOptTree() *ir.Command {
 	return &ir.Command{
@@ -120,6 +137,7 @@ func lexOptTree() *ir.Command {
 				valueOpt("name", "n"),
 				valueOpt("foxtrot", "f"),
 				valueOpt("count", "c"),
+				interruptOpt("help", "h"),
 			},
 		}},
 	}
@@ -360,19 +378,19 @@ func TestLex(t *testing.T) {
 		{
 			"HelpAlone",
 			lexOptTree, []string{"--help"},
-			[]lexStep{{kind: instHelp, cmd: "app"}},
+			[]lexStep{{kind: instInterrupt, flag: "--help", cmd: "app"}},
 			nil,
 		},
 		{
 			"HelpShortSpelling",
 			lexOptTree, []string{"-h"},
-			[]lexStep{{kind: instHelp, cmd: "app"}},
+			[]lexStep{{kind: instInterrupt, flag: "--help", cmd: "app"}},
 			nil,
 		},
 		{
 			"HelpWinsOverAnEarlierError",
 			lexOptTree, []string{"--bogus", "--help"},
-			[]lexStep{{kind: instHelp, cmd: "app"}},
+			[]lexStep{{kind: instInterrupt, flag: "--help", cmd: "app"}},
 			[]string{"unrecognized option: --bogus"},
 		},
 		{
@@ -380,6 +398,33 @@ func TestLex(t *testing.T) {
 			lexOptTree, []string{"--", "-h"},
 			nil,
 			[]string{"extra operand: -h"},
+		},
+		{
+			"InterruptEndsAShortCluster",
+			lexOptTree, []string{"-vh"},
+			[]lexStep{
+				{kind: instSet, flag: "--verbose", value: "true"},
+				{kind: instInterrupt, flag: "--help", cmd: "app"},
+			},
+			nil,
+		},
+		{
+			"InterruptTakesNoAttachedValue",
+			lexOptTree, []string{"--help=false"},
+			nil,
+			[]string{"option takes no argument: --help"},
+		},
+		{
+			"InterruptTakesNoAttachedValueWhenShort",
+			lexOptTree, []string{"-h=false"},
+			nil,
+			[]string{"option takes no argument: -h"},
+		},
+		{
+			"InterruptHasNoNegatedSpelling",
+			lexOptTree, []string{"--no-help"},
+			nil,
+			[]string{"unrecognized option: --no-help"},
 		},
 		{
 			"ExtraOperand",

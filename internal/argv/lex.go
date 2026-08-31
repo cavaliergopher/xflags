@@ -11,14 +11,6 @@ import (
 // seen is special; see lex's doc comment.
 const terminator = "--"
 
-// The forms that ask for a command's help message. A command may not
-// declare either name for itself -- validation reserves both -- so the
-// lexer answers them before it consults the option table at all.
-const (
-	helpShortForm = "-h"
-	helpLongForm  = "--help"
-)
-
 func isShortOption(arg string) bool {
 	if len(arg) < 2 {
 		return false
@@ -47,7 +39,7 @@ const (
 	instSet instructionKind = iota
 	instDispatch
 	instForward
-	instHelp
+	instInterrupt
 )
 
 // instruction is one resolved step of argv, produced by lex and applied in
@@ -56,14 +48,14 @@ const (
 type instruction struct {
 	kind instructionKind
 
-	// set
+	// set, interrupt: the flag the instruction names.
 	flag     *ir.Flag
 	value    string
 	attached bool
 	argIndex int // index into argv of the token the value came from
 
-	// dispatch, help: the command the instruction concerns -- the one
-	// descended into, or the one active when help was seen.
+	// dispatch, interrupt: the command the instruction concerns -- the
+	// one descended into, or the one active when the interrupt was named.
 	cmd *ir.Command
 
 	// forward: every argument after the terminator, unparsed.
@@ -111,8 +103,8 @@ type lexResult struct {
 // consumes only itself and lexing continues in the same command, so a
 // command line with several mistakes reports all of them -- though today
 // apply only ever surfaces the first, see apply's doc comment -- and so
-// that a --help anywhere on an otherwise broken line still produces a help
-// instruction for apply to find.
+// that an interrupt anywhere on an otherwise broken line still produces
+// an instruction for apply to find.
 func lex(root *ir.Command, argv []string) lexResult {
 	lx := &lexer{argv: argv}
 	lx.enterCommand(root)
@@ -188,8 +180,7 @@ func (lx *lexer) enterCommand(cmd *ir.Command) {
 }
 
 // lexOne resolves one token from argv: an argument being forwarded past the
-// terminator, the terminator itself, a help request, an operand, or an
-// option.
+// terminator, the terminator itself, an operand, or an option.
 //
 // Guideline 10 gives "--" two readings and a command picks one. By default
 // it ends option processing, so every argument after it is an operand
@@ -201,6 +192,8 @@ func (lx *lexer) enterCommand(cmd *ir.Command) {
 //
 // Only the first "--" is special. Once options have ended, a later one is
 // an ordinary operand, as is a "-h" that would otherwise ask for help.
+// Nothing past the terminator names an option, so nothing past it can
+// interrupt either.
 func (lx *lexer) lexOne() {
 	idx := lx.pos
 	tok := lx.argv[idx]
@@ -217,10 +210,6 @@ func (lx *lexer) lexOne() {
 			} else {
 				lx.optionsEnded = true
 			}
-			return
-		}
-		if tok == helpShortForm || tok == helpLongForm {
-			lx.instructions = append(lx.instructions, instruction{kind: instHelp, cmd: lx.cmd})
 			return
 		}
 		if !isOperand(tok) {
@@ -286,6 +275,10 @@ func (lx *lexer) lexLongOption(tok string, idx int) {
 		lx.unrecognizedOption(name)
 		return
 	}
+	if o.flag.Handler != nil {
+		lx.emitInterrupt(o.flag, name, attached)
+		return
+	}
 
 	// An attached value is unambiguous by construction, so it binds
 	// whatever it looks like and whatever the flag's type. A boolean takes
@@ -322,6 +315,13 @@ func (lx *lexer) lexShortOptions(arg string, idx int) {
 			return
 		}
 		rest := arg[i+utf8.RuneLen(r):]
+
+		// An interrupt ends the parse, so it also ends the cluster: the
+		// names after it in the same argument are never reached.
+		if o.flag.Handler != nil {
+			lx.emitInterrupt(o.flag, name, len(rest) > 0 && rest[0] == '=')
+			return
+		}
 
 		if !o.flag.TakesValue {
 			// Guideline 5 spends the whole remainder on further names,
@@ -411,6 +411,30 @@ func (lx *lexer) emitSet(o resolvedOption, value string, attached bool, argIndex
 		value:    o.valueFor(value),
 		attached: attached,
 		argIndex: argIndex,
+	})
+}
+
+// emitInterrupt records that the option name reached an interrupt: a
+// flag that ends the parse and runs in place of the command's handler.
+// It names the command active here, which is the command the interrupt
+// concerns -- "app remote --help" asks about remote, whichever command
+// up the path declared the flag.
+//
+// An interrupt takes no argument, so one attached to it is a malformed
+// token rather than a value to bind. Recording the error and no
+// instruction is what keeps the two apart: apply discards the errors an
+// interrupt outran, and a line whose only interrupt was misspelled has
+// none to discard them.
+func (lx *lexer) emitInterrupt(f *ir.Flag, name string, attached bool) {
+	if attached {
+		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, f, name,
+			"option takes no argument: %s", name))
+		return
+	}
+	lx.instructions = append(lx.instructions, instruction{
+		kind: instInterrupt,
+		flag: f,
+		cmd:  lx.cmd,
 	})
 }
 

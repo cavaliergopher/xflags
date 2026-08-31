@@ -21,6 +21,9 @@ var translations = map[string]string{
 }
 
 var App = NewCommand("helloworld", "Print \"Hello, World!\"").
+	// By convention the flag that prints help is declared first, so it
+	// heads the list of options; nothing requires it.
+	HelpFlag().
 	Description(
 		"The helloworld utility writes \"Hello, World!\" to the standard\n"+
 			" output multiple languages.",
@@ -101,6 +104,7 @@ func Example() {
 	//   MESSAGE  Optional message to print
 	//
 	// Options:
+	//   -h, --help      Show this help message and exit
 	//   -n              Do not print the trailing newline character
 	//   -l, --language  Language (en, es, it or nl)
 	//

@@ -285,6 +285,7 @@ func ExampleCommand_FlagGroups() {
 	var endcoding string
 
 	cmd := NewCommand("helloworld", "").
+		HelpFlag().
 		// n flag defines how many times to print "Hello, World!".
 		Flags(Int(&n, "n", 1, "Print n times")).
 
@@ -302,7 +303,8 @@ func ExampleCommand_FlagGroups() {
 	// Usage: helloworld [OPTIONS]
 	//
 	// Options:
-	//   -n   Print n times
+	//   -h, --help  Show this help message and exit
+	//   -n          Print n times
 	//
 	// Language options:
 	//    --encoding  Text encoding
@@ -316,6 +318,7 @@ func ExampleFromFlagSet() {
 
 	// import the flagset into an xflags command as a flag group
 	cmd := NewCommand("helloworld", "").
+		HelpFlag().
 		FlagGroups(FromFlagSet("native", "Native options", flagSet)).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Println(*message)
@@ -335,6 +338,9 @@ func ExampleFromFlagSet() {
 	// Output:
 	// + helloworld --help
 	// Usage: helloworld [OPTIONS]
+	//
+	// Options:
+	//   -h, --help  Show this help message and exit
 	//
 	// Native options:
 	//   -m   Message to print
@@ -362,6 +368,7 @@ func ExampleCommand_Subcommands() {
 
 	// configure the main command with two subcommands and a global "n" flag.
 	cmd := NewCommand("widgets", "").
+		HelpFlag().
 		Flags(Int(&n, "n", 1, "Affect n widgets")).
 		Subcommands(create, destroy)
 
@@ -380,7 +387,8 @@ func ExampleCommand_Subcommands() {
 	// Usage: widgets [OPTIONS] COMMAND
 	//
 	// Options:
-	//   -n   Affect n widgets
+	//   -h, --help  Show this help message and exit
+	//   -n          Affect n widgets
 	//
 	// Commands:
 	//   create   Make new widgets
@@ -393,6 +401,7 @@ func ExampleCommand_Subcommands() {
 func ExampleCommand_Description() {
 	var n int
 	cmd := NewCommand("helloworld", "Say \"Hello, World!\"").
+		HelpFlag().
 		// Configure a description to print detailed information on the help
 		// page.
 		Description(
@@ -409,7 +418,8 @@ func ExampleCommand_Description() {
 	// Say "Hello, World!"
 	//
 	// Options:
-	//   -n   Print n times
+	//   -h, --help  Show this help message and exit
+	//   -n          Print n times
 	//
 	// This utility prints "Hello, World!" to the standard output.
 	// Print more than once with -n.
@@ -1071,10 +1081,11 @@ func TestValidateFlagName(t *testing.T) {
 	}
 }
 
-// TestValidateReservedHelpNames asserts that a flag cannot claim "-h" or
-// "--help": the parser resolves both before the flag table, so such a
-// declaration would silently never fire.
-func TestValidateReservedHelpNames(t *testing.T) {
+// TestHelpNamesCollideOnlyWhenMounted asserts that "-h" and "--help" are
+// not reserved. A command that mounts the help flag and then declares
+// either name collides with it through the ordinary check, and a command
+// that mounts no help flag may name them whatever it likes.
+func TestHelpNamesCollideOnlyWhenMounted(t *testing.T) {
 	var a string
 	for _, tt := range []struct {
 		name string
@@ -1084,36 +1095,45 @@ func TestValidateReservedHelpNames(t *testing.T) {
 		{
 			"LongHelp",
 			String(&a, "help", "", ""),
-			"--help: flag name is reserved for help: --help",
+			"test: flag declared more than once: --help",
 		},
 		{
 			"ShortH",
 			String(&a, "foo", "", "").Aliases("h"),
-			"--foo: flag name is reserved for help: -h",
+			"test: flag declared more than once: -h",
 		},
 		{
 			"ShortOnlyH", // a one-character name is spelled with one dash
 			String(&a, "h", "", ""),
-			"-h: flag name is reserved for help: -h",
+			"test: flag declared more than once: -h",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Parse(NewCommand("test", "").Flags(tt.flag))
+			_, err := Parse(NewCommand("test", "").HelpFlag().Flags(tt.flag))
 			if err == nil {
-				t.Fatal("expected error for a reserved help name, got nil")
+				t.Fatal("expected a collision with the help flag, got nil")
 			}
 			if got, want := humanMessage(err), tt.want; got != want {
 				t.Errorf("message = %q, want %q", got, want)
 			}
 		})
+
+		t.Run(tt.name+"LegalUnmounted", func(t *testing.T) {
+			if _, err := Parse(NewCommand("test", "").Flags(tt.flag)); err != nil {
+				t.Errorf("expected the name to be free: %v", err)
+			}
+		})
 	}
-	// Reservation is exact: "H" is not "h", "helper" is not "help".
+	// A collision is exact: "H" is not "h", "helper" is not "help", and
+	// "--no-help" belongs to nobody, since an interrupt has no negation.
 	t.Run("Legal", func(t *testing.T) {
 		var b string
-		cmd := NewCommand("test", "").Flags(
-			String(&a, "helper", "", "").Aliases("H"),
-			String(&b, "no-help", "", ""),
-		)
+		cmd := NewCommand("test", "").
+			HelpFlag().
+			Flags(
+				String(&a, "helper", "", "").Aliases("H"),
+				String(&b, "no-help", "", ""),
+			)
 		if _, err := Parse(cmd); err != nil {
 			t.Errorf("expected nearby names to remain legal: %v", err)
 		}
@@ -1276,6 +1296,7 @@ func TestRunExitCodes(t *testing.T) {
 	// handles returns a command whose handler returns err.
 	handles := func(err error) *Command {
 		return NewCommand("test", "").
+			HelpFlag().
 			HandleFunc(func(ctx context.Context, inv *Invocation) error {
 				return err
 			})
@@ -1301,7 +1322,7 @@ func TestRunExitCodes(t *testing.T) {
 			cmd:      handles(nil),
 			args:     []string{"--help"},
 			wantCode: 0,
-			wantOut:  "Usage: test\n",
+			wantOut:  "Usage: test [OPTIONS]\n",
 		},
 		{
 			name:     "HandlerError",
@@ -1314,7 +1335,7 @@ func TestRunExitCodes(t *testing.T) {
 			cmd:      handles(nil),
 			args:     []string{"--nope"},
 			wantCode: 2,
-			wantErr:  "Argument error: unrecognized option: --nope\nUsage: test\n",
+			wantErr:  "Argument error: unrecognized option: --nope\nUsage: test [OPTIONS]\n",
 		},
 		{
 			name:     "NoHandler",
@@ -1423,7 +1444,7 @@ func TestArgumentErrorsPrintUsage(t *testing.T) {
 			HandleFunc(func(ctx context.Context, inv *Invocation) error {
 				return nil
 			})
-		return NewCommand("test", "").Subcommands(sub)
+		return NewCommand("test", "").HelpFlag().Subcommands(sub)
 	}
 	t.Run("BadFlag", func(t *testing.T) {
 		code, stdout, stderr := runCaptured(newCmd(), "sub", "--nope")
@@ -1433,7 +1454,7 @@ func TestArgumentErrorsPrintUsage(t *testing.T) {
 		// The usage is the subcommand's, where the error happened, not the
 		// root's, where Run was called.
 		assertOutput(t, "stderr", stderr,
-			"Argument error: unrecognized option: --nope\nUsage: test sub\n")
+			"Argument error: unrecognized option: --nope\nUsage: test sub [OPTIONS]\n")
 		assertOutput(t, "stdout", stdout, "")
 	})
 	t.Run("NoHandler", func(t *testing.T) {
@@ -1442,7 +1463,7 @@ func TestArgumentErrorsPrintUsage(t *testing.T) {
 			t.Errorf("exit code = %d, want %d", got, want)
 		}
 		assertOutput(t, "stderr", stderr,
-			"Argument error: missing subcommand\nUsage: test COMMAND\n")
+			"Argument error: missing subcommand\nUsage: test [OPTIONS] COMMAND\n")
 		assertOutput(t, "stdout", stdout, "")
 	})
 	t.Run("Help", func(t *testing.T) {
@@ -1450,7 +1471,7 @@ func TestArgumentErrorsPrintUsage(t *testing.T) {
 		if got, want := code, 0; got != want {
 			t.Errorf("exit code = %d, want %d", got, want)
 		}
-		assertOutput(t, "stdout", stdout, "Usage: test COMMAND\n")
+		assertOutput(t, "stdout", stdout, "Usage: test [OPTIONS] COMMAND\n")
 		assertOutput(t, "stderr", stderr, "")
 	})
 	// The other two error classes stay one line: a handler error means the
@@ -1501,7 +1522,7 @@ func TestDispatchReturnsRawError(t *testing.T) {
 			HandleFunc(func(ctx context.Context, inv *Invocation) error {
 				return nil
 			})
-		return NewCommand("test", "").Subcommands(sub)
+		return NewCommand("test", "").HelpFlag().Subcommands(sub)
 	}
 	// dispatchCaptured is runCaptured for Dispatch.
 	dispatchCaptured := func(cmd *Command, args ...string) (err error, stdout, stderr string) {
@@ -1542,7 +1563,7 @@ func TestDispatchReturnsRawError(t *testing.T) {
 		if err != nil {
 			t.Errorf("err = %v, want nil", err)
 		}
-		assertOutput(t, "stdout", stdout, "Usage: test COMMAND\n")
+		assertOutput(t, "stdout", stdout, "Usage: test [OPTIONS] COMMAND\n")
 		assertOutput(t, "stderr", stderr, "")
 	})
 	t.Run("HandlerError", func(t *testing.T) {
@@ -1574,6 +1595,7 @@ func TestRunReportsOutputFailure(t *testing.T) {
 		{
 			name: "Help",
 			cmd: NewCommand("test", "").
+				HelpFlag().
 				HandleFunc(func(ctx context.Context, inv *Invocation) error {
 					return nil
 				}),
@@ -1646,24 +1668,144 @@ func TestHandlerReceivesInvocation(t *testing.T) {
 	}
 }
 
-// TestParseReportsHelpRequested asserts that asking for help is reported on
-// the Invocation rather than as an error, naming the subcommand whose usage
-// was asked for, so a caller doing its own dispatch can tell help apart from
-// a failure.
-func TestParseReportsHelpRequested(t *testing.T) {
+// TestParseReportsHelpAsAnInterrupt asserts that asking for help is reported
+// on the Invocation rather than as an error, naming both the flag that asked
+// and the subcommand whose help was asked for, so a caller doing its own
+// dispatch can tell an interrupt apart from a failure.
+func TestParseReportsHelpAsAnInterrupt(t *testing.T) {
 	add := NewCommand("add", "")
-	app := NewCommand("myapp", "").Subcommands(add)
+	app := NewCommand("myapp", "").HelpFlag().Subcommands(add)
 
 	inv, err := Parse(app, "add", "--help")
 	if err != nil {
 		t.Fatalf("Parse() = %v, want no error", err)
 	}
-	if !inv.HelpRequested {
-		t.Error("HelpRequested = false, want true")
+	if inv.Interrupt == nil {
+		t.Fatal("Interrupt = nil, want the help flag")
+	}
+	if got, want := inv.Interrupt.String(), "--help"; got != want {
+		t.Errorf("Interrupt = %v, want %v", got, want)
 	}
 	if want := add.String(); inv.Cmd.String() != want {
 		t.Errorf("Cmd = %v, want %v", inv.Cmd, want)
 	}
+}
+
+// TestInterruptRunsInPlaceOfTheHandler asserts that naming an interrupt
+// runs it rather than the command the arguments reached, and that the
+// invocation it is given names that command -- an interrupt reports on
+// whichever command was named, not on the one that declared it.
+func TestInterruptRunsInPlaceOfTheHandler(t *testing.T) {
+	var ran string
+	sub := NewCommand("sub", "").
+		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+			ran = "handler"
+			return nil
+		})
+	cmd := NewCommand("test", "").
+		Flags(Interrupt("where", "", func(ctx context.Context, inv *Invocation) error {
+			ran = inv.Cmd.FullName
+			return nil
+		})).
+		Subcommands(sub)
+
+	if code, _, stderr := runCaptured(cmd, "sub", "--where"); code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if got, want := ran, "test sub"; got != want {
+		t.Errorf("ran = %q, want %q", got, want)
+	}
+}
+
+// TestInterruptWinsOverAWrongCommandLine asserts that the rule --help has
+// always kept belongs to every interrupt: what it reports does not depend
+// on the rest of the line being right, so a typo beside it is discarded
+// rather than reported instead.
+func TestInterruptWinsOverAWrongCommandLine(t *testing.T) {
+	var ran bool
+	cmd := NewCommand("test", "").
+		Flags(
+			String(new(string), "name", "", "").Required(),
+			Interrupt("where", "", func(ctx context.Context, inv *Invocation) error {
+				ran = true
+				return nil
+			}),
+		)
+	if code, _, stderr := runCaptured(cmd, "--bogus", "--where"); code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if !ran {
+		t.Error("the interrupt did not run")
+	}
+}
+
+// TestInterruptTakesNoArgument asserts that an interrupt is given by name
+// alone: it binds no value, so an attached one is a malformed token rather
+// than something to set, and it has no negated spelling to answer to.
+func TestInterruptTakesNoArgument(t *testing.T) {
+	newCmd := func() *Command {
+		return NewCommand("test", "").
+			Flags(Interrupt("where", "", func(ctx context.Context, inv *Invocation) error {
+				return nil
+			}))
+	}
+	for _, tt := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"Attached", []string{"--where=x"}, "option takes no argument: --where"},
+		{"Negated", []string{"--no-where"}, "unrecognized option: --no-where"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(newCmd(), tt.args...)
+			if err == nil {
+				t.Fatal("expected an error, got nil")
+			}
+			if got := humanMessage(err); got != tt.want {
+				t.Errorf("message = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestHelpFlagNames asserts what Command.HelpFlag mounts: the two usual
+// names when given none, and only what it was given otherwise, which is how
+// a program keeps "-h" for something of its own.
+func TestHelpFlagNames(t *testing.T) {
+	t.Run("DefaultsToHelpAndH", func(t *testing.T) {
+		for _, arg := range []string{"--help", "-h"} {
+			inv, err := Parse(NewCommand("test", "").HelpFlag(), arg)
+			if err != nil {
+				t.Fatalf("Parse(%q) = %v, want no error", arg, err)
+			}
+			if inv.Interrupt == nil {
+				t.Errorf("Parse(%q): Interrupt = nil, want the help flag", arg)
+			}
+		}
+	})
+	t.Run("NamedLongOnly", func(t *testing.T) {
+		var host string
+		cmd := NewCommand("test", "").
+			HelpFlag("help").
+			Flags(String(&host, "host", "", "").Aliases("h"))
+
+		if _, err := Parse(cmd, "-h", "example.com"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := host, "example.com"; got != want {
+			t.Errorf("host = %q, want %q", got, want)
+		}
+	})
+	t.Run("NoneUnlessMounted", func(t *testing.T) {
+		_, err := Parse(NewCommand("test", ""), "--help")
+		if err == nil {
+			t.Fatal("expected an error, got nil")
+		}
+		if got, want := humanMessage(err), "unrecognized option: --help"; got != want {
+			t.Errorf("message = %q, want %q", got, want)
+		}
+	})
 }
 
 // TestHelpSkipsFlagRules asserts that help is reported for a command line the
@@ -1673,6 +1815,7 @@ func TestParseReportsHelpRequested(t *testing.T) {
 func TestHelpSkipsFlagRules(t *testing.T) {
 	var stdout strings.Builder
 	cmd := NewCommand("test", "").
+		HelpFlag().
 		Stdout(&stdout).
 		Flags(String(new(string), "name", "", "").Required()).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
@@ -1769,6 +1912,7 @@ func TestUsageFuncIsInherited(t *testing.T) {
 	var stdout strings.Builder
 	root := NewCommand("root", "Root summary").
 		Stdout(&stdout).
+		HelpFlag().
 		UsageFunc(func(w io.Writer, cmd *ir.Command) error {
 			_, err := fmt.Fprintf(w, "custom help for %s\n", cmd.FullName)
 			return err
@@ -1817,7 +1961,8 @@ func TestParseFromSubcommandResetsTheTree(t *testing.T) {
 // positional -- and marshals it, so a behavior field added later without
 // its tag fails here, in a test, rather than leaking into a program's
 // machine-readable output. A middleware is declared too, to pin that
-// wrapping a handler adds nothing to the description.
+// wrapping a handler adds nothing to the description, and a help flag, so
+// that a Flag's own Handler is in the tree as well.
 func TestMarshalOmitsBehavior(t *testing.T) {
 	var name, arg string
 	sub := NewCommand("sub", "Sub summary").
@@ -1834,6 +1979,7 @@ func TestMarshalOmitsBehavior(t *testing.T) {
 			String(&arg, "ARG", "", "positional usage").Positional(),
 		)
 	root := NewCommand("root", "Root summary").
+		HelpFlag().
 		UsageFunc(func(w io.Writer, cmd *ir.Command) error { return nil }).
 		Middleware(func(next HandlerFunc) HandlerFunc { return next }).
 		Stdin(strings.NewReader("")).

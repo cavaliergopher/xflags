@@ -20,6 +20,7 @@ type exampleCommand struct {
 // *Command.
 func (c *exampleCommand) Command() *Command {
 	return NewCommand("example", "An example CLI program").
+		HelpFlag().
 		Flags(
 			String(&c.Species, "species", "Gopher", "the species we are studying"),
 			String(&c.GopherType, "gopher_type", "Pocket", "the variety of gopher"),
@@ -67,8 +68,9 @@ func Example_customTypes() {
 	// An example CLI program
 	//
 	// Options:
-	//    --species      the species we are studying
-	//    --gopher_type  the variety of gopher
+	//   -h, --help         Show this help message and exit
+	//       --species      the species we are studying
+	//       --gopher_type  the variety of gopher
 	//
 	// + example --gopher_type 'Goldman's pocket gopher'
 	// Goldman's pocket gopher is a variety of species Gopher

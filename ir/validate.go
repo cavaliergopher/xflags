@@ -88,7 +88,14 @@ func validateFlag(f *Flag) error {
 			fail("option is not matchable: %s", option)
 		}
 	}
-	if f.Value == nil {
+	// An interrupt runs rather than binds, so it is the one flag with
+	// nothing to bind to, and the one flag an operand could never be:
+	// ending the parse is something a flag is named to do.
+	if f.Handler != nil {
+		if f.Positional {
+			fail("positional argument must not interrupt")
+		}
+	} else if f.Value == nil {
 		fail("flag must be bound to a value")
 	}
 	if f.MinCount < 0 {

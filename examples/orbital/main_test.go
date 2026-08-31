@@ -104,7 +104,7 @@ func TestOrbital(t *testing.T) {
 		},
 		{
 			name: "ValueOutsideChoicesIsAUsageError",
-			args: []string{"deploy", "run", "--service", "api", "--version", "abcd123",
+			args: []string{"deploy", "run", "--service", "api", "--release", "abcd123",
 				"--env", "bogus"},
 			env:    []string{actor},
 			code:   2,
@@ -118,7 +118,7 @@ func TestOrbital(t *testing.T) {
 		},
 		{
 			name: "HandlerNamesItsOwnExitCode",
-			args: []string{"deploy", "run", "--service", "api", "--version", "abcd123",
+			args: []string{"deploy", "run", "--service", "api", "--release", "abcd123",
 				"--env", "production"},
 			env:    []string{actor},
 			code:   4,
@@ -225,6 +225,39 @@ func TestOrbitalRedirectsOutput(t *testing.T) {
 	}
 }
 
+// TestOrbitalVersion exercises the two spellings of one version string,
+// and what separates them. The flag is an interrupt, so it answers before
+// the root's required --actor is missed; the subcommand is an ordinary
+// command, so the same rule applies to it as to any other.
+func TestOrbitalVersion(t *testing.T) {
+	const want = "orbital 1.4.2\n"
+
+	stdout, stderr, code := run(t, nil, "--version")
+	if got := code; got != 0 {
+		t.Errorf("exit code = %d, want 0 (stderr: %s)", got, stderr)
+	}
+	if got := stdout; got != want {
+		t.Errorf("stdout = %q, want %q", got, want)
+	}
+
+	stdout, stderr, code = run(t, []string{actor}, "version")
+	if got := code; got != 0 {
+		t.Errorf("exit code = %d, want 0 (stderr: %s)", got, stderr)
+	}
+	if got := stdout; got != want {
+		t.Errorf("stdout = %q, want %q", got, want)
+	}
+
+	// The subcommand is subject to the tree's rules, and the flag is not.
+	_, stderr, code = run(t, nil, "version")
+	if got, want := code, 2; got != want {
+		t.Errorf("exit code = %d, want %d", got, want)
+	}
+	if want := "Argument error: missing required argument: --actor\n"; !strings.HasPrefix(stderr, want) {
+		t.Errorf("stderr = %q, want it to start with %q", stderr, want)
+	}
+}
+
 // TestOrbitalHelp pins the whole help message. It guards the example, and
 // the formatter with it: every section orbital exercises -- imported
 // groups, a registered group, environment variables, the description --
@@ -247,8 +280,10 @@ const wantHelp = `Usage: orbital [OPTIONS] COMMAND
 Deploy and operate services on the fleet
 
 Options:
-   --actor  Identity performing this action, recorded for the audit trail
-   --out    Write command output to FILE instead of stdout
+  -h, --help     Show this help message and exit
+      --version  Show the version and exit
+      --actor    Identity performing this action, recorded for the audit trail
+      --out      Write command output to FILE instead of stdout
 
 Legacy options (deprecated):
    --legacy-metrics-addr  Address the legacy metrics sidecar listens on (superseded by --trace)
@@ -258,10 +293,11 @@ Telemetry options:
    --trace      Emit a timing trace for every command
 
 Commands:
-  config  Read and write orbital's local configuration
-  deploy  Deploy and inspect services running on the fleet
-  logs    Print recent log lines for one or more services
-  exec    Run a one-off command inside a service's container
+  config   Read and write orbital's local configuration
+  deploy   Deploy and inspect services running on the fleet
+  logs     Print recent log lines for one or more services
+  exec     Run a one-off command inside a service's container
+  version  Show the version
 
 Environment variables:
   ORBITAL_ACTOR  Identity performing this action, recorded for the audit trail
@@ -307,7 +343,7 @@ func TestOrbitalCompletion(t *testing.T) {
 			name:  "NegationsAreNotOfferedUnprompted",
 			words: []string{"orbital", "--"}, cword: "1",
 			want: "plain,--actor\nplain,--help\nplain,--legacy-metrics-addr\n" +
-				"plain,--log-level\nplain,--out\nplain,--trace\nnofiles,\n",
+				"plain,--log-level\nplain,--out\nplain,--trace\nplain,--version\nnofiles,\n",
 		},
 		{
 			// Once the word reaches for one they arrive. --trace is the

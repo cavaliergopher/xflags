@@ -399,8 +399,8 @@ func TestTerminatorEndsOptions(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			assertStrings(t, tt.want, files)
-			if inv.HelpRequested {
-				t.Error("HelpRequested = true, want false")
+			if inv.Interrupt != nil {
+				t.Errorf("Interrupt = %v, want none", inv.Interrupt)
 			}
 			if len(inv.Forwarded) != 0 {
 				t.Errorf("Forwarded = %v, want empty", inv.Forwarded)
@@ -435,13 +435,15 @@ func TestTerminatorSelectsSubcommand(t *testing.T) {
 // unrecognized option, since parsing stopped at the first error and never
 // reached --help; see wip/lexer.md and wip/batch-2026-08-27.md.
 func TestHelpWinsOverAnEarlierArgumentError(t *testing.T) {
-	cmd := NewCommand("test", "").Flags(String(new(string), "name", "", ""))
+	cmd := NewCommand("test", "").
+		Flags(String(new(string), "name", "", "")).
+		HelpFlag()
 	inv, err := Parse(cmd, "--bogus", "--help")
 	if err != nil {
 		t.Fatalf("Parse() = %v, want no error", err)
 	}
-	if !inv.HelpRequested {
-		t.Error("HelpRequested = false, want true")
+	if got, want := inv.Interrupt.String(), "--help"; got != want {
+		t.Errorf("Interrupt = %v, want %v", got, want)
 	}
 }
 

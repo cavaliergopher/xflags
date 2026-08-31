@@ -18,6 +18,7 @@ func compRootTree() *Command {
 	)
 	hiddenSub := NewCommand("hidden-sub", "").Hidden()
 	return NewCommand("app", "").
+		HelpFlag().
 		Flags(
 			Bool(new(bool), "verbose", false, "").Aliases("v"),
 			Bool(new(bool), "extra", false, "").Aliases("x").Hidden(),
@@ -63,7 +64,7 @@ func TestComplete(t *testing.T) {
 		{
 			"OptionsOfferedHiddenExcludedHelpPresent",
 			compRootTree, nil, "-",
-			[]string{"--env", "--help", "--name", "--verbose", "-e", "-n", "-v"},
+			[]string{"--env", "--help", "--name", "--verbose", "-e", "-h", "-n", "-v"},
 			ir.CompNoFileComp,
 		},
 		{
@@ -98,7 +99,7 @@ func TestComplete(t *testing.T) {
 			compRootTree, []string{"add"}, "-",
 			[]string{
 				"--env", "--help", "--name", "--tags", "--verbose",
-				"-e", "-n", "-t", "-v",
+				"-e", "-h", "-n", "-t", "-v",
 			},
 			ir.CompNoFileComp,
 		},

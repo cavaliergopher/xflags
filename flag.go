@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"slices"
@@ -56,6 +57,10 @@ type Flag struct {
 	validateFunc ir.ValidateFunc
 	completeFunc ir.CompleteFunc
 	value        ir.Value
+
+	// handlerFunc is what an interrupt runs, and is nil for every flag
+	// that binds a value instead. See Interrupt.
+	handlerFunc HandlerFunc
 }
 
 // Var returns a Flag that can be used to define a command line flag with
@@ -205,6 +210,85 @@ func Uint64(p *uint64, name string, value uint64, usage string) *Flag {
 	return c
 }
 
+// Interrupt returns a Flag that stops the command line being read and
+// runs fn, in place of the handler of whichever command was named:
+//
+//	Interrupt("version", "Show the version and exit", printVersion)
+//
+// Nothing after it on the command line is read and nothing the line said
+// is checked, so an interrupt answers even a command line that is wrong
+// somewhere else. That is what lets "app --bogus --help" print help
+// rather than report the typo.
+//
+// The flag takes no value and is given by name alone. See HelpFlag and
+// VersionFlag for the two every program tends to want.
+func Interrupt(name, usage string, fn HandlerFunc) *Flag {
+	return &Flag{
+		names:       []string{name},
+		usage:       usage,
+		minCount:    defaultMinNArgs,
+		maxCount:    defaultMaxNArgs,
+		handlerFunc: fn,
+	}
+}
+
+// HelpFlag returns the Interrupt that prints a command's help message.
+// Given no names it answers to "--help" and "-h"; given some, it answers
+// to those, so a program wanting "-h" for something of its own keeps the
+// long name alone:
+//
+//	NewCommand("ssh", "").Flags(HelpFlag("help"))
+//
+// Mount it like any other flag. Command.HelpFlag is the shorthand.
+func HelpFlag(names ...string) *Flag {
+	if len(names) == 0 {
+		names = []string{"help", "h"}
+	}
+	return Interrupt(canonicalName(names), "Show this help message and exit", printHelp).
+		Aliases(names[1:]...)
+}
+
+// VersionFlag returns the Interrupt that prints version, alongside the
+// name of the program it is mounted in. Given no names it answers to
+// "--version"; given some, it answers to those.
+//
+// Mount it like any other flag. Command.VersionFlag is the shorthand, and
+// this is the way to put it somewhere that shorthand cannot -- a flag
+// group of its own, or hidden.
+//
+// It is an interrupt, so it answers a command line that is otherwise
+// incomplete: a program with a required flag still reports its version
+// without one. See VersionCommand for the same thing spelled as a
+// subcommand.
+func VersionFlag(version string, names ...string) *Flag {
+	if len(names) == 0 {
+		names = []string{"version"}
+	}
+	return Interrupt(canonicalName(names), "Show the version and exit", printVersion(version)).
+		Aliases(names[1:]...)
+}
+
+// printHelp is the handler of the flag asking for help: the command the
+// command line named describes itself.
+func printHelp(ctx context.Context, inv *Invocation) error {
+	return inv.Cmd.Usage(inv.Stdout)
+}
+
+// printVersion returns the handler that prints version, which VersionFlag
+// and VersionCommand both run.
+//
+// The program's name comes from the root of the tree rather than from
+// the command that was named, so "orbital deploy --version" reports
+// orbital's version, whichever command the flag was given after. The
+// program supplies only the version itself, which is what a build stamps
+// into a constant.
+func printVersion(version string) HandlerFunc {
+	return func(ctx context.Context, inv *Invocation) error {
+		_, err := fmt.Fprintf(inv.Stdout, "%s %s\n", inv.Cmd.Root.Name, version)
+		return err
+	}
+}
+
 // String returns how the flag is shown to a reader, which is what it
 // compiles to: see (*ir.Flag).String.
 func (c *Flag) String() string {
@@ -345,13 +429,16 @@ func (c *Flag) Complete(fn ir.CompleteFunc) *Flag {
 // rest of flag configuration is not checked here; see ir.Flag's own
 // validation, which Compile runs over the whole lowered tree.
 func (c *Flag) lower(errs *[]error) *ir.Flag {
-	takesValue := c.positional || !isBoolValue(c.value)
+	// An interrupt is named and never given a value, so it is not
+	// written as if it took one, whatever it is bound to -- which is
+	// nothing.
+	takesValue := c.handlerFunc == nil && (c.positional || !isBoolValue(c.value))
 	// How a flag is written down is the command line's question rather
 	// than this package's, in both halves of it, so what it declared goes
 	// over and the answers come back whole: which options it has and
 	// which it only answers to, and what its value is called, including
 	// when the answer is none. See ir.Flag.
-	namedOptions, claimedOptions := argv.OptionsFor(c.names, c.positional, takesValue)
+	namedOptions, claimedOptions := argv.OptionsFor(c.names, c.positional, takesValue, c.handlerFunc != nil)
 	valueName := argv.ValueNameFor(canonicalName(c.names), c.valueName, c.positional, takesValue)
 	flag := &ir.Flag{
 		NamedOptions:   namedOptions,
@@ -371,6 +458,7 @@ func (c *Flag) lower(errs *[]error) *ir.Flag {
 		Value:          c.value,
 		ValidateFunc:   c.validateFunc,
 		CompleteFunc:   c.completeFunc,
+		Handler:        c.handlerFunc,
 	}
 	c.validateNames(flag, errs)
 	return flag

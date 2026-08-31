@@ -92,6 +92,17 @@ func NewCommand(name, summary string) *Command {
 	}).Flags()
 }
 
+// VersionCommand returns a Command named "version" that prints version,
+// alongside the name of the program it is mounted in.
+//
+// Mount it like any other subcommand. Command.VersionCommand is the
+// shorthand, and this is the way to mount it somewhere that shorthand
+// cannot -- under a subcommand rather than the root, or renamed.
+func VersionCommand(version string) *Command {
+	return NewCommand("version", "Show the version").
+		HandleFunc(printVersion(version))
+}
+
 func (c *Command) String() string { return c.name }
 
 // root returns the root of the command tree c belongs to, which is c itself
@@ -438,6 +449,42 @@ func (c *Command) Flags(flags ...*Flag) *Command {
 	}
 	c.defaultGroup.flags = append(c.defaultGroup.flags, flags...)
 	return c
+}
+
+// HelpFlag adds the flag that prints this command's help message. Given
+// no names it answers to "--help" and "-h".
+//
+//	var App = xflags.NewCommand("myapp", "My application").HelpFlag()
+//
+// Call it on the root: every command below answers to the flag too, and
+// each prints its own help. It is shorthand for adding HelpFlag with
+// Flags, which is the way to hide it, or to name it something else
+// entirely.
+func (c *Command) HelpFlag(names ...string) *Command {
+	return c.Flags(HelpFlag(names...))
+}
+
+// VersionFlag adds the flag that prints version, alongside the name of
+// the program it is mounted in. Given no names it answers to "--version".
+//
+//	var App = xflags.NewCommand("orbital", "").VersionFlag(version)
+//
+// It is an interrupt, so it answers a command line that is otherwise
+// incomplete: a program with a required flag still reports its version
+// without one. It is shorthand for adding VersionFlag with Flags, which
+// is the way to put it in a group of its own, or to hide it.
+func (c *Command) VersionFlag(version string, names ...string) *Command {
+	return c.Flags(VersionFlag(version, names...))
+}
+
+// VersionCommand adds a subcommand named "version" that prints version,
+// alongside the name of the program it is mounted in.
+//
+// It is an ordinary command, so the tree's rules still apply to it: a
+// required flag declared on an ancestor must be given here too. See
+// VersionFlag for the spelling that answers without one.
+func (c *Command) VersionCommand(version string) *Command {
+	return c.Subcommands(VersionCommand(version))
 }
 
 // FlagGroups adds groups of command line flags, built with NewFlagGroup or
