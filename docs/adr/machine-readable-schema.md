@@ -1,6 +1,6 @@
 # The description is a wire format with its own types
 
-Status: accepted, 2026-08-30. Not yet implemented.
+Status: accepted, 2026-08-30. Implemented 2026-08-31.
 
 ## Context
 
@@ -277,11 +277,13 @@ describes the binary it finds itself in without being wired to it.
 It is a function returning a fresh command rather than an exported
 variable, because a package-level `*Command` is mutable by anyone holding
 it and a second mounting of the same value is already a configuration
-error. It is not a chained setter such as `AddSchemaCommand`, which would
-put one feature on the general builder and invite a method for every
-feature after it; returning a command to `Subcommands` is the idiom
-packages contributing a subcommand already use, which `examples/orbital`
-demonstrates throughout.
+error. Returning a command to `Subcommands` is the idiom packages
+contributing a subcommand already use, which `examples/orbital`
+demonstrates throughout. A builder shorthand exists beside it,
+`Command.SchemaCommand`, mirroring `Command.VersionCommand` — a
+convention that postdates this document's first draft, which had
+rejected an `AddSchemaCommand`-style setter when there was no such
+family for it to belong to.
 
 The name is fixed rather than a parameter. The value of a convention is
 that a packager or an agent knows where to look without being told.

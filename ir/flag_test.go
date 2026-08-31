@@ -57,12 +57,12 @@ func TestFlagDescribeOptions(t *testing.T) {
 		{
 			name: "EmptySlotSkipped",
 			flag: &Flag{
-				NamedOptions: []string{"--colour", ""},
+				NamedOptions: []string{"--format", ""},
 				ClaimedOptions: map[string]Claim{
-					"--colour": {Source: "--colour"},
+					"--format": {Source: "--format"},
 				},
 			},
-			want: []desc.Option{{Option: "--colour"}},
+			want: []desc.Option{{Option: "--format"}},
 		},
 		{
 			name: "Positional",

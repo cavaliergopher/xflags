@@ -15,9 +15,9 @@ type Flag struct {
 	ValueName string `json:"valueName,omitempty"`
 
 	// Kind names the kind of value the flag takes: "bool", "string",
-	// "int", "uint", "float", "duration" or "opaque" for anything more
-	// specific a dialect does not name. It is absent for an interrupt,
-	// which binds no value and so has none to classify.
+	// "int", "uint", "float", "duration", or "opaque" for a custom value
+	// that does not say. It is absent for an interrupt, which binds no
+	// value and so has none to classify.
 	Kind string `json:"kind,omitempty"`
 
 	Usage string `json:"usage,omitempty"`
