@@ -376,6 +376,13 @@ captured from a live value so that it can be re-applied on a repeat parse,
 which is machinery for restoring state rather than something a command
 line means.
 
+A document is purely structural, and never reports runtime state. The
+sharp case is a flag bound to an environment variable: the document says
+the variable's name and never its resolved value, because an environment
+variable may hold a secret, and a description that resolved it would
+publish it to whatever asked. The same rule keeps a document stable
+across environments -- it describes the program, not the process.
+
 ## References
 
 Where a convention already exists for what a document should say, or for
