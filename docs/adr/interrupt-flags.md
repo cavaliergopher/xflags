@@ -65,6 +65,14 @@ An interrupt binds no value. It has no `Value`, no default to restore, and
 no negated spelling, and an attached value -- `--help=false` -- is a
 malformed token rather than something to set.
 
+An interrupt runs no middleware and depends on no flag being correct. It
+answers and takes no other action: a program whose middleware redirects
+output to a file writes no file for `--help`, and someone who wants the
+help message in a file redirects the shell. This is a guarantee, not a
+consequence of middleware happening to wrap handlers -- an interrupt that
+ran its ancestors' wrappers could be refused by an authorization check, or
+could act on a command line it never finished reading.
+
 The version builders take the string the program supplies, since the
 library has none to report, and print it beside the root command's name.
 

@@ -43,7 +43,9 @@ type HandlerFunc = ir.HandlerFunc
 //	}
 //
 // Do the work in the handler returned, not in the wrapper itself: the
-// wrapper may be called more than once per run.
+// wrapper may be called more than once per run. An interrupt, such as
+// --help, runs no wrapper: it runs in place of the handler rather than
+// as one.
 type Middleware func(HandlerFunc) HandlerFunc
 
 // Command configures a command that users may invoke from the command line.
@@ -427,7 +429,9 @@ func (c *Command) HandleFunc(handler HandlerFunc) *Command {
 //
 // A wrapper runs only around a handler, and only once the command line has
 // parsed, so it may read the flags the user set. Returning an error
-// without calling the handler refuses the invocation. See Middleware.
+// without calling the handler refuses the invocation. Neither an interrupt
+// such as --help nor a command that only groups subcommands runs a handler,
+// so neither runs a wrapper. See Middleware.
 func (c *Command) Middleware(mw ...Middleware) *Command {
 	c.middleware = append(c.middleware, mw...)
 	return c

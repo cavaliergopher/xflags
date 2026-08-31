@@ -66,9 +66,11 @@ The details that follow from that, each of which had an alternative:
   lives, and leaves `ir` with nothing to branch on. The substitute is not
   wrapped: a command that only groups subcommands must not run its
   ancestors' middleware.
-- **A wrapper runs only around a handler.** Help, an unparsable command
-  line and a command that only groups subcommands run no handler, so they
-  run no middleware either. A wrapper exists to wrap something.
+- **A wrapper runs only around a handler.** An interrupt, an unparsable
+  command line and a command that only groups subcommands run no handler,
+  so they run no middleware either. A wrapper exists to wrap something.
+  For an interrupt this is a guarantee rather than a consequence; see
+  `docs/adr/interrupt-flags.md`.
 - **Middleware is in the core package, not a subpackage.** A subpackage
   cannot reach a handler in order to wrap it: `Command.handlerFunc` is
   unexported, and `Subcommands` takes already-built commands another team
