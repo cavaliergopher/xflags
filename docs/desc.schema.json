@@ -64,10 +64,6 @@
         "title": {
           "type": "string"
         },
-        "mounted": {
-          "type": "boolean",
-          "description": "The command took this group from a shared set of flags contributed by another package, rather than declaring it itself."
-        },
         "flags": {
           "type": "array",
           "items": { "$ref": "#/$defs/flag" }

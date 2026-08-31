@@ -22,9 +22,8 @@ func fullyPopulatedDocument() *Document {
 			ForwardArgs: true,
 			FlagGroups: []*FlagGroup{
 				{
-					Name:    "options",
-					Title:   "Options",
-					Mounted: true,
+					Name:  "options",
+					Title: "Options",
 					Flags: []*Flag{
 						{
 							Name:  "force",
@@ -90,7 +89,6 @@ var wireKeyPaths = []string{
 	"command.flagGroups.flags.takesValue",
 	"command.flagGroups.flags.usage",
 	"command.flagGroups.flags.valueName",
-	"command.flagGroups.mounted",
 	"command.flagGroups.name",
 	"command.flagGroups.title",
 	"command.forwardArgs",

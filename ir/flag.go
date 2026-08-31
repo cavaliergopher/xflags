@@ -304,9 +304,8 @@ type FlagGroup struct {
 // Describe returns g's description, and every flag in it.
 func (g *FlagGroup) Describe() *desc.FlagGroup {
 	group := &desc.FlagGroup{
-		Name:    g.Name,
-		Title:   g.Title,
-		Mounted: g.Mounted,
+		Name:  g.Name,
+		Title: g.Title,
 	}
 	for _, flag := range g.Flags {
 		group.Flags = append(group.Flags, flag.Describe())

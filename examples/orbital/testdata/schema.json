@@ -86,7 +86,6 @@
       {
         "name": "telemetry",
         "title": "Telemetry options",
-        "mounted": true,
         "flags": [
           {
             "name": "log-level",
