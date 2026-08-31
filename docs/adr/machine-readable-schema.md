@@ -164,11 +164,29 @@ nothing needs to inspect a `Value` and `flag.Value` is untouched:
   implementing an optional interface, in the manner `BoolValue` already
   establishes for `IsBoolFlag`.
 
+The optional interface is the only way an author states a kind, and that
+is deliberate. A configuration setter -- `Flag.Kind(...)` at the mount
+site -- was considered and rejected: a custom value type is written once,
+in a shared library, and mounted by teams that do not own it, so the type
+must be fully formed in the one place that defines it rather than leaving
+each mounter free to restate, and misstate, what its package already
+knows. Writing a custom value is the advanced case, and its audience is
+exactly the one comfortable implementing one more method.
+
+For the same reason the callback constructor, `Func`, always describes as
+`opaque`: it is the anonymous case, and anonymity is why it can claim no
+kind. An author who knows the kind writes a small value type in the
+library that owns the parsing.
+
 The set is `bool`, `string`, `int`, `uint`, `float`, `duration` and
 `opaque`, and is deliberately coarser than Go's types. A command line
 accepts a decimal integer whether the variable behind it is an `int` or an
 `int64`, and `ir` models what a program means rather than how it is built.
-Adding a kind later is additive.
+Adding a kind later is additive. The set is also closed to the program:
+a kind is one of these words or it is not a kind, since a consumer
+switching on it relies on the vocabulary being shared, the same reasoning
+that keeps an option's effect a single opaque term rather than a
+per-program vocabulary.
 
 ### A flag's name is undecorated, and identifies it
 
