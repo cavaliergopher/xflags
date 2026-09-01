@@ -127,10 +127,8 @@ func InterruptCommand(name, summary string, fn HandlerFunc) *Command {
 // VersionCommand returns a Command named "version" that prints version,
 // alongside the name of the program it is mounted in.
 //
-// It is an interrupt, so it answers a command line that is otherwise
-// incomplete: a program with a required flag still reports its version
-// from "app version" without one, the same as "app --version" already
-// does. See VersionFlag for the same thing spelled as a flag.
+// Like HelpFlag, it ends the program before any handlers run. See
+// VersionFlag for the same thing spelled as a flag.
 //
 // Mount it like any other subcommand. Command.VersionCommand is the
 // shorthand, and this is the way to mount it somewhere that shorthand
@@ -534,10 +532,8 @@ func (c *Command) HelpFlag(names ...string) *Command {
 //
 //	var App = xflags.NewCommand("orbital", "").VersionFlag(version)
 //
-// It is an interrupt, so it answers a command line that is otherwise
-// incomplete: a program with a required flag still reports its version
-// without one. It is shorthand for adding VersionFlag with Flags, which
-// is the way to put it in a group of its own, or to hide it.
+// It is shorthand for adding VersionFlag with Flags, which is the way
+// to put it in a group of its own, or to hide it.
 func (c *Command) VersionFlag(version string, names ...string) *Command {
 	return c.Flags(VersionFlag(version, names...))
 }
@@ -545,9 +541,8 @@ func (c *Command) VersionFlag(version string, names ...string) *Command {
 // VersionCommand adds a subcommand named "version" that prints version,
 // alongside the name of the program it is mounted in.
 //
-// It is an interrupt, so it answers a command line that is otherwise
-// incomplete: a program with a required flag still reports its version
-// without one. See VersionFlag for the same thing spelled as a flag.
+// Like HelpFlag, it ends the program before any handlers run. See
+// VersionFlag for the same thing spelled as a flag.
 func (c *Command) VersionCommand(version string) *Command {
 	return c.Subcommands(VersionCommand(version))
 }

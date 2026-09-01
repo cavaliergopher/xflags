@@ -279,10 +279,8 @@ func HelpFlag(names ...string) *Flag {
 // this is the way to put it somewhere that shorthand cannot -- a flag
 // group of its own, or hidden.
 //
-// It is an interrupt, so it answers a command line that is otherwise
-// incomplete: a program with a required flag still reports its version
-// without one. See VersionCommand for the same thing spelled as a
-// subcommand.
+// Like HelpFlag, it ends the program before any handlers run. See
+// VersionCommand for the same thing spelled as a subcommand.
 func VersionFlag(version string, names ...string) *Flag {
 	if len(names) == 0 {
 		names = []string{"version"}
