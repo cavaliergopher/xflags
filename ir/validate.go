@@ -113,7 +113,7 @@ func validateFlag(f *Flag) error {
 	// settled before this, while they are still undecorated.
 	for _, option := range f.NamedOptions {
 		if option == "" {
-			continue // an empty slot, which xflags.Flag.Aliases documents
+			continue // an empty slot, which climux.Flag.Aliases documents
 		}
 		if !f.Claims(option) {
 			fail("option is not matchable: %s", option)

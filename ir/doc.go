@@ -1,11 +1,11 @@
-// Package ir is the compiled form of an xflags command tree.
+// Package ir is the compiled form of an climux command tree.
 //
-// xflags splits every concept into two types. The configuration type --
-// xflags.Command, xflags.Flag, xflags.FlagGroup -- is what a program builds
+// climux splits every concept into two types. The configuration type --
+// climux.Command, climux.Flag, climux.FlagGroup -- is what a program builds
 // with chained setters: ergonomic to write, but opaque, since everything
 // it holds -- a bound Value, a handler, a stream -- lives in unexported
 // fields a formatter or a parser cannot reach. Compiling a configuration
-// tree with (*xflags.Command).Compile lowers it to the type declared
+// tree with (*climux.Command).Compile lowers it to the type declared
 // here, the implementation type: the same information, plus resolution --
 // ancestry via Ancestry, a full name and resolved streams computed once
 // while lowering, a flag's default rendered as a string -- with every
@@ -28,8 +28,8 @@
 // the type, only by asking for it by name.
 //
 // Most programs never import this package. Building and running a command
-// tree -- xflags.NewCommand, xflags.Run, xflags.Dispatch --
-// never touches it: xflags compiles a tree internally wherever compiling
+// tree -- climux.NewCommand, climux.Run, climux.Dispatch --
+// never touches it: climux compiles a tree internally wherever compiling
 // one is called for. Reach for ir directly only when writing something
 // that operates on the compiled form itself, such as a custom Value, a
 // CompleteFunc, a UsageFunc, or a tool that walks or marshals a command

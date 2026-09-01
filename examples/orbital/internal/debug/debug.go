@@ -8,14 +8,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cavaliergopher/xflags"
+	"go.hotsrc.dev/climux"
 )
 
 // Command returns the hidden "debug" command.
-func Command() *xflags.Command {
-	return xflags.NewCommand("debug", "Internal diagnostics, not for regular use").
+func Command() *climux.Command {
+	return climux.NewCommand("debug", "Internal diagnostics, not for regular use").
 		Hidden().
-		HandleFunc(func(ctx context.Context, inv *xflags.Invocation) error {
+		HandleFunc(func(ctx context.Context, inv *climux.Invocation) error {
 			fmt.Fprintln(inv.Stdout, "debug: dumping internal state (stub)")
 			return nil
 		})

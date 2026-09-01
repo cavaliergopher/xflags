@@ -3,7 +3,7 @@ package argv
 import (
 	"unicode/utf8"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // terminator ends option processing by default, or, on a command that opted

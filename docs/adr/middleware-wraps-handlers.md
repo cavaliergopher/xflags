@@ -24,10 +24,10 @@ reasons that compound:
   it.
 
 Until now the only answer was the `Wrap` idiom shown in
-`example_di_test.go` — a closure returning a `HandlerFunc`, which xflags
+`example_di_test.go` — a closure returning a `HandlerFunc`, which climux
 does not provide so much as permit — registered by each command at the
 point it declares its handler. That leaves the decision with the wrong
-party. xflags exists so that many teams can compose one binary, and the
+party. climux exists so that many teams can compose one binary, and the
 team that decides a subtree must be measured, or audited, is the one
 assembling it.
 
@@ -80,7 +80,7 @@ The details that follow from that, each of which had an alternative:
   open a seam for it, at which point the seam is the feature. The only
   question left is whether that seam is a parameter to `Run` or a field on
   `Command`, and a parameter cannot vary by subtree, which is the whole
-  point. A subpackage would still earn its place if xflags ever shipped
+  point. A subpackage would still earn its place if climux ever shipped
   middleware *implementations*, which is a separate decision.
 
 ## Consequences
@@ -88,7 +88,7 @@ The details that follow from that, each of which had an alternative:
 - Wrapping a handler in a function of your own stays a usage idiom rather
   than becoming a library feature. A handler is a plain function type, so
   an author who wants to hand one dependencies of its own writes a closure
-  and needs nothing from xflags. Middleware neither replaces that nor is
+  and needs nothing from climux. Middleware neither replaces that nor is
   asked to: a `Middleware` is a `HandlerFunc` on both sides, so it cannot
   change what a handler is given.
 - A nil middleware is a configuration error, reported by `Compile` against

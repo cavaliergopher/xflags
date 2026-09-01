@@ -1,13 +1,13 @@
 // Package legacy stands in for an older internal library that declared its
-// options with Go's flag package before orbital adopted xflags.
-// xflags.FromFlagSet lets orbital mount those options as an ordinary flag
+// options with Go's flag package before orbital adopted climux.
+// climux.FromFlagSet lets orbital mount those options as an ordinary flag
 // group without the library itself changing.
 package legacy
 
 import (
 	"flag"
 
-	"github.com/cavaliergopher/xflags"
+	"go.hotsrc.dev/climux"
 )
 
 // FlagSet holds the options this stand-in legacy library declares itself,
@@ -20,10 +20,10 @@ var metricsAddr = FlagSet.String(
 	"Address the legacy metrics sidecar listens on (superseded by --trace)",
 )
 
-// FlagGroup imports FlagSet into an xflags FlagGroup for mounting on a
+// FlagGroup imports FlagSet into an climux FlagGroup for mounting on a
 // command with Command.FlagGroups.
-func FlagGroup() *xflags.FlagGroup {
-	return xflags.FromFlagSet("legacy", "Legacy options (deprecated)", FlagSet)
+func FlagGroup() *climux.FlagGroup {
+	return climux.FromFlagSet("legacy", "Legacy options (deprecated)", FlagSet)
 }
 
 // MetricsAddr returns the configured legacy metrics address.

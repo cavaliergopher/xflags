@@ -6,28 +6,28 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cavaliergopher/xflags"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/middleware"
+	"go.hotsrc.dev/climux"
+	"go.hotsrc.dev/climux/examples/orbital/internal/middleware"
 )
 
 // setCommand returns "orbital config set KEY VALUE". It mutates the local
 // store, so it declares middleware.Audit like the other mutating
 // commands; "config get" does not.
-func setCommand() *xflags.Command {
+func setCommand() *climux.Command {
 	var key, value string
-	return xflags.NewCommand("set", "Set a configuration key to a value").
+	return climux.NewCommand("set", "Set a configuration key to a value").
 		Middleware(middleware.Audit).
 		Flags(
-			xflags.String(&key, "KEY", "", "Configuration key to set").
+			climux.String(&key, "KEY", "", "Configuration key to set").
 				Positional().
 				Required().
 				Validate(validKey),
-			xflags.String(&value, "VALUE", "", "New value").
+			climux.String(&value, "VALUE", "", "New value").
 				Positional().
 				Required(),
 		).
 		HandleFunc(
-			func(ctx context.Context, inv *xflags.Invocation) error {
+			func(ctx context.Context, inv *climux.Invocation) error {
 				store[key] = value
 				fmt.Fprintf(inv.Stdout, "%s = %s\n", key, value)
 				return nil

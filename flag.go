@@ -1,4 +1,4 @@
-package xflags
+package climux
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cavaliergopher/xflags/internal/argv"
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/internal/argv"
+	"go.hotsrc.dev/climux/ir"
 )
 
 const (
@@ -574,7 +574,7 @@ func FromFlagSet(name, title string, fs *flag.FlagSet) *FlagGroup {
 
 // kindFromFlagValue recovers the Kind of a value imported from a
 // flag.FlagSet, so a flag declared with any of the flag package's own
-// constructors is described as precisely as one declared with xflags's.
+// constructors is described as precisely as one declared with climux's.
 // The concrete type flag.Getter's Get returns classifies the eight
 // value-carrying constructors, flag.Bool through flag.Duration; a value
 // answering IsBoolFlag, which is how flag.BoolFunc marks itself, is a

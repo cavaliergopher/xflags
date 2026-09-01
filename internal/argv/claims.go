@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 const (
@@ -52,7 +52,7 @@ func OptionsFor(names []string, positional, takesValue, interrupts bool) (named 
 	for i, name := range names {
 		named[i] = optionOf(name)
 		if named[i] == "" {
-			continue // an empty slot, which xflags.Flag.Aliases documents
+			continue // an empty slot, which climux.Flag.Aliases documents
 		}
 		claimed[named[i]] = ir.Claim{Source: named[i]}
 	}

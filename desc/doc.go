@@ -1,4 +1,4 @@
-// Package desc is the wire format a compiled xflags command tree lowers
+// Package desc is the wire format a compiled climux command tree lowers
 // to: plain data describing a program's command line surface, meant to be
 // marshaled, published and read by something other than the program
 // itself -- a docs generator, a completion script, a diff run in CI, an
@@ -31,5 +31,6 @@
 // # Schema
 //
 // The format is also published as a JSON Schema document, at
-// docs/desc.schema.json.
+// docs/desc.schema.json, and published at
+// https://static.hotsrc.dev/climux/schema/v1.json.
 package desc

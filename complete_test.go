@@ -1,9 +1,9 @@
-package xflags
+package climux
 
 import (
 	"testing"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // compRootTree returns a command with a mix of flag kinds for the

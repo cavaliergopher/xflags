@@ -1,4 +1,4 @@
-package xflags
+package climux
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 func assertBool(t *testing.T, expect, actual bool) bool {

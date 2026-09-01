@@ -1,4 +1,4 @@
-package xflags
+package climux
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 func TestBitField(t *testing.T) {

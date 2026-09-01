@@ -1,8 +1,8 @@
-// Package argv reads a command line against a compiled xflags command
+// Package argv reads a command line against a compiled climux command
 // tree.
 //
-// Two compilations meet in xflags and it helps to keep them apart. The
-// command tree is compiled: (*xflags.Command).Compile lowers what a
+// Two compilations meet in climux and it helps to keep them apart. The
+// command tree is compiled: (*climux.Command).Compile lowers what a
 // program declared into the ir package, which is what the program means.
 // The command line is then read against that result, which is what this
 // package does. So ir is the artifact and argv is the machine that runs

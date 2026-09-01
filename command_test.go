@@ -1,4 +1,4 @@
-package xflags
+package climux
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 func TestSubcommands(t *testing.T) {
@@ -245,7 +245,7 @@ func TestCommandLineage(t *testing.T) {
 
 // TestSubcommandAlreadyParented asserts that Subcommands does not steal an
 // already-parented command -- such as a shared registry like
-// xflags.CommandLine -- and that the mismatch is reported as a
+// climux.CommandLine -- and that the mismatch is reported as a
 // ConfigError rather than silently corrupting the original relationship.
 func TestSubcommandAlreadyParented(t *testing.T) {
 	a, b, shared := NewCommand("a", ""), NewCommand("b", ""), NewCommand("shared", "")
@@ -372,7 +372,7 @@ func ExampleFromFlagSet() {
 	flagSet := flag.NewFlagSet("native", flag.ExitOnError)
 	message := flagSet.String("m", "Hello, World!", "Message to print")
 
-	// import the flagset into an xflags command as a flag group
+	// import the flagset into an climux command as a flag group
 	cmd := NewCommand("helloworld", "").
 		HelpFlag().
 		FlagGroups(FromFlagSet("native", "Native options", flagSet)).
@@ -491,7 +491,7 @@ func ExampleCommand_ForwardArgs() {
 		).
 		ForwardArgs(). // enable the "--" terminator
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
-			// read verbose argument which was parsed by xflags
+			// read verbose argument which was parsed by climux
 			if verbose {
 				fmt.Printf("+ echo %s\n", strings.Join(inv.Forwarded, " "))
 			}
@@ -1012,7 +1012,7 @@ func TestConfigErrorReportsOnRunsStderr(t *testing.T) {
 
 // TestArgumentErrorWrapsArgumentErrorOnce asserts that an ArgumentError
 // wrapping another, such as Choices reporting a bad value, prints its
-// wrapped message plain: Error() tags it "xflags: " for a Go caller, and
+// wrapped message plain: Error() tags it "climux: " for a Go caller, and
 // that tag must not leak into the sentence Run prints for a human.
 func TestArgumentErrorWrapsArgumentErrorOnce(t *testing.T) {
 	cmd := NewCommand("test", "").Flags(

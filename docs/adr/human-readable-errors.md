@@ -10,11 +10,11 @@ package always meant that context to be useful beyond a human reading
 stderr. There are really three audiences for one of these errors, and they
 want different things:
 
-- A human at a terminal, running a binary someone else built with xflags,
+- A human at a terminal, running a binary someone else built with climux,
   needs a short, unix-ish sentence.
 - A Go caller — code embedding the library, catching the error from
   `Parse` or a handler — wants to know, unambiguously, that this error
-  came from xflags, the moment it prints or logs it without going through
+  came from climux, the moment it prints or logs it without going through
   `Run`'s own reporting.
 - An agent or script driving the binary from outside, with only its
   stdout/stderr to read, wants structure: which flag, which argument, not
@@ -22,7 +22,7 @@ want different things:
 
 A prior pass tried to serve the first and third audience from one string,
 rendering `String()` as `cmd=ping flag=--ip arg="256.0.0.1" msg="..."`. It
-also hardcoded `"xflags: "` onto the front of both types' `Error()`. Both
+also hardcoded `"climux: "` onto the front of both types' `Error()`. Both
 choices were wrong for the same reason: these strings are printed by
 *other people's programs*. A debug dump reads as noise to the human who
 mistyped a flag, and a library announcing its own name inside a host
@@ -50,7 +50,7 @@ Call sites fold the specifics into `Message` itself, e.g.
 before it's attached to any command), and has no prefix at all if it has
 neither. `Run` prints
 `String()` with its own humanized prefix, never `Error()`, so none of this
-ever carries xflags' own name into a host program's console.
+ever carries climux' own name into a host program's console.
 
 The prefix names who caused the failure, because that is what tells a
 reader whether it is theirs to fix:
@@ -67,14 +67,14 @@ it as an ordinary failure. It carries more than the exit code does:
 `ConfigError` and `ArgumentError` both exit 2, so the prefix is the only
 thing telling a malformed program apart from a malformed command line.
 
-**Go callers — `Error()`.** `Error()` is `"xflags: " + String()`, on both
+**Go callers — `Error()`.** `Error()` is `"climux: " + String()`, on both
 types. It exists for a Go caller that catches the error value directly —
 `fmt.Println(err)`, `%w`/`%v` into its own logs — without going through
-`Run`'s reporting, where knowing at a glance that xflags produced it is
+`Run`'s reporting, where knowing at a glance that climux produced it is
 useful rather than noise. Because `Run` always prefers `String()` for its
 own output, this prefix reaches a real program's console only when that
 program chose to print the raw error itself instead of using `Run`.
-`fallbackToStderr` is unrelated to this: it hardcodes its own `"xflags: "`
+`fallbackToStderr` is unrelated to this: it hardcodes its own `"climux: "`
 because it reports a plain I/O failure — a write that failed — not one of
 these error types, and it needed that literal branding before either type
 existed.
@@ -88,7 +88,7 @@ stream changes. `Cmd` and `Flag` detail should project through the
 existing `ir.Command`/`ir.Flag` types `Compile()` already produces,
 rather than a second schema for describing a command or flag. Left open,
 tracked as `wip/TODO.md` item 28: the flag's exact name and scope — which
-overlaps item 18's still-undecided `--xflags-describe`-style flag and is
+overlaps item 18's still-undecided `--climux-describe`-style flag and is
 worth designing once, not twice — and whether the JSON goes to stdout or
 stderr.
 

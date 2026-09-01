@@ -4,7 +4,7 @@ Status: accepted, 2026-08-23.
 
 ## Context
 
-xflags exists so that many teams can compose one binary. A team ships a
+climux exists so that many teams can compose one binary. A team ships a
 `*Command`; somebody else decides where in the tree it hangs, and may rename
 or move it later. That is the premise the whole package is built on.
 

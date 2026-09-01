@@ -106,6 +106,12 @@ and no code generation. What keeps a format stable is the same either way:
 an explicit spec, a version, and goldens. Hand-written description types
 fill the role a `.proto` would have.
 
+The spec lives at docs/desc.schema.json and is served as
+https://static.hotsrc.dev/climux/schema/v1.json, which is the `$id` a
+document's consumer resolves. Serving it from a domain we control rather
+than from a repository host keeps it addressable if the code moves, the
+same reasoning that puts the module behind a vanity path.
+
 ### Documents are versioned and grow additively
 
 The envelope carries the version, so the content does not have to. The
@@ -277,13 +283,13 @@ hand-built `ir` trees exist only in tests survives.
 
 ### A program mounts the description command itself
 
-`xflags.SchemaCommand() *Command` returns a command whose handler writes
+`climux.SchemaCommand() *Command` returns a command whose handler writes
 the document for the whole binary to `inv.Stdout`. A program mounts it
 where it wants:
 
 ```go
-root := xflags.NewCommand("orbital", "...").
-    Subcommands(deploy.Command(client), xflags.SchemaCommand())
+root := climux.NewCommand("orbital", "...").
+    Subcommands(deploy.Command(client), climux.SchemaCommand())
 ```
 
 This needs no new machinery, which is what `Invocation` carrying the
@@ -409,7 +415,7 @@ Where a convention already exists for what a document should say, or for
 how a program should be asked for one, this design follows it rather than
 inventing a parallel. The alignment is deliberate and partial, and the
 boundary is worth stating plainly: conformance is a property of a
-program, not of the library it was built with. xflags can supply the
+program, not of the library it was built with. climux can supply the
 description, the command that emits it and the streams it goes to; the
 rest is the author's.
 
@@ -423,7 +429,7 @@ already-compiled tree and reaching nothing outside the process. Its rule
 that data goes to stdout and diagnostics to stderr is the contract
 `Invocation` already hands a handler. Two of its requirements belong to a
 program rather than to us: a `--output` or `--format` flag selecting
-JSON, which is a program's own output and not something xflags owns; and
+JSON, which is a program's own output and not something climux owns; and
 the per-command declarations `effects` — `read_only`, `idempotent`,
 `non_idempotent` — and `cardinality`. Those are where a command-level
 declaration would land if one is added, and the vocabulary to borrow when

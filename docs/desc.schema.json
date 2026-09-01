@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/cavaliergopher/xflags/main/docs/desc.schema.json",
-  "title": "xflags description document",
-  "description": "A command tree described by github.com/cavaliergopher/xflags, at schema version 1. See docs/adr/machine-readable-schema.md for the design this specifies.",
+  "$id": "https://static.hotsrc.dev/climux/schema/v1.json",
+  "title": "climux description document",
+  "description": "A command tree described by go.hotsrc.dev/climux, at schema version 1. See docs/adr/machine-readable-schema.md for the design this specifies.",
   "type": "object",
   "required": ["schemaVersion", "command"],
   "properties": {

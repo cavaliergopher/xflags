@@ -1,44 +1,44 @@
 /*
-Package xflags implements command-line flag parsing and is a compatible alternative to Go's flag
+Package climux implements command-line flag parsing and is a compatible alternative to Go's flag
 package. This package provides higher-order features such as subcommands, positional arguments,
 required arguments, validation, support for environment variables and others.
 
-Package xflags aims to make composing large, full-featured command line tools as simple and clean as
+Package climux aims to make composing large, full-featured command line tools as simple and clean as
 possible. Chained setters are employed to configure commands and flags declaratively.
 
 For compatibility, a flag.FlagSet may be imported with FromFlagSet.
 
 # Usage
 
-Every xflags program must define a top-level command using xflags.NewCommand:
+Every climux program must define a top-level command using climux.NewCommand:
 
 	import (
 		"context"
 		"os"
 
-		"github.com/cavaliergopher/xflags"
+		"go.hotsrc.dev/climux"
 	)
 
-	var App = xflags.NewCommand(os.Args[0], "My application")
+	var App = climux.NewCommand(os.Args[0], "My application")
 
 	func main() {
-		ctx, stop := xflags.NotifyContext(context.Background())
+		ctx, stop := climux.NotifyContext(context.Background())
 		defer stop()
-		os.Exit(xflags.Run(ctx, App))
+		os.Exit(climux.Run(ctx, App))
 	}
 
 You can import all global flags defined using Go's flag library with FromFlagSet.
 
-	var App = xflags.NewCommand(os.Args[0], "").
-		FlagGroups(xflags.FromFlagSet("go", "Options", flag.CommandLine))
+	var App = climux.NewCommand(os.Args[0], "").
+		FlagGroups(climux.FromFlagSet("go", "Options", flag.CommandLine))
 
 You can bind a flag to a variable using the Var functions.
 
 	var flagvar int
 
-	var App = xflags.NewCommand(os.Args[0], "").
+	var App = climux.NewCommand(os.Args[0], "").
 		Flags(
-			xflags.Int(
+			climux.Int(
 				&flagvar, "flagname", 1234, "help message for flagname",
 			),
 		)
@@ -46,15 +46,15 @@ You can bind a flag to a variable using the Var functions.
 Or you can create custom flags that satisfy the ir.Value interface (with pointer receivers) and
 couple them to a flag parsing by
 
-	xflags.Var(&flagVal, "name", "help message for flagname")
+	climux.Var(&flagVal, "name", "help message for flagname")
 
 For such flags, the default value is just the initial value of the variable.
 
 A handler may be defined for your command by
 
-	var App = xflags.NewCommand(os.Args[0], "").HandleFunc(MyAppHandler)
+	var App = climux.NewCommand(os.Args[0], "").HandleFunc(MyAppHandler)
 
-	func MyAppHandler(ctx context.Context, inv *xflags.Invocation) error {
+	func MyAppHandler(ctx context.Context, inv *climux.Invocation) error {
 		return nil
 	}
 
@@ -70,7 +70,7 @@ process streams. They are the process streams unless the Run call answering
 replaced them, so a test or an embedding program captures what a command
 writes without the command knowing; see WithStdout.
 
-	func MyAppHandler(ctx context.Context, inv *xflags.Invocation) error {
+	func MyAppHandler(ctx context.Context, inv *climux.Invocation) error {
 		fmt.Fprintln(inv.Stdout, "Hello, World!")
 		return nil
 	}
@@ -82,16 +82,16 @@ everything after "--" is handed to the handler unparsed as Invocation.Forwarded.
 You can define subcommands by
 
 	var (
-		FooCommand = xflags.NewCommand("foo", "Foo command")
-		BarCommand = xflags.NewCommand("bar", "Bar command")
+		FooCommand = climux.NewCommand("foo", "Foo command")
+		BarCommand = climux.NewCommand("bar", "Bar command")
 
-		App = xflags.NewCommand(os.Args[0], "Foo bar program").
+		App = climux.NewCommand(os.Args[0], "Foo bar program").
 			Subcommands(FooCommand, BarCommand)
 	)
 
 After all flags are defined, call
 
-	xflags.Run(ctx, App)
+	climux.Run(ctx, App)
 
 to parse the command line into the defined flags and call the handler associated with the command or
 any if its subcommands if specified in os.Args.
@@ -107,7 +107,7 @@ Command.HelpFlag adds the flag that prints a command's help message,
 answering to --help and -h. A program that reports a version adds one or
 both spellings of it from the one string a build stamps into a constant:
 
-	var App = xflags.NewCommand("orbital", "Operate the fleet").
+	var App = climux.NewCommand("orbital", "Operate the fleet").
 		HelpFlag().              // --help, -h
 		VersionFlag(version).    // --version
 		VersionCommand(version)  // orbital version
@@ -132,14 +132,14 @@ was named. Declare one of your own with Interrupt.
 Command.Middleware wraps a command's handler, and every handler beneath
 it, in one function of your own:
 
-	var App = xflags.NewCommand(os.Args[0], "My application").
+	var App = climux.NewCommand(os.Args[0], "My application").
 		Middleware(Authorize, Trace).
 		Subcommands(GetCommand, DeleteCommand)
 
-	func Authorize(next xflags.HandlerFunc) xflags.HandlerFunc {
-		return func(ctx context.Context, inv *xflags.Invocation) error {
+	func Authorize(next climux.HandlerFunc) climux.HandlerFunc {
+		return func(ctx context.Context, inv *climux.Invocation) error {
 			if !allowed(inv.Cmd.FullName) {
-				return xflags.Exitf(xflags.ExitCodeUsage, "not authorized")
+				return climux.Exitf(climux.ExitCodeUsage, "not authorized")
 			}
 			return next(ctx, inv)
 		}
@@ -228,7 +228,7 @@ two places it departs from getopt.
 
 Command.EnableCompletion opts a command into shell completion:
 
-	var App = xflags.NewCommand(os.Args[0], "My application").
+	var App = climux.NewCommand(os.Args[0], "My application").
 		EnableCompletion()
 
 Once enabled, Run checks one environment variable before
@@ -258,4 +258,4 @@ question programmatically: given the command line so far and the word
 being completed, which candidates apply. It is exported so it can be
 tested and driven directly, without a shell in the loop.
 */
-package xflags
+package climux

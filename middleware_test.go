@@ -1,4 +1,4 @@
-package xflags
+package climux
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // tracer records the order in which middleware and handlers ran, which is

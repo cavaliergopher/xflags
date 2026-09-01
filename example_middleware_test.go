@@ -1,7 +1,7 @@
 // This example demonstrates middleware: a wrapper around a command's
 // handler, declared once on an ancestor and inherited by every command
 // beneath it, for the work every command in a subtree has to do.
-package xflags
+package climux
 
 import (
 	"context"

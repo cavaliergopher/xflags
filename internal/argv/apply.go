@@ -3,7 +3,7 @@ package argv
 import (
 	"os"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // Parse reads args against the compiled command cmd and stores the value
@@ -13,7 +13,7 @@ import (
 // Parse resets every flag reachable from cmd's tree to its default before
 // reading any arguments, so parsing the same tree twice yields the same
 // result. It does not validate the tree: a tree produced by
-// (*xflags.Command).Compile is already validated.
+// (*climux.Command).Compile is already validated.
 //
 // The returned Invocation names cmd, or one of its subcommands if the
 // arguments specified one.

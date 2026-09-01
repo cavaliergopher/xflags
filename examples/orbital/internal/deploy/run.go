@@ -4,15 +4,15 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cavaliergopher/xflags"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/fleet"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/middleware"
+	"go.hotsrc.dev/climux"
+	"go.hotsrc.dev/climux/examples/orbital/internal/fleet"
+	"go.hotsrc.dev/climux/examples/orbital/internal/middleware"
 )
 
 // runCommand returns "orbital deploy run", the one command in this binary
 // that changes what is running, so it declares middleware.Audit. The
 // timing trace it also runs inside is the root's, inherited.
-func runCommand(client *fleet.Client) *xflags.Command {
+func runCommand(client *fleet.Client) *climux.Command {
 	var (
 		service    string
 		release    string
@@ -22,38 +22,38 @@ func runCommand(client *fleet.Client) *xflags.Command {
 		confirm    bool
 		skipHealth bool
 	)
-	return xflags.NewCommand("run", "Roll out a new version of a service").
+	return climux.NewCommand("run", "Roll out a new version of a service").
 		Middleware(middleware.Audit).
 		Flags(
-			xflags.String(&service, "service", "", "Service to deploy").
+			climux.String(&service, "service", "", "Service to deploy").
 				Aliases("s").
 				Required(),
 			// Not "--version": the root mounts one to report orbital's
 			// own, and a name claimed there is claimed for the whole
 			// tree. Compile reports the clash rather than letting a
 			// deploy silently print a version instead.
-			xflags.String(&release, "release", "", "Release to deploy, such as a git SHA").
+			climux.String(&release, "release", "", "Release to deploy, such as a git SHA").
 				Required().
 				Validate(validRelease),
-			xflags.String(&env, "env", "staging", "Environment to deploy to").
+			climux.String(&env, "env", "staging", "Environment to deploy to").
 				Choices("staging", "production").
 				ShowDefault(),
-			xflags.String(&strategy, "strategy", "rolling", "Rollout strategy").
+			climux.String(&strategy, "strategy", "rolling", "Rollout strategy").
 				Choices("rolling", "blue-green", "canary").
 				ShowDefault(),
-			xflags.Strings(&tags, "tag", nil, "Metadata tag to attach to this rollout (repeatable)").
+			climux.Strings(&tags, "tag", nil, "Metadata tag to attach to this rollout (repeatable)").
 				NArgs(0, 5),
-			xflags.Bool(&confirm, "confirm", false, "Confirm a deploy to production"),
-			xflags.Bool(&skipHealth, "unsafe-skip-health-checks", false, "Skip post-deploy health checks").
+			climux.Bool(&confirm, "confirm", false, "Confirm a deploy to production"),
+			climux.Bool(&skipHealth, "unsafe-skip-health-checks", false, "Skip post-deploy health checks").
 				Hidden(),
 		).
 		HandleFunc(
-			func(ctx context.Context, inv *xflags.Invocation) error {
+			func(ctx context.Context, inv *climux.Invocation) error {
 				if env == "production" && !confirm {
 					// A misuse the parser could not catch on its own --
 					// two flags whose combination matters -- names its
 					// own exit code rather than the generic failure one.
-					return xflags.Exitf(4,
+					return climux.Exitf(4,
 						"refusing to deploy %s to production without --confirm", service)
 				}
 				if err := client.Deploy(ctx, service, release); err != nil {

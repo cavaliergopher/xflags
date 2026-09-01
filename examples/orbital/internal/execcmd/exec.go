@@ -9,24 +9,24 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cavaliergopher/xflags"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/middleware"
+	"go.hotsrc.dev/climux"
+	"go.hotsrc.dev/climux/examples/orbital/internal/middleware"
 )
 
 // Command returns the "exec" command.
-func Command() *xflags.Command {
+func Command() *climux.Command {
 	var service string
-	return xflags.NewCommand("exec", "Run a one-off command inside a service's container").
+	return climux.NewCommand("exec", "Run a one-off command inside a service's container").
 		Middleware(middleware.Audit).
 		ForwardArgs().
 		Forwarded("cmd", "Command to run inside the container, after --").
 		Flags(
-			xflags.String(&service, "service", "", "Service whose container to exec into").
+			climux.String(&service, "service", "", "Service whose container to exec into").
 				Aliases("s").
 				Required(),
 		).
 		HandleFunc(
-			func(ctx context.Context, inv *xflags.Invocation) error {
+			func(ctx context.Context, inv *climux.Invocation) error {
 				if len(inv.Forwarded) == 0 {
 					return fmt.Errorf(
 						"no command given; usage: orbital exec --service NAME -- CMD [ARGS...]")

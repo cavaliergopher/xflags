@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // Complete resolves shell completion candidates for a command line that is

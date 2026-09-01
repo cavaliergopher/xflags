@@ -1,4 +1,4 @@
-package xflags
+package climux
 
 import (
 	"encoding/json"

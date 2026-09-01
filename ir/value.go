@@ -8,7 +8,7 @@ package ir
 // operand bound to a positional flag.
 //
 // This is Go's flag.Value without String, so a value already written for
-// the flag package satisfies it and may be bound with xflags.Var
+// the flag package satisfies it and may be bound with climux.Var
 // unchanged. String is not required because a compiled flag carries its
 // default already rendered, captured when the flag was constructed. The
 // likeness stops at the interface: command lines are POSIX/GNU and not

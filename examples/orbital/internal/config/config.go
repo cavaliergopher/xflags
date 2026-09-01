@@ -4,7 +4,7 @@
 // the ones the store already knows about.
 package config
 
-import "github.com/cavaliergopher/xflags"
+import "go.hotsrc.dev/climux"
 
 // store is orbital's local configuration, seeded with the values a fresh
 // checkout would ship with.
@@ -16,7 +16,7 @@ var store = map[string]string{
 // Command returns the "config" subcommand, which only groups "get" and
 // "set" -- it has no handler of its own, so "orbital config" alone is a
 // usage error naming its subcommands.
-func Command() *xflags.Command {
-	return xflags.NewCommand("config", "Read and write orbital's local configuration").
+func Command() *climux.Command {
+	return climux.NewCommand("config", "Read and write orbital's local configuration").
 		Subcommands(getCommand(), setCommand())
 }

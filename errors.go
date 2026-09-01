@@ -1,9 +1,9 @@
-package xflags
+package climux
 
 import (
 	"fmt"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // The exit codes Run terminates with. A handler may name any other code by
@@ -48,7 +48,7 @@ func Exitf(code int, format string, a ...any) error {
 // humanMessage prefers a String() method over Error(). The two differ by
 // audience, not representation: on a ConfigError or ArgumentError from the
 // ir package, String() is the plain sentence Run prints for a human, and
-// Error() is that sentence tagged "xflags: ", for a Go caller that prints
+// Error() is that sentence tagged "climux: ", for a Go caller that prints
 // or logs the error itself.
 func humanMessage(err error) string {
 	if s, ok := err.(fmt.Stringer); ok {

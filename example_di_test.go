@@ -1,5 +1,5 @@
 // This example demonstrates a pattern for injecting dependencies into your command handlers.
-package xflags
+package climux
 
 import (
 	"context"

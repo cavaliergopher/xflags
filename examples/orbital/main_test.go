@@ -155,7 +155,7 @@ func TestOrbital(t *testing.T) {
 // TestOrbitalNegatedBool exercises the second spelling every boolean
 // answers to, on the flag where it earns its keep: --trace reads
 // ORBITAL_TRACE, so --no-trace is how one invocation turns off what the
-// environment turned on. Nothing declares it -- xflags generates one for
+// environment turned on. Nothing declares it -- climux generates one for
 // every boolean -- and nothing advertises it either, which is why an
 // example is the only place a reader meets it.
 func TestOrbitalNegatedBool(t *testing.T) {

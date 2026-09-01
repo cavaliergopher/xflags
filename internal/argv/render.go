@@ -48,7 +48,7 @@ func optionOf(name string) string {
 // reader less than "-c VALUE" does. Every comparable parser reaches for
 // something generic there rather than the letter -- Go's flag package
 // writes the value's type, clap writes <VALUE> -- and a program that
-// wants better says so with xflags.Flag.ValueName, which is honored
+// wants better says so with climux.Flag.ValueName, which is honored
 // however short it is.
 //
 // An operand keeps its name however short. It is named rather than

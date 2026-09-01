@@ -1,4 +1,4 @@
-package xflags
+package climux
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/cavaliergopher/xflags/internal/argv"
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/internal/argv"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // A RunOption replaces something Run takes from the process: the
@@ -44,7 +44,7 @@ func newRunConfig(opts []RunOption) *runConfig {
 // WithArgs reads args as the command line, in place of the arguments the
 // program was started with.
 //
-//	xflags.Run(ctx, cmd, xflags.WithArgs("deploy", "--dry-run"))
+//	climux.Run(ctx, cmd, climux.WithArgs("deploy", "--dry-run"))
 func WithArgs(args ...string) RunOption {
 	return func(cfg *runConfig) { cfg.args = args }
 }
@@ -83,9 +83,9 @@ func WithStderr(w io.Writer) RunOption {
 // for reading and writing somewhere else, which is what a test does.
 //
 //	func main() {
-//	    ctx, stop := xflags.NotifyContext(context.Background())
+//	    ctx, stop := climux.NotifyContext(context.Background())
 //	    defer stop()
-//	    os.Exit(xflags.Run(ctx, cmd))
+//	    os.Exit(climux.Run(ctx, cmd))
 //	}
 //
 // Help is printed to stdout. An error is printed to stderr, followed by
@@ -116,7 +116,7 @@ func Run(ctx context.Context, cmd *Command, opts ...RunOption) int {
 // code.
 //
 // Reach for it in a program that reports errors its own way, or embeds
-// xflags in a larger command loop: Run is Dispatch plus the reporting
+// climux in a larger command loop: Run is Dispatch plus the reporting
 // and the exit code. It takes the same options; see WithArgs.
 //
 // An interrupt such as --help is not an error: it runs in place of the

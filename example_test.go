@@ -1,5 +1,5 @@
 // This example demonstrates a simple "Hello, World!" CLI program.
-package xflags
+package climux
 
 import (
 	"context"
@@ -86,9 +86,9 @@ func Example() {
 	// Most programs will call the following from main:
 	//
 	//     func main() {
-	//         ctx, stop := xflags.NotifyContext(context.Background())
+	//         ctx, stop := climux.NotifyContext(context.Background())
 	//         defer stop()
-	//         os.Exit(Run(ctx, xflags, WithArgs(App...)))
+	//         os.Exit(climux.Run(ctx, App))
 	//     }
 	//
 	fmt.Println()

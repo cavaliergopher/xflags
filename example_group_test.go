@@ -2,7 +2,7 @@
 // contributes command line flags to whichever program imports it: a
 // settings struct whose FlagGroup method binds flags to the receiver, and
 // one package-level instance registered with Register.
-package xflags
+package climux
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func Example_sharedFlagGroups() {
 	ctx := context.Background()
 
 	// The program mounts every registered group with one line. From
-	// outside this package that line reads GroupSets(xflags.CommandLine).
+	// outside this package that line reads GroupSets(climux.CommandLine).
 	app := NewCommand("myapp", "Do things, with logging").
 		HelpFlag().
 		GroupSets(CommandLine).

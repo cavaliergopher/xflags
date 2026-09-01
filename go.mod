@@ -1,3 +1,3 @@
-module github.com/cavaliergopher/xflags
+module go.hotsrc.dev/climux
 
 go 1.24

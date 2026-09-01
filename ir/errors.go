@@ -16,7 +16,7 @@ const (
 // humanMessage prefers a String() method over Error(). The two differ by
 // audience, not representation: on ConfigError and ArgumentError, String()
 // is the plain sentence a program prints for a human, and Error() is that
-// sentence tagged "xflags: ", for a Go caller that prints or logs the
+// sentence tagged "climux: ", for a Go caller that prints or logs the
 // error itself.
 func humanMessage(err error) string {
 	if s, ok := err.(fmt.Stringer); ok {
@@ -160,7 +160,7 @@ func newConfigErrorf(err error, cmd *Command, flag *Flag, format string, a ...an
 
 func (e *ConfigError) ExitCode() int { return ExitCodeUsage }
 func (e *ConfigError) Unwrap() error { return e.Err }
-func (e *ConfigError) Error() string { return "xflags: " + e.String() }
+func (e *ConfigError) Error() string { return "climux: " + e.String() }
 
 // String reports which command or flag is misconfigured, if either is
 // known, followed by the message describing what's wrong with it.
@@ -205,7 +205,7 @@ func NewArgumentErrorf(err error, cmd *Command, flag *Flag, arg string, format s
 
 func (e *ArgumentError) ExitCode() int { return ExitCodeUsage }
 func (e *ArgumentError) Unwrap() error { return e.Err }
-func (e *ArgumentError) Error() string { return "xflags: " + e.String() }
+func (e *ArgumentError) Error() string { return "climux: " + e.String() }
 
 // String reports the message describing what was wrong with the argument,
 // followed by the error it wraps, if any.

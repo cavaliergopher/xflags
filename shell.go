@@ -1,4 +1,4 @@
-package xflags
+package climux
 
 import (
 	"fmt"
@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/cavaliergopher/xflags/internal/argv"
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/internal/argv"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // completionEnvVar returns the name of the environment variable Run

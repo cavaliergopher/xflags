@@ -1,22 +1,31 @@
-# Expressive flags for Go
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/wordmark-ansi.svg">
+  <img alt="climux" src="docs/logo/wordmark-ansi-light.svg" width="340">
+</picture>
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/cavaliergopher/xflags.svg)](https://pkg.go.dev/github.com/cavaliergopher/xflags)
+# A command line multiplexer for Go
+
+[![Go Reference](https://pkg.go.dev/badge/go.hotsrc.dev/climux.svg)](https://pkg.go.dev/go.hotsrc.dev/climux)
 [![CI](https://github.com/cavaliergopher/xflags/actions/workflows/ci.yml/badge.svg)](https://github.com/cavaliergopher/xflags/actions/workflows/ci.yml)
 
-Package xflags implements command-line flag parsing and is a compatible
-alternative to Go's flag package. This package provides higher-order features
-such as subcommands, positional arguments, required arguments, validation,
-support for environment variables and others.
+Many commands in, one dispatched out. Package climux implements command line
+flag parsing and is a compatible alternative to Go's flag package, with the
+higher-order features a real tool needs: subcommands, positional arguments,
+required arguments, validation, environment variables and others.
 
-Package xflags aims to make composing large, full-featured command line tools as
+Package climux aims to make composing large, full-featured command line tools as
 simple and clean as possible. Chained setters are employed to configure
 commands and flags declaratively. There are no dependencies beyond the standard
 library, and no code generation or struct tags.
 
+A command tree compiles into a described form the program can publish, so a
+packager, a documentation generator or an agent can read what a binary accepts
+in one call rather than crawling `--help`.
+
 ## Install
 
 ```
-go get github.com/cavaliergopher/xflags
+go get go.hotsrc.dev/climux
 ```
 
 ## Usage
@@ -29,24 +38,24 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cavaliergopher/xflags"
+	"go.hotsrc.dev/climux"
 )
 
 var flagName string
 
-var App = xflags.NewCommand("greet", "Print a greeting").
+var App = climux.NewCommand("greet", "Print a greeting").
 	Flags(
-		xflags.String(&flagName, "name", "World", "Who to greet"),
+		climux.String(&flagName, "name", "World", "Who to greet"),
 	).
-	HandleFunc(func(ctx context.Context, inv *xflags.Invocation) error {
+	HandleFunc(func(ctx context.Context, inv *climux.Invocation) error {
 		fmt.Fprintf(inv.Stdout, "Hello, %s!\n", flagName)
 		return nil
 	})
 
 func main() {
-	ctx, stop := xflags.NotifyContext(context.Background())
+	ctx, stop := climux.NotifyContext(context.Background())
 	defer stop()
-	os.Exit(xflags.Run(ctx, App))
+	os.Exit(climux.Run(ctx, App))
 }
 ```
 
@@ -73,14 +82,14 @@ being the one declared highest in the tree, and a wrapper that returns without
 calling the handler refuses the invocation.
 
 ```go
-var App = xflags.NewCommand("fleet", "Operate the fleet").
+var App = climux.NewCommand("fleet", "Operate the fleet").
 	Middleware(Authorize, Trace).
 	Subcommands(RestartCommand, StatusCommand)
 
-func Authorize(next xflags.HandlerFunc) xflags.HandlerFunc {
-	return func(ctx context.Context, inv *xflags.Invocation) error {
+func Authorize(next climux.HandlerFunc) climux.HandlerFunc {
+	return func(ctx context.Context, inv *climux.Invocation) error {
 		if !allowed(inv.Cmd.FullName) {
-			return xflags.Exitf(xflags.ExitCodeUsage, "not authorized")
+			return climux.Exitf(climux.ExitCodeUsage, "not authorized")
 		}
 		return next(ctx, inv)
 	}
@@ -94,7 +103,7 @@ both spellings of it, from the one string a build stamps into a constant:
 ```go
 const version = "1.4.2"
 
-var App = xflags.NewCommand("orbital", "Operate the fleet").
+var App = climux.NewCommand("orbital", "Operate the fleet").
 	HelpFlag().              // --help, -h
 	VersionFlag(version).    // --version
 	VersionCommand(version)  // orbital version
@@ -111,7 +120,7 @@ wants them somewhere else: last, hidden, or under a heading of their own.
 
 All three are *interrupts*: a flag that ends the parse and runs in place of
 the command that was named. That is the whole of what makes `--help`
-special, and `xflags.Interrupt` declares one of your own. Nothing is mounted
+special, and `climux.Interrupt` declares one of your own. Nothing is mounted
 that a program did not ask for.
 
 ## Command line syntax
@@ -174,12 +183,12 @@ Five departures from `getopt_long` are deliberate, and
 ## Compiling a command
 
 `Command.Compile` lowers a command tree into the implementation types in the
-[ir](https://pkg.go.dev/github.com/cavaliergopher/xflags/ir) package: every
+[ir](https://pkg.go.dev/go.hotsrc.dev/climux/ir) package: every
 command, flag group and flag, with ancestry resolved and exported fields
 holding everything that marshals. The default help formatter walks it, and
 so can your own tooling. Most programs never need to call Compile
 themselves, or import ir at all -- it is what Parse, Run and the help
 output use internally.
 
-See [the docs](https://pkg.go.dev/github.com/cavaliergopher/xflags) for
+See [the docs](https://pkg.go.dev/go.hotsrc.dev/climux) for
 comprehensive examples.

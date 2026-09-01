@@ -178,7 +178,7 @@ Nothing is lost that completion does not give back.
 
 **`--version` is the program's, not the library's.** The GNU standards ask
 every program to have one; the library has no version string to report, so
-the program supplies it. `xflags.VersionFlag` and `xflags.VersionCommand`
+the program supplies it. `climux.VersionFlag` and `climux.VersionCommand`
 declare the two spellings from one constant, and neither is mounted unless
 the program mounts it.
 

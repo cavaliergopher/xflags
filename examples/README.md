@@ -1,7 +1,7 @@
 # Examples
 
 `orbital` is a fictional platform team's deploy and operations CLI, built
-to show how a large engineering org would put xflags together: several
+to show how a large engineering org would put climux together: several
 teams' packages, each owning its own commands, flags and handlers, wired
 into one binary by `main`.
 

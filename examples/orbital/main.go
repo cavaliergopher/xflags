@@ -1,5 +1,5 @@
 // Command orbital is a fictional platform team's deploy and operations
-// CLI. It shows how a large engineering org assembles one xflags binary
+// CLI. It shows how a large engineering org assembles one climux binary
 // out of packages owned by different teams: main only wires the tree
 // together, and each internal package owns its own commands, flags and
 // handlers.
@@ -9,16 +9,16 @@ import (
 	"context"
 	"os"
 
-	"github.com/cavaliergopher/xflags"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/config"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/debug"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/deploy"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/execcmd"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/fleet"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/identity"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/legacy"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/logscmd"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/middleware"
+	"go.hotsrc.dev/climux"
+	"go.hotsrc.dev/climux/examples/orbital/internal/config"
+	"go.hotsrc.dev/climux/examples/orbital/internal/debug"
+	"go.hotsrc.dev/climux/examples/orbital/internal/deploy"
+	"go.hotsrc.dev/climux/examples/orbital/internal/execcmd"
+	"go.hotsrc.dev/climux/examples/orbital/internal/fleet"
+	"go.hotsrc.dev/climux/examples/orbital/internal/identity"
+	"go.hotsrc.dev/climux/examples/orbital/internal/legacy"
+	"go.hotsrc.dev/climux/examples/orbital/internal/logscmd"
+	"go.hotsrc.dev/climux/examples/orbital/internal/middleware"
 )
 
 // version is what a build stamps into the binary. Both --version and the
@@ -28,7 +28,7 @@ const version = "1.4.2"
 func main() {
 	client := fleet.NewClient("us-west-2")
 
-	root := xflags.NewCommand("orbital", "Deploy and operate services on the fleet").
+	root := climux.NewCommand("orbital", "Deploy and operate services on the fleet").
 		// Declared first, by convention, so both head the list of
 		// options. Both are interrupts, so both answer before --actor is
 		// missed: "orbital --version" works without an identity.
@@ -47,9 +47,9 @@ func main() {
 				"them into one binary.",
 		).
 		FlagGroups(legacy.FlagGroup()).
-		GroupSets(xflags.CommandLine).
+		GroupSets(climux.CommandLine).
 		Flags(
-			xflags.String(&identity.Actor, "actor", "", "Identity performing this action, recorded for the audit trail").
+			climux.String(&identity.Actor, "actor", "", "Identity performing this action, recorded for the audit trail").
 				Required().
 				Env("ORBITAL_ACTOR"),
 			middleware.OutputFlag(),
@@ -63,13 +63,13 @@ func main() {
 			// An interrupt too, like the flag above: "orbital version"
 			// answers without --actor the same way "orbital --version"
 			// does.
-			xflags.VersionCommand(version),
+			climux.VersionCommand(version),
 			// Also an interrupt, so tooling can ask "orbital schema" for
 			// the whole tree without an identity to hand it.
-			xflags.SchemaCommand(),
+			climux.SchemaCommand(),
 		)
 
-	ctx, stop := xflags.NotifyContext(context.Background())
+	ctx, stop := climux.NotifyContext(context.Background())
 	defer stop()
-	os.Exit(xflags.Run(ctx, root))
+	os.Exit(climux.Run(ctx, root))
 }

@@ -1,13 +1,13 @@
-package xflags
+package climux
 
 import (
 	"context"
 	"encoding/json"
 	"slices"
 
-	"github.com/cavaliergopher/xflags/desc"
-	"github.com/cavaliergopher/xflags/internal/argv"
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/desc"
+	"go.hotsrc.dev/climux/internal/argv"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // An Invocation is the result of parsing a command line. It records which
@@ -33,8 +33,8 @@ type HandlerFunc = ir.HandlerFunc
 // first and decides whether to call the one it wrapped. Declare one with
 // Command.Middleware.
 //
-//	func timing(next xflags.HandlerFunc) xflags.HandlerFunc {
-//	    return func(ctx context.Context, inv *xflags.Invocation) error {
+//	func timing(next climux.HandlerFunc) climux.HandlerFunc {
+//	    return func(ctx context.Context, inv *climux.Invocation) error {
 //	        start := time.Now()
 //	        err := next(ctx, inv)
 //	        fmt.Fprintf(inv.Stderr, "%s took %s\n", inv.Cmd.FullName, time.Since(start))
@@ -270,7 +270,7 @@ func (c *Command) Compile() (*ir.Command, error) {
 //
 // Whether a subcommand's parent actually names the command about to
 // claim it as a child. See Subcommands for why -- a shared command such
-// as xflags.CommandLine may be mounted under more than one parent, and
+// as climux.CommandLine may be mounted under more than one parent, and
 // only the source *Command remembers which one Subcommands actually
 // accepted.
 //
@@ -457,7 +457,7 @@ func (c *Command) HandleFunc(handler HandlerFunc) *Command {
 // timing trace, a resource opened and closed -- written once instead of at
 // the top of every handler.
 //
-//	var App = xflags.NewCommand("myapp", "Do things").
+//	var App = climux.NewCommand("myapp", "Do things").
 //	    Middleware(authorize, trace).
 //	    Subcommands(GetCommand, DeleteCommand)
 //
@@ -496,7 +496,7 @@ func (c *Command) Flags(flags ...*Flag) *Command {
 // HelpFlag adds the flag that prints this command's help message. Given
 // no names it answers to "--help" and "-h".
 //
-//	var App = xflags.NewCommand("myapp", "My application").HelpFlag()
+//	var App = climux.NewCommand("myapp", "My application").HelpFlag()
 //
 // Call it on the root: every command below answers to the flag too, and
 // each prints its own help. It is shorthand for adding HelpFlag with
@@ -509,7 +509,7 @@ func (c *Command) HelpFlag(names ...string) *Command {
 // VersionFlag adds the flag that prints version, alongside the name of
 // the program it is mounted in. Given no names it answers to "--version".
 //
-//	var App = xflags.NewCommand("orbital", "").VersionFlag(version)
+//	var App = climux.NewCommand("orbital", "").VersionFlag(version)
 //
 // It is shorthand for adding VersionFlag with Flags, which is the way
 // to put it in a group of its own, or to hide it.
@@ -545,7 +545,7 @@ func (c *Command) FlagGroups(groups ...*FlagGroup) *Command {
 // this command, after the command's own groups. Mount CommandLine to pick
 // up everything the program's libraries registered:
 //
-//	var App = xflags.NewCommand("myapp", "").GroupSets(xflags.CommandLine)
+//	var App = climux.NewCommand("myapp", "").GroupSets(climux.CommandLine)
 //
 // A group registered after this call is still picked up. Mounted flags
 // behave exactly like the command's own, each group under its own heading
@@ -557,7 +557,7 @@ func (c *Command) GroupSets(sets ...*GroupSet) *Command {
 
 // Subcommands adds subcommands to this command and sets their parent to
 // this command, unless a command given here already has one -- typically a
-// command already mounted elsewhere, such as xflags.CommandLine -- in
+// command already mounted elsewhere, such as climux.CommandLine -- in
 // which case its existing parent is left alone and validation reports the
 // mismatch; see lower.
 func (c *Command) Subcommands(cmds ...*Command) *Command {

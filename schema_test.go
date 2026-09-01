@@ -1,4 +1,4 @@
-package xflags
+package climux
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/cavaliergopher/xflags/desc"
+	"go.hotsrc.dev/climux/desc"
 )
 
 // TestSchemaCommand runs "app schema" against a small tree and asserts

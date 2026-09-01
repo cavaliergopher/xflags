@@ -1,11 +1,11 @@
-package xflags
+package climux
 
 import (
 	"fmt"
 	"strconv"
 	"time"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // isBoolValue reports whether v declares itself a boolean flag by

@@ -11,32 +11,32 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cavaliergopher/xflags"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/fleet"
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux"
+	"go.hotsrc.dev/climux/examples/orbital/internal/fleet"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // Command returns the "logs" command.
-func Command(client *fleet.Client) *xflags.Command {
+func Command(client *fleet.Client) *climux.Command {
 	var (
 		services []string
 		follow   bool
 		since    time.Duration
 	)
-	return xflags.NewCommand("logs", "Print recent log lines for one or more services").
+	return climux.NewCommand("logs", "Print recent log lines for one or more services").
 		Flags(
-			xflags.Strings(&services, "SERVICE", nil, "Services to tail").
+			climux.Strings(&services, "SERVICE", nil, "Services to tail").
 				Positional().
 				NArgs(1, 0).
-				Complete(func(inv *xflags.Invocation, word string) ([]string, ir.CompDirective) {
+				Complete(func(inv *climux.Invocation, word string) ([]string, ir.CompDirective) {
 					return client.Services(), ir.CompNoFileComp
 				}),
-			xflags.Bool(&follow, "follow", false, "Keep streaming until interrupted").
+			climux.Bool(&follow, "follow", false, "Keep streaming until interrupted").
 				Aliases("f"),
-			xflags.Duration(&since, "since", 10*time.Minute, "How far back to start showing logs").
+			climux.Duration(&since, "since", 10*time.Minute, "How far back to start showing logs").
 				ShowDefault(),
 		).
-		HandleFunc(func(ctx context.Context, inv *xflags.Invocation) error {
+		HandleFunc(func(ctx context.Context, inv *climux.Invocation) error {
 			for _, svc := range services {
 				select {
 				case <-ctx.Done():

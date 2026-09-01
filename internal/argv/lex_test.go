@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // lexStep is a comparable projection of one instruction, so a golden test
@@ -46,7 +46,7 @@ func errMessages(errs []error) []string {
 
 // humanMessage renders an error the way a program reports it, preferring
 // String() over Error() so that a lex error reads as the sentence a user
-// sees rather than the "xflags: " tagged form. Both ir and the root
+// sees rather than the "climux: " tagged form. Both ir and the root
 // package keep their own unexported copy of this; the assertions below
 // compare against the sentence, so the test needs one too.
 func humanMessage(err error) string {

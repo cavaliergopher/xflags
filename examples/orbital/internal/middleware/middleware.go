@@ -3,7 +3,7 @@
 // binary runs inside, and an audit check that only the commands changing
 // fleet state do.
 //
-// All three are xflags.Middleware, so none is registered by the handler
+// All three are climux.Middleware, so none is registered by the handler
 // it wraps. main.go declares Timing and Output on the root, which inherit
 // down the whole tree, and each mutating command declares Audit on
 // itself; a
@@ -18,9 +18,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/cavaliergopher/xflags"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/identity"
-	"github.com/cavaliergopher/xflags/examples/orbital/internal/telemetry"
+	"go.hotsrc.dev/climux"
+	"go.hotsrc.dev/climux/examples/orbital/internal/identity"
+	"go.hotsrc.dev/climux/examples/orbital/internal/telemetry"
 )
 
 // Audit refuses to run as the placeholder "anonymous" identity, in place
@@ -31,8 +31,8 @@ import (
 // because the root --actor flag it comes from is not applied until the
 // command line parses, which is after every command in the tree was
 // built.
-func Audit(next xflags.HandlerFunc) xflags.HandlerFunc {
-	return func(ctx context.Context, inv *xflags.Invocation) error {
+func Audit(next climux.HandlerFunc) climux.HandlerFunc {
+	return func(ctx context.Context, inv *climux.Invocation) error {
 		if identity.Actor == "anonymous" {
 			return fmt.Errorf(
 				"%s: refusing to run as %q; pass --actor or set ORBITAL_ACTOR",
@@ -46,8 +46,8 @@ func Audit(next xflags.HandlerFunc) xflags.HandlerFunc {
 // Timing reports how long the handler took, but only when --trace asked
 // for it -- another package's settings, read by value at call time rather
 // than copied in at declaration.
-func Timing(next xflags.HandlerFunc) xflags.HandlerFunc {
-	return func(ctx context.Context, inv *xflags.Invocation) error {
+func Timing(next climux.HandlerFunc) climux.HandlerFunc {
+	return func(ctx context.Context, inv *climux.Invocation) error {
 		start := time.Now()
 		err := next(ctx, inv)
 		if telemetry.Flags.Trace {
@@ -67,8 +67,8 @@ var outFile string
 // middleware because neither is any use without the other; main.go
 // declares both on the root, so every command in the tree can be
 // redirected.
-func OutputFlag() *xflags.Flag {
-	return xflags.String(&outFile, "out", "",
+func OutputFlag() *climux.Flag {
+	return climux.String(&outFile, "out", "",
 		"Write command output to FILE instead of stdout").
 		ValueName("file")
 }
@@ -81,8 +81,8 @@ func OutputFlag() *xflags.Flag {
 //
 // Help is not redirected, because asking for help does not run a handler
 // and so runs no middleware either.
-func Output(next xflags.HandlerFunc) xflags.HandlerFunc {
-	return func(ctx context.Context, inv *xflags.Invocation) error {
+func Output(next climux.HandlerFunc) climux.HandlerFunc {
+	return func(ctx context.Context, inv *climux.Invocation) error {
 		if outFile == "" {
 			return next(ctx, inv)
 		}

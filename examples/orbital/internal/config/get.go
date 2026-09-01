@@ -4,19 +4,19 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cavaliergopher/xflags"
+	"go.hotsrc.dev/climux"
 )
 
 // getCommand returns "orbital config get KEY".
-func getCommand() *xflags.Command {
+func getCommand() *climux.Command {
 	var key string
-	return xflags.NewCommand("get", "Print the value of a configuration key").
+	return climux.NewCommand("get", "Print the value of a configuration key").
 		Flags(
-			xflags.String(&key, "KEY", "", "Configuration key to read").
+			climux.String(&key, "KEY", "", "Configuration key to read").
 				Positional().
 				Required(),
 		).
-		HandleFunc(func(ctx context.Context, inv *xflags.Invocation) error {
+		HandleFunc(func(ctx context.Context, inv *climux.Invocation) error {
 			v, ok := store[key]
 			if !ok {
 				// A plain error: nothing about this is a usage mistake the

@@ -3,7 +3,7 @@ package ir
 import (
 	"testing"
 
-	"github.com/cavaliergopher/xflags/desc"
+	"go.hotsrc.dev/climux/desc"
 )
 
 // TestFlagDescribeOptions asserts the option order desc.Flag.Options

@@ -4,7 +4,7 @@ Status: accepted, 2026-09-01.
 
 ## Context
 
-xflags prints on its own behalf: help, errors, a version, shell completion
+climux prints on its own behalf: help, errors, a version, shell completion
 replies. Where that output goes must be injectable -- a test wants to read
 it, an embedding program wants to place it -- which is the need
 `flag.FlagSet.SetOutput` answers in the stdlib.

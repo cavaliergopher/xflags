@@ -1,11 +1,11 @@
-package xflags
+package climux
 
 import (
 	"errors"
 	"strings"
 	"testing"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // TestRegister asserts that Register returns its argument, so registration

@@ -4,7 +4,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/cavaliergopher/xflags/desc"
+	"go.hotsrc.dev/climux/desc"
 )
 
 // Claim is what naming a flag by one option on the command line means:
@@ -28,7 +28,7 @@ type Claim struct {
 
 // Flag is the compiled, implementation form of a command line flag or
 // positional argument, produced by lowering a configuration tree with
-// (*xflags.Command).Compile.
+// (*climux.Command).Compile.
 //
 // Every field is exported, including Value, ValidateFunc, CompleteFunc
 // and Handler, which carry behavior: ir is never encoded, so nothing has
@@ -38,7 +38,7 @@ type Flag struct {
 	// NamedOptions is the option each name the program declared is shown
 	// as: "--verbose" and "-v" rather than "verbose" and "v". It runs
 	// parallel to those names, in the order
-	// xflags.Flag.Aliases documents -- the canonical name, the short
+	// climux.Flag.Aliases documents -- the canonical name, the short
 	// name, then any further aliases -- so a slot a flag left empty stays
 	// empty here rather than closing up, and a help formatter can print
 	// the first two knowing what they are.
@@ -132,7 +132,7 @@ type Flag struct {
 	ValidateFunc ValidateFunc
 
 	// CompleteFunc, if set, completes the flag's value for a shell. See
-	// xflags.Complete.
+	// climux.Complete.
 	CompleteFunc CompleteFunc
 
 	// Handler, if set, makes the flag an interrupt: naming it on the
@@ -228,7 +228,7 @@ func (f *Flag) describeOptions() []desc.Option {
 	var options []desc.Option
 	for _, name := range f.NamedOptions {
 		if name == "" {
-			continue // an empty slot, which xflags.Flag.Aliases documents
+			continue // an empty slot, which climux.Flag.Aliases documents
 		}
 		named[name] = struct{}{}
 		options = append(options, desc.Option{

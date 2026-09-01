@@ -4,7 +4,7 @@ Status: accepted, 2026-08-29; implemented 2026-08-31.
 
 ## Context
 
-`xflags.Command` and `xflags.Flag` are the builder half of the two-type
+`climux.Command` and `climux.Flag` are the builder half of the two-type
 model (see `two-type-model.md`): what a program declares, with chained
 setters, before anything is resolved. They had also accumulated the verbs
 that act on a declared tree — `Parse`, `Run`, `Dispatch`, `Complete`, and
@@ -55,12 +55,12 @@ already configuration only.
 ## Consequences
 
 - Breaking, but narrowly. Every program in the documentation already ended
-  with `xflags.Run(ctx, App)`, and the only non-test caller of any moved
+  with `climux.Run(ctx, App)`, and the only non-test caller of any moved
   method was `RunWithArgs` itself. It breaks a program that reached for the
   methods rather than the functions, which the docs never taught.
 - `command.go` is now legibly the configuration type: a struct, a
   constructor, `Compile`, `lower`, and setters. The entry points and the
-  error reporting live together in `xflags.go`, which is what a reader
+  error reporting live together in `climux.go`, which is what a reader
   wanting to run a tree opens.
 - The exit-code contract moved with the code, from `Command.Run`'s doc to
   `RunWithArgs`, which is now the implementation rather than a wrapper.

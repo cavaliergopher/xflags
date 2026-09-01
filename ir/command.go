@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/cavaliergopher/xflags/desc"
+	"go.hotsrc.dev/climux/desc"
 )
 
 // An Invocation is the result of parsing a command line. It records which
@@ -46,7 +46,7 @@ type Invocation struct {
 	// Stdin, Stdout and Stderr are the streams the handler should use in
 	// place of the process streams, so that a caller redirecting a
 	// command captures its output. They are the process streams unless
-	// the Run call answering replaced them; see xflags.WithStdout.
+	// the Run call answering replaced them; see climux.WithStdout.
 	//
 	// They are never nil.
 	Stdin  io.Reader
@@ -57,7 +57,7 @@ type Invocation struct {
 // A HandlerFunc handles the invocation of a command specified by command
 // line arguments.
 //
-// ctx is the context given to xflags.Dispatch, so a handler
+// ctx is the context given to climux.Dispatch, so a handler
 // that does anything cancelable should honor it.
 //
 // inv describes the invocation: the command that was named, the path it was
@@ -75,7 +75,7 @@ type HandlerFunc func(ctx context.Context, inv *Invocation) error
 
 // Command is the compiled, implementation form of a command that users may
 // invoke from the command line, produced by lowering a configuration tree
-// with (*xflags.Command).Compile.
+// with (*climux.Command).Compile.
 //
 // Every field is exported, including Ancestry and Root, which would make
 // an encoded tree self-referential, and Handler, UsageFunc and the three
@@ -95,7 +95,7 @@ type Command struct {
 	// the command line -- a required flag missing, an argument count
 	// unmet, an option nothing recognizes -- does not stop it from
 	// answering. No middleware wraps it. Nil means the command is not
-	// an interrupt. See xflags.InterruptCommand.
+	// an interrupt. See climux.InterruptCommand.
 	Interrupt HandlerFunc
 
 	// FullName is the command's name joined with each ancestor's, from the
@@ -168,7 +168,7 @@ func (c *Command) String() string { return c.Name }
 // tree it is called. It checks each command and flag on its own terms:
 // whether two flags would answer to the same spelling is settled where
 // spelling is, so a tree that passes here may still be rejected by
-// (*xflags.Command).Compile, which runs both. A Command produced by
+// (*climux.Command).Compile, which runs both. A Command produced by
 // Compile is already validated.
 func (c *Command) Validate() error {
 	return validateTree(c.Root)

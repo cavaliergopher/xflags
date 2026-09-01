@@ -9,7 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/cavaliergopher/xflags/ir"
+	"go.hotsrc.dev/climux/ir"
 )
 
 // Validate checks the compiled tree rooted at root for the one
@@ -150,7 +150,7 @@ func ValidateNames(names []string, positional bool) []error {
 // short boolean read "=" as a delimiter.
 func validateName(name string) error {
 	if name == "" {
-		return nil // an empty slot, which xflags.Flag.Aliases documents
+		return nil // an empty slot, which climux.Flag.Aliases documents
 	}
 	switch {
 	case strings.HasPrefix(name, "-"):

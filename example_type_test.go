@@ -1,6 +1,6 @@
 // This example demonstrates how a custom struct type may be used to encapsulate
 // the behavior of a single command.
-package xflags
+package climux
 
 import (
 	"context"
@@ -53,9 +53,9 @@ func Example_customTypes() {
 	// Most programs will call the following from main:
 	//
 	//     func main() {
-	//         ctx, stop := xflags.NotifyContext(context.Background())
+	//         ctx, stop := climux.NotifyContext(context.Background())
 	//         defer stop()
-	//         os.Exit(Run(ctx, xflags, WithArgs(ExampleCommand...)))
+	//         os.Exit(climux.Run(ctx, ExampleCommand))
 	//     }
 	//
 	fmt.Println()
