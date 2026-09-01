@@ -18,13 +18,16 @@ type Invocation struct {
 	// Cmd is the command the arguments named.
 	Cmd *Command
 
-	// Forwarded holds the arguments that followed a "--" terminator, which
-	// the parser did not interpret. It is empty unless the command opted in
-	// with Command.ForwardArgs.
+	// Forwarded holds the arguments the parser deliberately left
+	// unparsed: everything after a "--" terminator, for a command that
+	// opted in with Command.ForwardArgs, or everything after the token
+	// that ended the parse, when an interrupt flag or an interrupt
+	// command did. It is empty otherwise.
 	//
-	// This is not the command's operands, which bind to positional flags as
-	// usual. These are the arguments the command means to hand on to
-	// something else.
+	// This is not the command's operands, which bind to positional flags
+	// as usual. These are the arguments left for the handler to
+	// interpret or ignore: what a forwarding command hands on to
+	// something else, or what follows an interrupt, verbatim.
 	Forwarded []string
 
 	// Interrupt is the flag that ended the parse, and is nil both when
@@ -36,7 +39,8 @@ type Invocation struct {
 	//
 	// The rest of the command line is not parsed and the flag rules are
 	// not checked, so an interrupt answers even on an otherwise incomplete
-	// command line. See Flag.Handler.
+	// command line; what followed the flag arrives in Forwarded. See
+	// Flag.Handler.
 	Interrupt *Flag
 
 	// Stdin, Stdout and Stderr are the streams the handler should use in

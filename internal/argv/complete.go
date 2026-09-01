@@ -36,6 +36,10 @@ func Complete(cmd *ir.Command, args []string, word string) ([]string, ir.CompDir
 		case instForward:
 			forwarded = instr.forwarded
 			forwardedArgs = true
+		case instInterrupt:
+			// Nothing after an interrupt is read, so nothing after it
+			// is this tree's to complete.
+			return nil, ir.CompDefault
 		}
 	}
 	if forwardedArgs {

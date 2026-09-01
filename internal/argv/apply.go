@@ -74,14 +74,15 @@ func applyDefaults(c *ir.Command) error {
 // their typo reported too. apply walks instructions up to the first
 // interrupt it finds -- earlier Set and Dispatch instructions still run,
 // so flags given before it take effect -- and stops there: env vars are
-// not read and NArgs is not checked.
+// not read and NArgs is not checked. The tokens after the interrupt were
+// never lexed; they ride on its instruction and land on the invocation
+// as Forwarded.
 //
 // A command that is itself an interrupt (ir.Command.Interrupt) is
-// answered the same way once it is the command the line named, even
-// though nothing in res marks the point the way an instInterrupt
-// instruction does for a flag: every recorded lex error is discarded and
-// env vars and NArgs are not checked, but there is no earlier point to
-// stop the walk at, so every Set and Dispatch instruction still runs.
+// answered the same way once it is the command the line named: every
+// recorded lex error is discarded, env vars are not read and NArgs is
+// not checked, and the tokens after its name arrive through the
+// instForward instruction lex emitted when it stopped there.
 //
 // Otherwise, any recorded lex error stops apply before it starts: nothing
 // is mutated unless every argument in argv resolved. An error from Set or
@@ -130,7 +131,7 @@ func apply(root *ir.Command, res lexResult) (*ir.Invocation, error) {
 	}
 
 	if interruptAt != -1 {
-		return invocationFor(interrupt.cmd, forwarded, interrupt.flag), nil
+		return invocationFor(interrupt.cmd, interrupt.forwarded, interrupt.flag), nil
 	}
 	if cmdInterrupt {
 		return invocationFor(active, forwarded, nil), nil

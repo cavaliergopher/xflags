@@ -253,6 +253,17 @@ func (lx *lexer) lexOperand(tok string, idx int) {
 	}
 	lx.instructions = append(lx.instructions, instruction{kind: instDispatch, cmd: sub})
 	lx.enterCommand(sub)
+
+	// Naming an interrupt command ends the lex the way naming an
+	// interrupt flag does: every later token is forwarded verbatim,
+	// whatever it looks like, for the handler to interpret or ignore.
+	if sub.Interrupt {
+		lx.instructions = append(lx.instructions, instruction{
+			kind:      instForward,
+			forwarded: append([]string(nil), lx.argv[lx.pos:]...),
+		})
+		lx.pos = len(lx.argv)
+	}
 }
 
 // lexOption resolves one option to its option-argument. The two forms are
@@ -425,6 +436,12 @@ func (lx *lexer) emitSet(o resolvedOption, value string, attached bool, argIndex
 // instruction is what keeps the two apart: apply discards the errors an
 // interrupt outran, and a line whose only interrupt was misspelled has
 // none to discard them.
+//
+// An interrupt ends the lex: nothing after its token is read, and the
+// rest of argv rides on the instruction verbatim, for the handler to
+// interpret or ignore. The letters after an interrupt in the same
+// cluster are part of the token already read, so they forward with
+// nothing.
 func (lx *lexer) emitInterrupt(f *ir.Flag, name string, attached bool) {
 	if attached {
 		lx.errs = append(lx.errs, ir.NewArgumentErrorf(nil, lx.cmd, f, name,
@@ -432,10 +449,12 @@ func (lx *lexer) emitInterrupt(f *ir.Flag, name string, attached bool) {
 		return
 	}
 	lx.instructions = append(lx.instructions, instruction{
-		kind: instInterrupt,
-		flag: f,
-		cmd:  lx.cmd,
+		kind:      instInterrupt,
+		flag:      f,
+		cmd:       lx.cmd,
+		forwarded: append([]string(nil), lx.argv[lx.pos:]...),
 	})
+	lx.pos = len(lx.argv)
 }
 
 // findDescendantWithFlag returns the first descendant of cmd to answer to

@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -652,5 +653,62 @@ func TestNegatedBoolIsNotAdvertised(t *testing.T) {
 	}
 	if got := buf.String(); strings.Contains(got, "--no-verbose") {
 		t.Errorf("help mentions --no-verbose:\n%s", got)
+	}
+}
+
+// TestInterruptFlagForwardsRemainder asserts that the token naming an
+// interrupt ends the parse and everything after it arrives on
+// Invocation.Forwarded verbatim, however it is spelled: options, a bare
+// "--", operands -- none of it is read.
+func TestInterruptFlagForwardsRemainder(t *testing.T) {
+	cmd := NewCommand("test", "").
+		Flags(Interrupt("where", "", func(ctx context.Context, inv *Invocation) error {
+			return nil
+		}))
+	inv, err := Parse(cmd, "--where", "extra", "--", "-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Interrupt == nil {
+		t.Fatal("Interrupt = nil, want the flag")
+	}
+	if got, want := strings.Join(inv.Forwarded, " "), "extra -- -x"; got != want {
+		t.Errorf("Forwarded = %q, want %q", got, want)
+	}
+}
+
+// TestInterruptFlagForwardsNothing asserts that an interrupt with nothing
+// after it forwards nothing, rather than an empty slice standing in.
+func TestInterruptFlagForwardsNothing(t *testing.T) {
+	cmd := NewCommand("test", "").
+		Flags(Interrupt("where", "", func(ctx context.Context, inv *Invocation) error {
+			return nil
+		}))
+	inv, err := Parse(cmd, "--where")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Forwarded != nil {
+		t.Errorf("Forwarded = %v, want nil", inv.Forwarded)
+	}
+}
+
+// TestInterruptCommandForwardsRemainder asserts the same rule for the
+// command tier: naming an interrupt command ends the parse, and the rest
+// of the line -- options a parse would reject included -- arrives on
+// Invocation.Forwarded for the handler to interpret.
+func TestInterruptCommandForwardsRemainder(t *testing.T) {
+	cmd := NewCommand("test", "").
+		Flags(String(new(string), "name", "", "").Required()).
+		Subcommands(VersionCommand("1.0"))
+	inv, err := Parse(cmd, "version", "deploy", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := inv.Cmd.FullName, "test version"; got != want {
+		t.Fatalf("Cmd = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(inv.Forwarded, " "), "deploy --json"; got != want {
+		t.Errorf("Forwarded = %q, want %q", got, want)
 	}
 }
