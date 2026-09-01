@@ -105,6 +105,20 @@ func NewCommand(name, summary string) *Command {
 	}).Flags()
 }
 
+// InterruptCommand returns a Command that ends the program with fn
+// before any handlers or middleware run, the way --help and --version
+// do, even when the rest of the command line is incomplete or wrong.
+//
+// Everything after the command's name reaches fn unparsed, as
+// Invocation.Forwarded; an interrupt declares no flags and no
+// subcommands of its own. VersionCommand and SchemaCommand are two of
+// these, ready made.
+func InterruptCommand(name, summary string, fn HandlerFunc) *Command {
+	c := NewCommand(name, summary).HandleFunc(fn)
+	c.interrupt = true
+	return c
+}
+
 // VersionCommand returns a Command named "version" that prints version,
 // alongside the name of the program it is mounted in.
 //
@@ -117,10 +131,7 @@ func NewCommand(name, summary string) *Command {
 // shorthand, and this is the way to mount it somewhere that shorthand
 // cannot -- under a subcommand rather than the root, or renamed.
 func VersionCommand(version string) *Command {
-	c := NewCommand("version", "Show the version").
-		HandleFunc(printVersion(version))
-	c.interrupt = true
-	return c
+	return InterruptCommand("version", "Show the version", printVersion(version))
 }
 
 // SchemaCommand returns a Command named "schema" that writes a JSON
@@ -134,14 +145,12 @@ func VersionCommand(version string) *Command {
 // shorthand, and this is the way to mount it somewhere that shorthand
 // cannot -- under a subcommand rather than the root, or renamed.
 func SchemaCommand() *Command {
-	c := NewCommand("schema", "Describe this program as JSON").
-		HandleFunc(func(ctx context.Context, inv *Invocation) error {
+	return InterruptCommand("schema", "Describe this program as JSON",
+		func(ctx context.Context, inv *Invocation) error {
 			enc := json.NewEncoder(inv.Stdout)
 			enc.SetIndent("", "  ")
 			return enc.Encode(desc.NewDocument(inv.Cmd.Root.Describe()))
 		})
-	c.interrupt = true
-	return c
 }
 
 func (c *Command) String() string { return c.name }

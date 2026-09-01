@@ -2364,3 +2364,65 @@ func TestRunCompilesOnce(t *testing.T) {
 		})
 	}
 }
+
+// TestInterruptCommandDeclaresNothing asserts that flags and subcommands
+// on an interrupt command are configuration errors: everything after its
+// name is forwarded unparsed, so there is nothing for either to do.
+func TestInterruptCommandDeclaresNothing(t *testing.T) {
+	noop := func(ctx context.Context, inv *Invocation) error { return nil }
+	for _, tt := range []struct {
+		name   string
+		cmd    *Command
+		reason string
+	}{
+		{
+			name:   "Flags",
+			cmd:    InterruptCommand("where", "", noop).Flags(Bool(new(bool), "loud", false, "")),
+			reason: "an interrupt command declares no flags",
+		},
+		{
+			name:   "Subcommands",
+			cmd:    InterruptCommand("where", "", noop).Subcommands(NewCommand("sub", "")),
+			reason: "an interrupt command declares no subcommands",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := NewCommand("test", "").Subcommands(tt.cmd)
+			_, err := root.Compile()
+			if err == nil {
+				t.Fatal("Compile succeeded, want a configuration error")
+			}
+			if got := err.Error(); !strings.Contains(got, tt.reason) {
+				t.Errorf("error = %q, want it to contain %q", got, tt.reason)
+			}
+		})
+	}
+}
+
+// TestInterruptCommandRunsBare asserts the constructor's whole contract in
+// one line: under a root with a required flag and middleware, the
+// interrupt answers without the flag and outside the wrapper.
+func TestInterruptCommandRunsBare(t *testing.T) {
+	var wrapped, ran bool
+	root := NewCommand("test", "").
+		Flags(String(new(string), "name", "", "").Required()).
+		Middleware(func(next HandlerFunc) HandlerFunc {
+			return func(ctx context.Context, inv *Invocation) error {
+				wrapped = true
+				return next(ctx, inv)
+			}
+		}).
+		Subcommands(InterruptCommand("about", "", func(ctx context.Context, inv *Invocation) error {
+			ran = true
+			return nil
+		}))
+	if code, _, stderr := runCaptured(root, "about"); code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, stderr)
+	}
+	if !ran {
+		t.Error("the interrupt did not run")
+	}
+	if wrapped {
+		t.Error("middleware wrapped the interrupt")
+	}
+}

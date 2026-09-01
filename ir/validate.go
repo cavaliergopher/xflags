@@ -32,6 +32,24 @@ func validateTree(c *Command) error {
 func validateSelf(c *Command) error {
 	var errs []error
 
+	// An interrupt answers and takes no other action, so there is
+	// nothing for a flag or a subcommand of its own to do: everything
+	// after its name is forwarded to its handler unparsed. Declaring
+	// either is a mistake worth naming at the declaration.
+	if c.Interrupt {
+		for _, group := range c.FlagGroups {
+			if len(group.Flags) > 0 {
+				errs = append(errs, newConfigErrorf(nil, c, nil,
+					"an interrupt command declares no flags"))
+				break
+			}
+		}
+		if len(c.Subcommands) > 0 {
+			errs = append(errs, newConfigErrorf(nil, c, nil,
+				"an interrupt command declares no subcommands"))
+		}
+	}
+
 	hasUnboundedPositional := false
 	// A positional argument is shown by its value name alone, so two of
 	// them sharing one is the collision that matters: "missing required
