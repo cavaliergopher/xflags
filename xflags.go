@@ -118,6 +118,9 @@ func dispatch(ctx context.Context, cmd *ir.Command, args []string) error {
 	if inv.Interrupt != nil {
 		return inv.Interrupt.Handler(ctx, inv)
 	}
+	if inv.Cmd.Interrupt != nil {
+		return inv.Cmd.Interrupt(ctx, inv)
+	}
 	return inv.Cmd.Handler(ctx, inv)
 }
 

@@ -2476,3 +2476,16 @@ func TestDescribeForwarded(t *testing.T) {
 		t.Errorf("Forwarded = %+v, want nil", fwd)
 	}
 }
+
+// TestInterruptOrHandlerNotBoth asserts that a command carrying both an
+// interrupt and a handler is a configuration error: the callback is the
+// marker, and only one can answer.
+func TestInterruptOrHandlerNotBoth(t *testing.T) {
+	noop := func(ctx context.Context, inv *Invocation) error { return nil }
+	cmd := InterruptCommand("about", "", noop).HandleFunc(noop)
+	if _, err := NewCommand("test", "").Subcommands(cmd).Compile(); err == nil {
+		t.Fatal("Compile succeeded, want a configuration error")
+	} else if got, want := err.Error(), "a command is an interrupt or has a handler, not both"; !strings.Contains(got, want) {
+		t.Errorf("error = %q, want it to contain %q", got, want)
+	}
+}

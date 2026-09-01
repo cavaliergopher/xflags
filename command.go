@@ -62,13 +62,14 @@ type Command struct {
 	hidden      bool
 	forwardArgs bool
 
-	// interrupt marks a command as an interrupt, the way HelpFlag and
-	// VersionFlag mark a flag: invoking it skips the checks an ordinary
-	// command line must pass. There is no chained setter for it -- a
-	// program wanting one of its own reaches for the same constructors
-	// this package's own interrupts are built with, such as
-	// VersionCommand.
-	interrupt bool
+	// interrupt, if set, is what makes the command an interrupt, the
+	// way a Handler makes a flag one: the callback is the marker, and
+	// invoking the command runs it in place of any handler, skipping
+	// the checks an ordinary command line must pass. There is no
+	// chained setter for it -- a program wanting one of its own reaches
+	// for InterruptCommand, the same constructor this package's own are
+	// built with.
+	interrupt HandlerFunc
 
 	// forwardedValueName and forwardedUsage name and explain the
 	// arguments the command forwards unparsed; see Command.Forwarded.
@@ -119,8 +120,8 @@ func NewCommand(name, summary string) *Command {
 // subcommands of its own. VersionCommand and SchemaCommand are two of
 // these, ready made.
 func InterruptCommand(name, summary string, fn HandlerFunc) *Command {
-	c := NewCommand(name, summary).HandleFunc(fn)
-	c.interrupt = true
+	c := NewCommand(name, summary)
+	c.interrupt = fn
 	return c
 }
 
@@ -356,8 +357,12 @@ func (c *Command) lower(parent *ir.Command, inherited Middleware, nodeMap map[*C
 	// not have.
 	if node.Handler == nil {
 		node.Handler = missingSubcommand(node)
-	} else if middleware != nil && !c.interrupt {
+	} else if middleware != nil && c.interrupt == nil {
 		node.Handler = middleware(node.Handler)
+	}
+	if c.interrupt != nil && c.handlerFunc != nil {
+		*errs = append(*errs, ir.NewConfigErrorf(nil, node, nil,
+			"a command is an interrupt or has a handler, not both"))
 	}
 
 	// The root has no parent to inherit from, so a stream nobody named is

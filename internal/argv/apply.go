@@ -101,7 +101,7 @@ func apply(root *ir.Command, res lexResult) (*ir.Invocation, error) {
 	// the walk below ends on whenever no flag interrupt cuts it short --
 	// checking it here, before the walk, is what lets a command interrupt
 	// win over a recorded lex error the same way a flag interrupt does.
-	cmdInterrupt := interruptAt == -1 && res.active.Interrupt
+	cmdInterrupt := interruptAt == -1 && res.active.Interrupt != nil
 	if interruptAt == -1 && !cmdInterrupt && len(res.errs) > 0 {
 		return nil, res.errs[0]
 	}

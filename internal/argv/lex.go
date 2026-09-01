@@ -257,7 +257,7 @@ func (lx *lexer) lexOperand(tok string, idx int) {
 	// Naming an interrupt command ends the lex the way naming an
 	// interrupt flag does: every later token is forwarded verbatim,
 	// whatever it looks like, for the handler to interpret or ignore.
-	if sub.Interrupt {
+	if sub.Interrupt != nil {
 		lx.instructions = append(lx.instructions, instruction{
 			kind:      instForward,
 			forwarded: append([]string(nil), lx.argv[lx.pos:]...),

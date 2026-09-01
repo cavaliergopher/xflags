@@ -89,13 +89,14 @@ type Command struct {
 	Hidden      bool
 	ForwardArgs bool
 
-	// Interrupt reports that invoking this command ends the parse the
-	// way an interrupt flag does: a check that would otherwise fail the
-	// command line -- a required flag missing, an argument count unmet,
-	// an option nothing recognizes -- does not stop this command from
-	// running, and no middleware wraps its handler. See
-	// xflags.VersionCommand.
-	Interrupt bool
+	// Interrupt, if set, is what makes the command an interrupt, and
+	// runs in place of Handler: invoking the command ends the parse the
+	// way an interrupt flag does, and a check that would otherwise fail
+	// the command line -- a required flag missing, an argument count
+	// unmet, an option nothing recognizes -- does not stop it from
+	// answering. No middleware wraps it. Nil means the command is not
+	// an interrupt. See xflags.InterruptCommand.
+	Interrupt HandlerFunc
 
 	// FullName is the command's name joined with each ancestor's, from the
 	// root down, so a deep subcommand reads as "app remote add" rather
@@ -141,7 +142,9 @@ type Command struct {
 	// arrives here already wrapped in the wrappers its program put around
 	// it, and a command that declared no handler of its own gets one
 	// reporting a usage error, since such a command exists only to group
-	// its subcommands. Calling it is how a command is run.
+	// its subcommands. Calling it is how a command is run -- unless the
+	// command is an interrupt, in which case Interrupt runs instead and
+	// this is never called.
 	Handler HandlerFunc
 
 	// UsageFunc renders this command's help message in place of the

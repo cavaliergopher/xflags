@@ -36,7 +36,7 @@ func validateSelf(c *Command) error {
 	// nothing for a flag or a subcommand of its own to do: everything
 	// after its name is forwarded to its handler unparsed. Declaring
 	// either is a mistake worth naming at the declaration.
-	if c.Interrupt {
+	if c.Interrupt != nil {
 		for _, group := range c.FlagGroups {
 			if len(group.Flags) > 0 {
 				errs = append(errs, newConfigErrorf(nil, c, nil,
@@ -54,7 +54,7 @@ func validateSelf(c *Command) error {
 	// unparsed, which only an interrupt or a ForwardArgs command holds
 	// up; and the name is how they are shown, so an explanation without
 	// one has nowhere to hang.
-	if c.ForwardedValueName != "" && !c.Interrupt && !c.ForwardArgs {
+	if c.ForwardedValueName != "" && c.Interrupt == nil && !c.ForwardArgs {
 		errs = append(errs, newConfigErrorf(nil, c, nil,
 			"only a command that forwards arguments may name them"))
 	}

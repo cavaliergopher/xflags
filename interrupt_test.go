@@ -5,11 +5,13 @@ import (
 	"testing"
 )
 
-// asInterrupt marks cmd as an interrupt the way a library constructor
-// such as VersionCommand does, for a test that needs one shaped to its
+// asInterrupt makes cmd an interrupt the way a library constructor such
+// as VersionCommand does, moving its handler into the interrupt slot --
+// the callback is the marker -- for a test that needs one shaped to its
 // own scenario rather than reaching for VersionCommand itself.
 func asInterrupt(cmd *Command) *Command {
-	cmd.interrupt = true
+	cmd.interrupt = cmd.handlerFunc
+	cmd.handlerFunc = nil
 	return cmd
 }
 
