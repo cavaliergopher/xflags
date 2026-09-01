@@ -1,0 +1,5 @@
+# Golden files are compared byte for byte against what a program writes,
+# which is always LF. Checking them out with CRLF on Windows fails the
+# comparison for a reason that has nothing to do with the program.
+*.json text eol=lf
+*.golden text eol=lf
