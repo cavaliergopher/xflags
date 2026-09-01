@@ -219,8 +219,10 @@ func (f *Flag) Describe() *desc.Flag {
 
 // describeOptions returns every option that reaches f, in the order
 // desc.Flag.Options documents: NamedOptions in order, skipping any empty
-// slot, then every option ClaimedOptions holds that is not already named,
-// sorted. A positional argument claims no option and so describes none.
+// slot, then every option a dialect generated, ordered by the named
+// option it was generated from, so a derivative sits by the rank of its
+// source rather than by the alphabet. A positional argument claims no
+// option and so describes none.
 func (f *Flag) describeOptions() []desc.Option {
 	named := make(map[string]struct{}, len(f.NamedOptions))
 	var options []desc.Option
@@ -234,14 +236,20 @@ func (f *Flag) describeOptions() []desc.Option {
 			Effect: f.ClaimedOptions[name].Effect,
 		})
 	}
-	for _, option := range slices.Sorted(maps.Keys(f.ClaimedOptions)) {
-		if _, ok := named[option]; ok {
-			continue
+	generated := slices.Sorted(maps.Keys(f.ClaimedOptions))
+	for _, source := range f.NamedOptions {
+		for _, option := range generated {
+			if _, ok := named[option]; ok {
+				continue
+			}
+			if f.ClaimedOptions[option].Source != source {
+				continue
+			}
+			options = append(options, desc.Option{
+				Option: option,
+				Effect: f.ClaimedOptions[option].Effect,
+			})
 		}
-		options = append(options, desc.Option{
-			Option: option,
-			Effect: f.ClaimedOptions[option].Effect,
-		})
 	}
 	return options
 }

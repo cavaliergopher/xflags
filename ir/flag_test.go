@@ -8,8 +8,9 @@ import (
 
 // TestFlagDescribeOptions asserts the option order desc.Flag.Options
 // documents: NamedOptions in order, skipping an empty slot, then every
-// generated option ClaimedOptions holds, sorted -- and that a positional
-// argument, which claims no option, describes none.
+// generated option ClaimedOptions holds, in the order of the named
+// options each was generated from -- and that a positional argument,
+// which claims no option, describes none.
 func TestFlagDescribeOptions(t *testing.T) {
 	for _, tt := range []struct {
 		name string
@@ -30,6 +31,27 @@ func TestFlagDescribeOptions(t *testing.T) {
 				{Option: "--verbose"},
 				{Option: "-v"},
 				{Option: "--no-verbose", Effect: "negate"},
+			},
+		},
+		{
+			// Derivatives order by their sources' rank, not the
+			// alphabet: --no-zap precedes --no-add because --zap
+			// precedes --add.
+			name: "GeneratedFollowSourceOrder",
+			flag: &Flag{
+				NamedOptions: []string{"--zap", "--add"},
+				ClaimedOptions: map[string]Claim{
+					"--zap":    {Source: "--zap"},
+					"--add":    {Source: "--add"},
+					"--no-zap": {Source: "--zap", Effect: "negate"},
+					"--no-add": {Source: "--add", Effect: "negate"},
+				},
+			},
+			want: []desc.Option{
+				{Option: "--zap"},
+				{Option: "--add"},
+				{Option: "--no-zap", Effect: "negate"},
+				{Option: "--no-add", Effect: "negate"},
 			},
 		},
 		{

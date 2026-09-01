@@ -61,8 +61,9 @@ type Flag struct {
 
 	// Options is every option that reaches the flag: the canonical
 	// name's option, then the short name's, then any further aliases,
-	// then every option a dialect generated, sorted. The order is part
-	// of the format, so a formatter can tell a short name from an alias
-	// without counting dashes. A positional argument has none.
+	// then every option a dialect generated, in the order of the named
+	// options each was generated from. The order is part of the format,
+	// so a formatter can tell a short name from an alias without
+	// counting dashes. A positional argument has none.
 	Options []Option `json:"options,omitempty"`
 }
