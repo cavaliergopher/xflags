@@ -48,6 +48,6 @@ func Delete(ctx context.Context, inv *Invocation, db *sql.DB) error {
 }
 
 func Example_dependencyInjection() {
-	RunWithArgs(context.Background(), DBClient, "get")
+	Run(context.Background(), DBClient, WithArgs("get"))
 	// Output: db-client get: issued a get query
 }

@@ -66,9 +66,9 @@ its author does not own, so the path is something only the invocation can tell
 it.
 
 A handler should read and write the streams on its invocation rather than the
-process streams, for the same reason: whoever composes the binary decides where
-the input and output of any command in the tree go, with Command.Stdin,
-Command.Stdout and Command.Stderr.
+process streams. They are the process streams unless the Run call answering
+replaced them, so a test or an embedding program captures what a command
+writes without the command knowing; see WithStdout.
 
 	func MyAppHandler(ctx context.Context, inv *xflags.Invocation) error {
 		fmt.Fprintln(inv.Stdout, "Hello, World!")
@@ -231,7 +231,7 @@ Command.EnableCompletion opts a command into shell completion:
 	var App = xflags.NewCommand(os.Args[0], "My application").
 		EnableCompletion()
 
-Once enabled, Run and RunWithArgs check one environment variable before
+Once enabled, Run checks one environment variable before
 doing anything else -- the command's name, uppercased, with every
 non-alphanumeric rune mapped to "_", and "_COMPLETE" appended, so "myapp"
 answers to MYAPP_COMPLETE. A recognized value there makes Run print a

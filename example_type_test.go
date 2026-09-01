@@ -48,19 +48,19 @@ func Example_customTypes() {
 	ctx := context.Background()
 
 	fmt.Println("+ example --help")
-	RunWithArgs(ctx, ExampleCommand, "--help")
+	Run(ctx, ExampleCommand, WithArgs("--help"))
 
 	// Most programs will call the following from main:
 	//
 	//     func main() {
 	//         ctx, stop := xflags.NotifyContext(context.Background())
 	//         defer stop()
-	//         os.Exit(RunWithArgs(ctx, xflags, ExampleCommand...))
+	//         os.Exit(Run(ctx, xflags, WithArgs(ExampleCommand...)))
 	//     }
 	//
 	fmt.Println()
 	fmt.Println("+ example --gopher_type 'Goldman's pocket gopher'")
-	RunWithArgs(ctx, ExampleCommand, "--gopher_type", "Goldman's pocket gopher")
+	Run(ctx, ExampleCommand, WithArgs("--gopher_type", "Goldman's pocket gopher"))
 	// Output:
 	// + example --help
 	// Usage: example [OPTIONS]

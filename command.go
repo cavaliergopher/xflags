@@ -3,8 +3,6 @@ package xflags
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"os"
 	"slices"
 
 	"github.com/cavaliergopher/xflags/desc"
@@ -82,9 +80,6 @@ type Command struct {
 	usageFunc   ir.UsageFunc
 	handlerFunc HandlerFunc
 	middleware  []Middleware
-	stdin       io.Reader
-	stdout      io.Writer
-	stderr      io.Writer
 
 	// completionEnabled records that EnableCompletion was called on this
 	// command, so Run consults the shell completion environment variable
@@ -303,9 +298,6 @@ func (c *Command) lower(parent *ir.Command, inherited Middleware, nodeMap map[*C
 		FullName:           fullName,
 		Handler:            c.handlerFunc,
 		UsageFunc:          c.usageFunc,
-		Stdin:              c.stdin,
-		Stdout:             c.stdout,
-		Stderr:             c.stderr,
 	}
 	node.Root = node
 	node.Ancestry = []*ir.Command{node}
@@ -323,15 +315,6 @@ func (c *Command) lower(parent *ir.Command, inherited Middleware, nodeMap map[*C
 	if parent != nil {
 		if node.UsageFunc == nil {
 			node.UsageFunc = parent.UsageFunc
-		}
-		if node.Stdin == nil {
-			node.Stdin = parent.Stdin
-		}
-		if node.Stdout == nil {
-			node.Stdout = parent.Stdout
-		}
-		if node.Stderr == nil {
-			node.Stderr = parent.Stderr
 		}
 	}
 	// Middleware composes where the fields above fall back: a command's
@@ -368,15 +351,6 @@ func (c *Command) lower(parent *ir.Command, inherited Middleware, nodeMap map[*C
 	// The root has no parent to inherit from, so a stream nobody named is
 	// the process's. UsageFunc has no default to fall back to here: nil
 	// means the help renderer chooses one when it prints.
-	if node.Stdin == nil {
-		node.Stdin = os.Stdin
-	}
-	if node.Stdout == nil {
-		node.Stdout = os.Stdout
-	}
-	if node.Stderr == nil {
-		node.Stderr = os.Stderr
-	}
 	nodeMap[c] = node
 
 	// Own groups first, then every mounted set, matching the order
@@ -645,35 +619,5 @@ func (c *Command) ForwardArgs() *Command {
 func (c *Command) Forwarded(valueName, usage string) *Command {
 	c.forwardedValueName = valueName
 	c.forwardedUsage = usage
-	return c
-}
-
-// Stdin sets the source the command's handler reads as Invocation.Stdin.
-//
-// A nil reader inherits the stream from the command's parent, and is
-// os.Stdin at the root.
-func (c *Command) Stdin(r io.Reader) *Command {
-	c.stdin = r
-	return c
-}
-
-// Stdout sets the destination for the command's usage messages and for
-// whatever its handler writes to Invocation.Stdout.
-//
-// A nil writer inherits the stream from the command's parent, and is
-// os.Stdout at the root.
-func (c *Command) Stdout(w io.Writer) *Command {
-	c.stdout = w
-	return c
-}
-
-// Stderr sets the destination for the command's error messages and for
-// whatever its handler writes to Invocation.Stderr. Each stream is set on
-// its own, so redirecting stdout still leaves errors on stderr.
-//
-// A nil writer inherits the stream from the command's parent, and is
-// os.Stderr at the root.
-func (c *Command) Stderr(w io.Writer) *Command {
-	c.stderr = w
 	return c
 }

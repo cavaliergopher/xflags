@@ -52,10 +52,6 @@ func Example_middleware() {
 	// tree runs inside them, in the order given here, and neither
 	// subcommand below knows they exist.
 	app := NewCommand("fleet", "Operate the fleet").
-		// Both wrappers report on stderr, as does Run when one of them
-		// refuses, so the example points that stream at stdout to show
-		// everything in one place. A real program would leave it alone.
-		Stderr(os.Stdout).
 		Middleware(requireActor, timing).
 		Flags(String(&auditFlags.actor, "actor", "", "Who is running this")).
 		Subcommands(
@@ -71,18 +67,23 @@ func Example_middleware() {
 				}),
 		)
 
+	// Both wrappers report on stderr, as does Run when one of them
+	// refuses, so the example points that stream at stdout to show
+	// everything in one place. A real program would leave it alone.
+	toStdout := WithStderr(os.Stdout)
+
 	fmt.Println("+ fleet --actor=alice restart")
-	RunWithArgs(ctx, app, "--actor=alice", "restart")
+	Run(ctx, app, WithArgs("--actor=alice", "restart"), toStdout)
 
 	fmt.Println()
 	fmt.Println("+ fleet --actor=alice status")
-	RunWithArgs(ctx, app, "--actor=alice", "status")
+	Run(ctx, app, WithArgs("--actor=alice", "status"), toStdout)
 
 	// The wrapper refuses before the handler runs, so nothing is
 	// restarted and the exit code is the one it named.
 	fmt.Println()
 	fmt.Println("+ fleet restart")
-	fmt.Printf("exit code %d\n", RunWithArgs(ctx, app, "restart"))
+	fmt.Printf("exit code %d\n", Run(ctx, app, WithArgs("restart"), toStdout))
 
 	// Output:
 	// + fleet --actor=alice restart

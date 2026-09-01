@@ -23,9 +23,7 @@ func TestSchemaCommand(t *testing.T) {
 		)
 
 	var out bytes.Buffer
-	app.Stdout(&out)
-
-	if err := Dispatch(context.Background(), app, "schema"); err != nil {
+	if err := Dispatch(context.Background(), app, WithArgs("schema"), WithStdout(&out)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,8 +13,74 @@ import (
 	"github.com/cavaliergopher/xflags/ir"
 )
 
-// Run runs the command or subcommand named by the command line in os.Args
-// and returns the exit code the program should terminate with.
+// A RunOption replaces something Run takes from the process: the
+// command line it reads, or the streams it and the command's handlers
+// write. Pass none and a program behaves as a command line program
+// does.
+type RunOption func(*runConfig)
+
+// runConfig is what the options build: everything Run takes from the
+// process, resolved once before anything runs.
+type runConfig struct {
+	args   []string
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func newRunConfig(opts []RunOption) *runConfig {
+	cfg := &runConfig{
+		args:   os.Args[1:],
+		stdin:  os.Stdin,
+		stdout: os.Stdout,
+		stderr: os.Stderr,
+	}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	return cfg
+}
+
+// WithArgs reads args as the command line, in place of the arguments the
+// program was started with.
+//
+//	xflags.Run(ctx, cmd, xflags.WithArgs("deploy", "--dry-run"))
+func WithArgs(args ...string) RunOption {
+	return func(cfg *runConfig) { cfg.args = args }
+}
+
+// WithStdin reads r as Invocation.Stdin, in place of the process's
+// standard input.
+func WithStdin(r io.Reader) RunOption {
+	return func(cfg *runConfig) { cfg.stdin = r }
+}
+
+// WithStdout writes w as Invocation.Stdout, in place of the process's
+// standard output. Help and every other answer an interrupt gives go
+// here too.
+func WithStdout(w io.Writer) RunOption {
+	return func(cfg *runConfig) { cfg.stdout = w }
+}
+
+// WithStderr writes w as Invocation.Stderr, in place of the process's
+// standard error. Errors and the usage that follows them go here too.
+func WithStderr(w io.Writer) RunOption {
+	return func(cfg *runConfig) { cfg.stderr = w }
+}
+
+// Run runs the command or subcommand named by the command line and
+// returns the exit code the program should terminate with:
+//
+//	0  the handler returned nil, or an interrupt such as --help ran
+//	1  the handler returned an error
+//	2  the command line or the command tree was wrong
+//
+// A handler names its own exit code by returning an error that
+// implements ExitCoder. See Exit and Exitf.
+//
+// The command line comes from the arguments the program was started
+// with, and the streams from the process. See WithArgs and WithStdout
+// for reading and writing somewhere else, which is what a test does.
 //
 //	func main() {
 //	    ctx, stop := xflags.NotifyContext(context.Background())
@@ -21,57 +88,45 @@ import (
 //	    os.Exit(xflags.Run(ctx, cmd))
 //	}
 //
-// See RunWithArgs for the exit codes and what gets printed.
-func Run(ctx context.Context, cmd *Command) int {
-	return RunWithArgs(ctx, cmd, os.Args[1:]...)
-}
-
-// RunWithArgs runs the command or subcommand named by args and returns the
-// exit code the program should terminate with:
-//
-//	0  the handler returned nil, or an interrupt such as --help ran
-//	1  the handler returned an error
-//	2  the command line or the command tree was wrong
-//
-// A handler names its own exit code by returning an error that implements
-// ExitCoder. See Exit and Exitf.
-//
-// Help is printed to the command's stdout. An error is printed to its
-// stderr, followed by the command's usage when the command line was at
-// fault. See Command.Stdout and Command.Stderr.
+// Help is printed to stdout. An error is printed to stderr, followed by
+// the command's usage when the command line was at fault.
 //
 // ctx reaches the handler unchanged. See NotifyContext.
-func RunWithArgs(ctx context.Context, cmd *Command, args ...string) int {
+func Run(ctx context.Context, cmd *Command, opts ...RunOption) int {
+	cfg := newRunConfig(opts)
+
 	// The one place an ordinary invocation compiles the tree. Everything
 	// below takes the compiled node, so lowering happens once however
 	// many steps consult it.
 	node, err := cmd.Compile()
 	if err != nil {
-		return reportConfigError(err)
+		return reportConfigError(err, cfg.stderr)
 	}
 	if cmd.completionEnabled {
-		if code, handled := completionHook(node); handled {
+		if code, handled := completionHook(node, cfg.stdout); handled {
 			return code
 		}
 	}
-	return runCompiled(ctx, node, args...)
+	return report(node, dispatch(ctx, node, cfg), cfg.stderr)
 }
 
-// Dispatch runs the command or subcommand named by args and returns the
-// handler's error, or the error that stopped the command line from being
-// read. It prints nothing and maps nothing to an exit code.
+// Dispatch runs the command or subcommand named by the command line and
+// returns the handler's error, or the error that stopped the command
+// line from being read. It prints nothing and maps nothing to an exit
+// code.
 //
 // Reach for it in a program that reports errors its own way, or embeds
-// xflags in a larger command loop: RunWithArgs is Dispatch plus the
-// reporting and the exit code. An interrupt such as --help is not an
-// error: it runs in place of the command, and what it returns is
-// returned here.
-func Dispatch(ctx context.Context, cmd *Command, args ...string) error {
+// xflags in a larger command loop: Run is Dispatch plus the reporting
+// and the exit code. It takes the same options; see WithArgs.
+//
+// An interrupt such as --help is not an error: it runs in place of the
+// command, and what it returns is returned here.
+func Dispatch(ctx context.Context, cmd *Command, opts ...RunOption) error {
 	node, err := cmd.Compile()
 	if err != nil {
 		return err
 	}
-	return dispatch(ctx, node, args)
+	return dispatch(ctx, node, newRunConfig(opts))
 }
 
 // Parse reads args into the flags cmd and its subcommands declare and
@@ -84,12 +139,20 @@ func Dispatch(ctx context.Context, cmd *Command, args ...string) error {
 //
 // If an interrupt such as --help was given, the returned Invocation names
 // it and nothing after it was checked.
+//
+// The Invocation's streams are the process's, since Parse runs nothing
+// that would write to them. See Run to read and write somewhere else.
 func Parse(cmd *Command, args ...string) (*Invocation, error) {
 	node, err := cmd.Compile()
 	if err != nil {
 		return nil, err
 	}
-	return argv.Parse(node, args)
+	inv, err := argv.Parse(node, args)
+	if err != nil {
+		return nil, err
+	}
+	inv.Stdin, inv.Stdout, inv.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return inv, nil
 }
 
 // Complete returns the shell completion candidates for a command line that
@@ -108,13 +171,18 @@ func Complete(cmd *Command, args []string, word string) ([]string, ir.CompDirect
 }
 
 // dispatch is Dispatch against a tree that is already compiled, which is
-// what lets RunWithArgs lower the tree once and hand the same node to
-// everything below it. See runCompiled.
-func dispatch(ctx context.Context, cmd *ir.Command, args []string) error {
-	inv, err := argv.Parse(cmd, args)
+// what lets Run lower the tree once and hand the same node to everything
+// below it.
+//
+// It is where an Invocation gets its streams: the parser leaves them nil,
+// having no business knowing what a process was given, and everything
+// that runs from here reads and writes what cfg resolved.
+func dispatch(ctx context.Context, cmd *ir.Command, cfg *runConfig) error {
+	inv, err := argv.Parse(cmd, cfg.args)
 	if err != nil {
 		return err
 	}
+	inv.Stdin, inv.Stdout, inv.Stderr = cfg.stdin, cfg.stdout, cfg.stderr
 	if inv.Interrupt != nil {
 		return inv.Interrupt.Handler(ctx, inv)
 	}
@@ -124,53 +192,39 @@ func dispatch(ctx context.Context, cmd *ir.Command, args []string) error {
 	return inv.Cmd.Handler(ctx, inv)
 }
 
-// runCompiled runs an already-compiled command tree and returns the exit
-// code the program should terminate with. It is RunWithArgs's whole body
-// past the compile, and the seam a precompiled entry point would be
-// exported at if one is ever wanted.
-func runCompiled(ctx context.Context, cmd *ir.Command, args ...string) int {
-	return report(cmd, dispatch(ctx, cmd, args))
-}
-
 // report reports err against cmd, an already-compiled tree, and returns
 // the exit code the program should terminate with. A joined error -- a
 // wrong command line can report more than one fault -- prints one
 // prefixed line per error.
 //
-// A line goes to the stderr of the command the error names, or to cmd's
-// when it names none. An argument error is followed by that command's
-// usage, so the reader who mistyped sees what to type instead; see
+// Every line goes to stderr, which is the process's unless the Run call
+// replaced it. An argument error is followed by the usage of the command
+// it names, so the reader who mistyped sees what to type instead; see
 // docs/adr/argument-errors-print-usage.md.
 //
-// A configuration error is the exception, and reaches here only from a
-// tree that compiled and then failed anyway -- restoring a default
-// through Set is the one way that happens. The fault is the program's
-// rather than the user's, so it goes to os.Stderr whatever the tree
-// configured and prints no usage. A tree that failed to compile at all
-// never reaches here; see reportConfigError.
-func report(cmd *ir.Command, err error) int {
+// A configuration error reaches here only from a tree that compiled and
+// then failed anyway -- restoring a default through Set is the one way
+// that happens. The fault is the program's rather than the user's, so it
+// prints no usage. A tree that failed to compile at all never reaches
+// here; see reportConfigError.
+func report(cmd *ir.Command, err error, stderr io.Writer) int {
 	if err == nil {
 		return ExitCodeSuccess
 	}
 
 	for _, e := range ir.FlattenErrors(err) {
 		errTypeName := "Error"
-		stderr := cmd.Stderr
 
 		var argErr *ir.ArgumentError
 		var cfgErr *ir.ConfigError
 		switch {
 		case errors.As(e, &argErr):
 			errTypeName = "Argument error"
-			if argErr.Cmd != nil {
-				stderr = argErr.Cmd.Stderr
-			}
 
 		case errors.As(e, &cfgErr):
 			// Both exit 2, so the prefix is all that says whether the
 			// fault was the user's or the program's.
 			errTypeName = "Program error"
-			stderr = os.Stderr
 		}
 
 		// A config error is already on os.Stderr, which is where the
@@ -206,12 +260,12 @@ func report(cmd *ir.Command, err error) int {
 // configured. No usage follows, because a malformed tree cannot describe
 // itself. Compile reports the same faults as an ordinary error value,
 // which is where a program is best served catching them.
-func reportConfigError(err error) int {
+func reportConfigError(err error, stderr io.Writer) int {
 	for _, e := range ir.FlattenErrors(err) {
 		// A failure to write here has nowhere left to go: os.Stderr is
 		// already where the fallback would write, and it must not cost
 		// the exit code that says the program is malformed.
-		fmt.Fprintf(os.Stderr, "Program error: %s\n", humanMessage(e))
+		fmt.Fprintf(stderr, "Program error: %s\n", humanMessage(e))
 	}
 	return ExitCode(err)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -54,7 +55,7 @@ func TestMiddlewareOrder(t *testing.T) {
 		Middleware(tr.step("root1"), tr.step("root2")).
 		Subcommands(sub)
 
-	if err := Dispatch(context.Background(), app, "sub"); err != nil {
+	if err := Dispatch(context.Background(), app, WithArgs("sub")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := "root1 in, root2 in, sub in, handler, sub out, root2 out, root1 out"
@@ -71,7 +72,7 @@ func TestMiddlewareAppends(t *testing.T) {
 		Middleware(tr.step("second")).
 		HandleFunc(tr.handler("handler", nil))
 
-	if err := Dispatch(context.Background(), app); err != nil {
+	if err := Dispatch(context.Background(), app, WithArgs()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assertString(t, "first in, second in, handler, second out, first out", tr.String())
@@ -92,13 +93,13 @@ func TestMiddlewareWrapsSiblingsIndependently(t *testing.T) {
 		Subcommands(audited, plain)
 
 	ctx := context.Background()
-	if err := Dispatch(ctx, app, "plain"); err != nil {
+	if err := Dispatch(ctx, app, WithArgs("plain")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assertString(t, "root in, plain handler, root out", tr.String())
 
 	tr.steps = nil
-	if err := Dispatch(ctx, app, "audited"); err != nil {
+	if err := Dispatch(ctx, app, WithArgs("audited")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assertString(t, "root in, audit in, audited handler, audit out, root out", tr.String())
@@ -112,7 +113,6 @@ func TestMiddlewareRefusesInvocation(t *testing.T) {
 	handled := false
 	var stderr strings.Builder
 	app := NewCommand("app", "").
-		Stderr(&stderr).
 		Middleware(func(next HandlerFunc) HandlerFunc {
 			return func(ctx context.Context, inv *Invocation) error {
 				return Exitf(7, "not authorized")
@@ -123,7 +123,7 @@ func TestMiddlewareRefusesInvocation(t *testing.T) {
 			return nil
 		})
 
-	if code := RunWithArgs(context.Background(), app); code != 7 {
+	if code := Run(context.Background(), app, WithArgs(), WithStderr(&stderr)); code != 7 {
 		t.Errorf("exit code = %d, want 7", code)
 	}
 	if handled {
@@ -147,7 +147,7 @@ func TestMiddlewareSeesParsedFlags(t *testing.T) {
 		}).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error { return nil })
 
-	if err := Dispatch(context.Background(), app, "--actor=alice"); err != nil {
+	if err := Dispatch(context.Background(), app, WithArgs("--actor=alice")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assertString(t, "alice", seen)
@@ -159,19 +159,17 @@ func TestMiddlewareSeesParsedFlags(t *testing.T) {
 // handler, so with none to wrap it has nothing to say.
 func TestMiddlewareSkippedWithoutHandler(t *testing.T) {
 	var tr tracer
-	var stdout strings.Builder
 	app := NewCommand("app", "").
-		Stdout(&stdout).
 		HelpFlag().
 		Middleware(tr.step("root")).
 		Subcommands(NewCommand("sub", "").HandleFunc(tr.handler("handler", nil)))
 
 	ctx := context.Background()
-	if err := Dispatch(ctx, app, "--help"); err != nil {
+	if err := Dispatch(ctx, app, WithArgs("--help"), WithStdout(io.Discard)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var argErr *ir.ArgumentError
-	if err := Dispatch(ctx, app); !errors.As(err, &argErr) {
+	if err := Dispatch(ctx, app, WithArgs()); !errors.As(err, &argErr) {
 		t.Fatalf("error = %v, want an *ir.ArgumentError", err)
 	}
 	assertString(t, "", tr.String())

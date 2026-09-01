@@ -26,7 +26,7 @@ func TestInterruptCommandSkipsAncestorRequiredFlag(t *testing.T) {
 		Flags(String(new(string), "name", "", "").Required()).
 		Subcommands(asInterrupt(NewCommand("version", "").HandleFunc(tr.handler("version", nil))))
 
-	if err := Dispatch(context.Background(), app, "version"); err != nil {
+	if err := Dispatch(context.Background(), app, WithArgs("version")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got, want := tr.String(), "version"; got != want {
@@ -43,7 +43,7 @@ func TestInterruptCommandSkipsMiddleware(t *testing.T) {
 		Middleware(tr.step("root")).
 		Subcommands(asInterrupt(NewCommand("version", "").HandleFunc(tr.handler("handler", nil))))
 
-	if err := Dispatch(context.Background(), app, "version"); err != nil {
+	if err := Dispatch(context.Background(), app, WithArgs("version")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got, want := tr.String(), "handler"; got != want {
@@ -64,7 +64,7 @@ func TestNonInterruptSiblingStillEnforcesRules(t *testing.T) {
 			NewCommand("sibling", "").HandleFunc(tr.handler("sibling", nil)),
 		)
 
-	if err := Dispatch(context.Background(), app, "version"); err != nil {
+	if err := Dispatch(context.Background(), app, WithArgs("version")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got, want := tr.String(), "version"; got != want {
@@ -77,7 +77,7 @@ func TestNonInterruptSiblingStillEnforcesRules(t *testing.T) {
 	}
 
 	tr.steps = nil
-	if err := Dispatch(context.Background(), app, "--name=x", "sibling"); err != nil {
+	if err := Dispatch(context.Background(), app, WithArgs("--name=x", "sibling")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got, want := tr.String(), "root in, sibling, root out"; got != want {
@@ -96,7 +96,7 @@ func TestInterruptCommandIgnoresItsOwnBadFlag(t *testing.T) {
 	app := NewCommand("app", "").
 		Subcommands(asInterrupt(NewCommand("version", "").HandleFunc(tr.handler("version", nil))))
 
-	if err := Dispatch(context.Background(), app, "version", "--nonexistent"); err != nil {
+	if err := Dispatch(context.Background(), app, WithArgs("version", "--nonexistent")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got, want := tr.String(), "version"; got != want {

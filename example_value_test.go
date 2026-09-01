@@ -39,6 +39,6 @@ func ExampleValue() {
 			return nil
 		})
 
-	RunWithArgs(context.Background(), cmd, "--ip=ff02:0000:0000:0000:0000:0000:0000:0001")
+	Run(context.Background(), cmd, WithArgs("--ip=ff02:0000:0000:0000:0000:0000:0000:0001"))
 	// Output: ping: ff02::1
 }

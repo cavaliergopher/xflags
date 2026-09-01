@@ -118,7 +118,6 @@ func ExampleFlag_Validate() {
 	var ip string
 
 	cmd := NewCommand("ping", "").
-		Stderr(os.Stdout). // for tests
 		Flags(
 			String(&ip, "ip", "127.0.0.1", "IP Address to ping").
 				Validate(func(arg string) error {
@@ -134,10 +133,10 @@ func ExampleFlag_Validate() {
 		})
 
 	ctx := context.Background()
-	RunWithArgs(ctx, cmd, "--ip=127.0.0.1")
+	Run(ctx, cmd, WithArgs("--ip=127.0.0.1"), WithStderr(os.Stdout))
 
 	// 256 is not a valid IPv4 component
-	RunWithArgs(ctx, cmd, "--ip=256.0.0.1")
+	Run(ctx, cmd, WithArgs("--ip=256.0.0.1"), WithStderr(os.Stdout))
 	// Output:
 	// ping: 127.0.0.1
 	// Argument error: --ip: invalid IP: 256.0.0.1
@@ -168,7 +167,7 @@ func ExampleBitField() {
 		})
 
 	// Enable user read and write
-	RunWithArgs(context.Background(), cmd, "-r", "-w")
+	Run(context.Background(), cmd, WithArgs("-r", "-w"), WithStderr(os.Stdout))
 	// Output: File mode: -rw-r--r--
 }
 
@@ -182,8 +181,8 @@ func ExampleCommand_VersionFlag() {
 		VersionCommand(version)
 
 	ctx := context.Background()
-	RunWithArgs(ctx, cmd, "--version")
-	RunWithArgs(ctx, cmd, "version")
+	Run(ctx, cmd, WithArgs("--version"), WithStderr(os.Stdout))
+	Run(ctx, cmd, WithArgs("version"), WithStderr(os.Stdout))
 	// Output:
 	// orbital 1.4.2
 	// orbital 1.4.2
@@ -193,7 +192,6 @@ func ExampleFunc() {
 	var ip net.IP
 
 	cmd := NewCommand("ping", "").
-		Stderr(os.Stdout). // for tests
 		Flags(
 			Func("ip", "IP address to ping", func(s string) error {
 				ip = net.ParseIP(s)
@@ -209,10 +207,10 @@ func ExampleFunc() {
 		})
 
 	ctx := context.Background()
-	RunWithArgs(ctx, cmd, "--ip", "127.0.0.1")
+	Run(ctx, cmd, WithArgs("--ip", "127.0.0.1"), WithStderr(os.Stdout))
 
 	// 256 is not a valid IPv4 component
-	RunWithArgs(ctx, cmd, "--ip", "256.0.0.1")
+	Run(ctx, cmd, WithArgs("--ip", "256.0.0.1"), WithStderr(os.Stdout))
 	// Output:
 	// ping: 127.0.0.1
 	// Argument error: --ip: invalid IP: 256.0.0.1
@@ -236,7 +234,7 @@ func ExampleStrings() {
 			return nil
 		})
 
-	RunWithArgs(context.Background(), cmd, "--name=foo", "--name=bar")
+	Run(context.Background(), cmd, WithArgs("--name=foo", "--name=bar"), WithStderr(os.Stdout))
 	// Output: Created new widgets: foo, bar
 }
 

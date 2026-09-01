@@ -233,13 +233,13 @@ func validateNArgs(active *ir.Command, scope []*ir.Command, counts map[*ir.Flag]
 // invocationFor returns the Invocation apply reports for cmd having become
 // active, naming every command in path from the one Parse was called on to
 // cmd itself.
+//
+// Its streams are left nil. Streams are process environment, so the entry
+// point holding them fills them in.
 func invocationFor(cmd *ir.Command, forwarded []string, interrupt *ir.Flag) *ir.Invocation {
 	return &ir.Invocation{
 		Cmd:       cmd,
 		Forwarded: forwarded,
 		Interrupt: interrupt,
-		Stdin:     cmd.Stdin,
-		Stdout:    cmd.Stdout,
-		Stderr:    cmd.Stderr,
 	}
 }

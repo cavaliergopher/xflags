@@ -51,11 +51,11 @@ func Example_sharedFlagGroups() {
 		})
 
 	fmt.Println("+ myapp --help")
-	RunWithArgs(ctx, app, "--help")
+	Run(ctx, app, WithArgs("--help"))
 
 	fmt.Println()
 	fmt.Println("+ myapp --log-level=debug")
-	RunWithArgs(ctx, app, "--log-level=debug")
+	Run(ctx, app, WithArgs("--log-level=debug"))
 
 	// A test mounts a fresh instance instead, fully isolated from the
 	// registered one.

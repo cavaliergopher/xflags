@@ -62,7 +62,7 @@ func TestSubcommands(t *testing.T) {
 		}
 
 		// invoke the subcommand handler
-		if err := Dispatch(context.Background(), cmd, args...); err != nil {
+		if err := Dispatch(context.Background(), cmd, WithArgs(args...)); err != nil {
 			t.Error(err)
 			return
 		}
@@ -354,7 +354,7 @@ func ExampleCommand_FlagGroups() {
 		))
 
 	// Print the help page
-	RunWithArgs(context.Background(), cmd, "--help")
+	Run(context.Background(), cmd, WithArgs("--help"))
 	// Output:
 	// Usage: helloworld [OPTIONS]
 	//
@@ -385,12 +385,12 @@ func ExampleFromFlagSet() {
 
 	// Print the help page
 	fmt.Println("+ helloworld --help")
-	RunWithArgs(ctx, cmd, "--help")
+	Run(ctx, cmd, WithArgs("--help"))
 
 	// Run the command
 	fmt.Println()
 	fmt.Println("+ helloworld")
-	RunWithArgs(ctx, cmd)
+	Run(ctx, cmd, WithArgs())
 	// Output:
 	// + helloworld --help
 	// Usage: helloworld [OPTIONS]
@@ -432,12 +432,12 @@ func ExampleCommand_Subcommands() {
 
 	// Print the help page
 	fmt.Println("+ widgets --help")
-	RunWithArgs(ctx, cmd, "--help")
+	Run(ctx, cmd, WithArgs("--help"))
 
 	// Invoke the "create" subcommand
 	fmt.Println()
 	fmt.Println("+ widgets create -n=3")
-	RunWithArgs(ctx, cmd, "create", "-n=3")
+	Run(ctx, cmd, WithArgs("create", "-n=3"))
 	// Output:
 	// + widgets --help
 	// Usage: widgets [OPTIONS] COMMAND
@@ -467,7 +467,7 @@ func ExampleCommand_Description() {
 		Flags(Int(&n, "n", 1, "Print n times"))
 
 	// Print the help page
-	RunWithArgs(context.Background(), cmd, "--help")
+	Run(context.Background(), cmd, WithArgs("--help"))
 	// Output:
 	// Usage: helloworld [OPTIONS]
 	//
@@ -504,7 +504,7 @@ func ExampleCommand_ForwardArgs() {
 		})
 
 	// run in verbose mode and pass ["Hello,", "World!"] through the terminator
-	RunWithArgs(context.Background(), cmd, "-v", "--", "Hello,", "World!")
+	Run(context.Background(), cmd, WithArgs("-v", "--", "Hello,", "World!"))
 	// Output:
 	// + echo Hello, World!
 	// Hello, World!
@@ -972,7 +972,7 @@ func TestValidateCollectsAllErrors(t *testing.T) {
 	}
 	var code int
 	stderr := captureStderr(t, func() {
-		code = RunWithArgs(context.Background(), cmd)
+		code = Run(context.Background(), cmd, WithArgs())
 	})
 	if got, want := code, 2; got != want {
 		t.Errorf("exit code = %d, want %d", got, want)
@@ -988,74 +988,25 @@ func TestValidateCollectsAllErrors(t *testing.T) {
 	}
 }
 
-// TestConfigErrorIgnoresConfiguredStreams asserts that a malformed tree is
-// reported on os.Stderr rather than on any stream the tree names, because
-// those streams are part of what failed to validate. The error names a
-// subcommand that redirected its own stderr -- a stream the composer of
-// the binary neither chose nor reads -- which used to swallow the report
-// whole.
-func TestConfigErrorIgnoresConfiguredStreams(t *testing.T) {
-	var rootErr, subErr strings.Builder
+// TestConfigErrorReportsOnRunsStderr asserts that a tree which fails to
+// compile reports on the stderr its Run call was given. The tree is what
+// failed, so nothing it says about itself is worth trusting; the caller's
+// stderr is.
+func TestConfigErrorReportsOnRunsStderr(t *testing.T) {
 	sub := NewCommand("sub", "").
-		Stderr(&subErr).
 		Flags(
 			String(new(string), "foo", "", ""),
 			String(new(string), "foo", "", ""),
 		)
-	cmd := NewCommand("test", "").Stderr(&rootErr).Subcommands(sub)
+	cmd := NewCommand("test", "").Subcommands(sub)
 
-	var code int
-	stderr := captureStderr(t, func() {
-		code = RunWithArgs(context.Background(), cmd, "sub")
-	})
+	var stderr strings.Builder
+	code := Run(context.Background(), cmd, WithArgs("sub"), WithStderr(&stderr))
 	if got, want := code, 2; got != want {
 		t.Errorf("exit code = %d, want %d", got, want)
 	}
-	want := "Program error: test sub: flag declared more than once: --foo\n"
-	if got := stderr; got != want {
-		t.Errorf("os.Stderr = %q, want %q", got, want)
-	}
-	assertString(t, "", rootErr.String())
-	assertString(t, "", subErr.String())
-}
-
-// TestStreamsAreInherited asserts that a command with no stream of its
-// own takes each one from the nearest ancestor that named it, and that
-// the three resolve independently, so redirecting one leaves the others
-// where they were.
-func TestStreamsAreInherited(t *testing.T) {
-	var rootOut, midErr strings.Builder
-	leaf := NewCommand("leaf", "")
-	mid := NewCommand("mid", "").Stderr(&midErr).Subcommands(leaf)
-	NewCommand("root", "").Stdout(&rootOut).Subcommands(mid)
-
-	node, err := leaf.Compile()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := node.Stdout, io.Writer(&rootOut); got != want {
-		t.Errorf("Stdout = %v, want the root's", got)
-	}
-	if got, want := node.Stderr, io.Writer(&midErr); got != want {
-		t.Errorf("Stderr = %v, want the middle command's", got)
-	}
-	if got, want := node.Stdin, io.Reader(os.Stdin); got != want {
-		t.Errorf("Stdin = %v, want os.Stdin", got)
-	}
-
-	// A command that names its own wins over the ancestor it would
-	// otherwise inherit from, which is what makes the inheritance a
-	// default rather than a rule.
-	var leafOut strings.Builder
-	loud := NewCommand("loud", "").Stdout(&leafOut)
-	NewCommand("root", "").Stdout(&rootOut).Subcommands(loud)
-
-	own, err := loud.Compile()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := own.Stdout, io.Writer(&leafOut); got != want {
-		t.Errorf("Stdout = %v, want the command's own, not the root's", got)
+	if got := stderr.String(); !strings.Contains(got, "foo") {
+		t.Errorf("stderr = %q, want it to name the duplicate flag", got)
 	}
 }
 
@@ -1364,9 +1315,6 @@ func TestRunExitCodes(t *testing.T) {
 		wantCode int
 		wantOut  string
 		wantErr  string
-		// wantProcErr is what reaches os.Stderr rather than the command's
-		// own stream, which only a malformed tree does.
-		wantProcErr string
 	}{
 		{
 			name:     "Success",
@@ -1406,8 +1354,8 @@ func TestRunExitCodes(t *testing.T) {
 					String(new(string), "foo", "", ""),
 					String(new(string), "foo", "", ""),
 				),
-			wantCode:    2,
-			wantProcErr: "Program error: test: flag declared more than once: --foo\n",
+			wantCode: 2,
+			wantErr:  "Program error: test: flag declared more than once: --foo\n",
 		},
 		{
 			// A tree that leads back into itself reports like any other
@@ -1419,8 +1367,8 @@ func TestRunExitCodes(t *testing.T) {
 				sub.Subcommands(cmd)
 				return cmd
 			}(),
-			wantCode:    2,
-			wantProcErr: "Program error: \"test\" is its own ancestor\n",
+			wantCode: 2,
+			wantErr:  "Program error: \"test\" is its own ancestor\n",
 		},
 		{
 			name:     "Exit",
@@ -1455,17 +1403,12 @@ func TestRunExitCodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var code int
-			var stdout, stderr string
-			procErr := captureStderr(t, func() {
-				code, stdout, stderr = runCaptured(tt.cmd, tt.args...)
-			})
+			code, stdout, stderr := runCaptured(tt.cmd, tt.args...)
 			if got, want := code, tt.wantCode; got != want {
 				t.Errorf("exit code = %d, want %d", got, want)
 			}
 			assertOutput(t, "stdout", stdout, tt.wantOut)
 			assertOutput(t, "stderr", stderr, tt.wantErr)
-			assertOutput(t, "os.Stderr", procErr, tt.wantProcErr)
 		})
 	}
 }
@@ -1551,19 +1494,15 @@ func TestArgumentErrorsPrintUsage(t *testing.T) {
 			String(new(string), "foo", "", ""),
 			String(new(string), "foo", "", ""),
 		)
-		var code int
-		var stderr string
-		procErr := captureStderr(t, func() {
-			code, _, stderr = runCaptured(cmd)
-		})
+		code, _, stderr := runCaptured(cmd)
 		if got, want := code, 2; got != want {
 			t.Errorf("exit code = %d, want %d", got, want)
 		}
+		// A malformed tree prints no usage: it cannot describe itself.
 		want := "Program error: test: flag declared more than once: --foo\n"
-		if got := procErr; got != want {
-			t.Errorf("os.Stderr = %q, want %q", got, want)
+		if got := stderr; got != want {
+			t.Errorf("stderr = %q, want %q", got, want)
 		}
-		assertString(t, "", stderr)
 	})
 }
 
@@ -1583,8 +1522,8 @@ func TestDispatchReturnsRawError(t *testing.T) {
 	// dispatchCaptured is runCaptured for Dispatch.
 	dispatchCaptured := func(cmd *Command, args ...string) (err error, stdout, stderr string) {
 		var out, errOut strings.Builder
-		cmd.Stdout(&out).Stderr(&errOut)
-		err = Dispatch(context.Background(), cmd, args...)
+		err = Dispatch(context.Background(), cmd, WithArgs(args...),
+			WithStdout(&out), WithStderr(&errOut))
 		return err, out.String(), errOut.String()
 	}
 	// asArgumentError asserts that err carries an *ArgumentError naming the
@@ -1664,10 +1603,10 @@ func TestRunReportsOutputFailure(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.cmd.Stdout(errWriter{}).Stderr(errWriter{})
 			var code int
 			stderr := captureStderr(t, func() {
-				code = RunWithArgs(context.Background(), tt.cmd, tt.args...)
+				code = Run(context.Background(), tt.cmd, WithArgs(tt.args...),
+					WithStdout(errWriter{}), WithStderr(errWriter{}))
 			})
 			if code == 0 {
 				t.Errorf("exit code = 0, want non-zero")
@@ -1683,10 +1622,11 @@ func TestRunReportsOutputFailure(t *testing.T) {
 // an argument error has the same fallback as the error line: a stderr that
 // goes away between the two is still reported on os.Stderr.
 func TestRunReportsUsageWriteFailure(t *testing.T) {
-	cmd := NewCommand("test", "").Stderr(&failAfterWriter{n: 1})
+	cmd := NewCommand("test", "")
 	var code int
 	stderr := captureStderr(t, func() {
-		code = RunWithArgs(context.Background(), cmd)
+		code = Run(context.Background(), cmd,
+			WithArgs(), WithStderr(&failAfterWriter{n: 1}))
 	})
 	if code == 0 {
 		t.Errorf("exit code = 0, want non-zero")
@@ -1711,7 +1651,7 @@ func TestHandlerReceivesInvocation(t *testing.T) {
 		Subcommands(NewCommand("remote", "").Subcommands(add))
 
 	args := []string{"remote", "add", "--", "origin"}
-	if code := RunWithArgs(context.Background(), app, args...); code != 0 {
+	if code := Run(context.Background(), app, WithArgs(args...)); code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
 	if got == nil {
@@ -1872,14 +1812,14 @@ func TestHelpSkipsFlagRules(t *testing.T) {
 	var stdout strings.Builder
 	cmd := NewCommand("test", "").
 		HelpFlag().
-		Stdout(&stdout).
 		Flags(String(new(string), "name", "", "").Required()).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			t.Error("handler was called")
 			return nil
 		})
 
-	if got, want := RunWithArgs(context.Background(), cmd, "--help"), 0; got != want {
+	code := Run(context.Background(), cmd, WithArgs("--help"), WithStdout(&stdout))
+	if got, want := code, 0; got != want {
 		t.Errorf("exit code = %d, want %d", got, want)
 	}
 	assertOutput(t, "stdout", stdout.String(), "Usage: test")
@@ -1898,76 +1838,26 @@ func TestHandlerStreams(t *testing.T) {
 			fmt.Fprint(inv.Stderr, "echoed")
 			return nil
 		})
-	app := NewCommand("app", "").
-		Stdin(strings.NewReader("hello")).
-		Subcommands(echo)
+	app := NewCommand("app", "").Subcommands(echo)
 
 	var stdout, stderr strings.Builder
-	app.Stdout(&stdout).Stderr(&stderr)
-	if code := RunWithArgs(context.Background(), app, "echo"); code != 0 {
+	code := Run(context.Background(), app, WithArgs("echo"),
+		WithStdin(strings.NewReader("hello")),
+		WithStdout(&stdout), WithStderr(&stderr))
+	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
 	assertString(t, "hello", stdout.String())
 	assertString(t, "echoed", stderr.String())
 }
 
-// TestStreamsResolveIndependently asserts that redirecting one stream leaves
-// the others at the process defaults. They used to be inherited all or
-// nothing, so redirecting stdout alone resolved a nil stderr and the first
-// error message panicked.
-func TestStreamsResolveIndependently(t *testing.T) {
-	var stdout strings.Builder
-	cmd := NewCommand("test", "").
-		Stdout(&stdout).
-		HandleFunc(func(ctx context.Context, inv *Invocation) error {
-			return errors.New("boom")
-		})
-
-	var code int
-	stderr := captureStderr(t, func() {
-		code = RunWithArgs(context.Background(), cmd)
-	})
-	if got, want := code, 1; got != want {
-		t.Errorf("exit code = %d, want %d", got, want)
-	}
-	if got, want := stderr, "Error: boom\n"; got != want {
-		t.Errorf("os.Stderr = %q, want %q", got, want)
-	}
-	assertString(t, "", stdout.String())
-}
-
-// TestStreamsDefaultToProcess asserts that a command nobody has redirected
-// hands its handler the process streams, rather than nil.
-func TestStreamsDefaultToProcess(t *testing.T) {
-	var got *Invocation
-	cmd := NewCommand("test", "").
-		HandleFunc(func(ctx context.Context, inv *Invocation) error {
-			got = inv
-			return nil
-		})
-	if code := RunWithArgs(context.Background(), cmd); code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if got.Stdin != os.Stdin {
-		t.Errorf("Stdin = %v, want os.Stdin", got.Stdin)
-	}
-	if got.Stdout != os.Stdout {
-		t.Errorf("Stdout = %v, want os.Stdout", got.Stdout)
-	}
-	if got.Stderr != os.Stderr {
-		t.Errorf("Stderr = %v, want os.Stderr", got.Stderr)
-	}
-}
-
 // TestUsageFuncIsInherited asserts that a custom renderer set on one
 // command serves its subcommands too, and that the command it is handed is
-// the one being described rather than the one that set it. Compile
-// resolves the renderer the way it resolves the streams, so a subcommand
-// that sets none carries its nearest ancestor's.
+// the one being described rather than the one that set it: a subcommand
+// that sets no renderer carries its nearest ancestor's.
 func TestUsageFuncIsInherited(t *testing.T) {
 	var stdout strings.Builder
 	root := NewCommand("root", "Root summary").
-		Stdout(&stdout).
 		HelpFlag().
 		UsageFunc(func(w io.Writer, cmd *ir.Command) error {
 			_, err := fmt.Fprintf(w, "custom help for %s\n", cmd.FullName)
@@ -1980,7 +1870,8 @@ func TestUsageFuncIsInherited(t *testing.T) {
 				}),
 		)
 
-	if code := RunWithArgs(context.Background(), root, "child", "--help"); code != 0 {
+	code := Run(context.Background(), root, WithArgs("child", "--help"), WithStdout(&stdout))
+	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
 	if got, want := stdout.String(), "custom help for root child\n"; got != want {
@@ -2024,10 +1915,11 @@ func ExampleInvocation() {
 
 	// Whoever composes the binary decides where it hangs.
 	app := NewCommand("myapp", "").
-		Stderr(os.Stdout). // for tests
 		Subcommands(NewCommand("remote", "Manage remotes").Subcommands(add))
 
-	fmt.Println("exit code:", RunWithArgs(context.Background(), app, "remote", "add"))
+	code := Run(context.Background(), app, WithArgs("remote", "add"),
+		WithStderr(os.Stdout)) // for tests
+	fmt.Println("exit code:", code)
 	// Output:
 	// Error: no remote named: try "myapp remote add --help"
 	// exit code: 2
@@ -2345,8 +2237,6 @@ func TestRunCompilesOnce(t *testing.T) {
 			applied := 0
 			app := NewCommand("app", "").
 				EnableCompletion().
-				Stdout(io.Discard).
-				Stderr(io.Discard).
 				Middleware(func(next HandlerFunc) HandlerFunc {
 					applied++
 					return next
@@ -2355,7 +2245,9 @@ func TestRunCompilesOnce(t *testing.T) {
 					return nil
 				})
 
-			if code := RunWithArgs(context.Background(), app, tt.args...); code != tt.want {
+			code := Run(context.Background(), app, WithArgs(tt.args...),
+				WithStdout(io.Discard), WithStderr(io.Discard))
+			if code != tt.want {
 				t.Errorf("exit code = %d, want %d", code, tt.want)
 			}
 			if applied != 1 {

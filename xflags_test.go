@@ -123,8 +123,8 @@ func (w *failAfterWriter) Write(p []byte) (int, error) {
 // returns the exit code alongside everything written to stdout and stderr.
 func runCaptured(cmd *Command, args ...string) (code int, stdout, stderr string) {
 	var out, errOut strings.Builder
-	cmd.Stdout(&out).Stderr(&errOut)
-	code = RunWithArgs(context.Background(), cmd, args...)
+	code = Run(context.Background(), cmd,
+		WithArgs(args...), WithStdout(&out), WithStderr(&errOut))
 	return code, out.String(), errOut.String()
 }
 

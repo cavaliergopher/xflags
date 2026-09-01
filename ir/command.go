@@ -44,11 +44,11 @@ type Invocation struct {
 	Interrupt *Flag
 
 	// Stdin, Stdout and Stderr are the streams the handler should use in
-	// place of the process streams, so that whoever composes the binary
-	// decides where its input and output go. Each is resolved independently
-	// from the invoked command and its ancestors, defaulting to the
-	// matching process stream; see Command.Stdin, Command.Stdout and
-	// Command.Stderr.
+	// place of the process streams, so that a caller redirecting a
+	// command captures its output. They are the process streams unless
+	// the Run call answering replaced them; see xflags.WithStdout.
+	//
+	// They are never nil.
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
@@ -154,16 +154,6 @@ type Command struct {
 	// method has to go looking for; it is nil only when no command on the
 	// path set one, and Usage falls back to the default renderer.
 	UsageFunc UsageFunc
-
-	// Stdin, Stdout and Stderr are the streams resolved for this command
-	// when the tree was compiled, and are never nil: each defaults to the
-	// matching process stream. Because xflags.Parse compiles a
-	// fresh tree on every call, nothing observable changes, though a
-	// caller holding a compiled tree across a reassignment of os.Stdout
-	// keeps the stream it compiled with.
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
 }
 
 // String returns the command's own name, unqualified by its ancestry. See

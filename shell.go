@@ -54,7 +54,7 @@ func shellFuncName(prog string) string {
 // RunWithArgs already lowered rather than the configuration it was
 // lowered from. A tree that does not compile never reaches here: its
 // fault is reported first. See EnableCompletion and RunWithArgs.
-func completionHook(cmd *ir.Command) (code int, handled bool) {
+func completionHook(cmd *ir.Command, stdout io.Writer) (code int, handled bool) {
 	rootName := cmd.Root.Name
 	varName := completionEnvVar(rootName)
 	val, ok := os.LookupEnv(varName)
@@ -64,13 +64,13 @@ func completionHook(cmd *ir.Command) (code int, handled bool) {
 
 	switch val {
 	case "bash_source":
-		fmt.Fprint(cmd.Stdout, bashSourceScript(rootName, varName))
+		fmt.Fprint(stdout, bashSourceScript(rootName, varName))
 		return ExitCodeSuccess, true
 	case "zsh_source":
-		fmt.Fprint(cmd.Stdout, zshSourceScript(rootName, varName))
+		fmt.Fprint(stdout, zshSourceScript(rootName, varName))
 		return ExitCodeSuccess, true
 	case "bash_complete", "zsh_complete":
-		writeCompletionReply(cmd, cmd.Stdout)
+		writeCompletionReply(cmd, stdout)
 		return ExitCodeSuccess, true
 	default:
 		return 0, false

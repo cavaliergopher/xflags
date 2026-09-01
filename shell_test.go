@@ -110,11 +110,7 @@ func TestRunCompletionMalformedTreeFallsThrough(t *testing.T) {
 	)
 	t.Setenv("APP_COMPLETE", "bash_source")
 
-	var code int
-	var stdout string
-	procErr := captureStderr(t, func() {
-		code, stdout, _ = runCaptured(cmd)
-	})
+	code, stdout, stderr := runCaptured(cmd)
 
 	if got, want := code, ExitCodeUsage; got != want {
 		t.Errorf("code = %d, want %d", got, want)
@@ -123,7 +119,7 @@ func TestRunCompletionMalformedTreeFallsThrough(t *testing.T) {
 		t.Errorf("stdout = %q, want empty", stdout)
 	}
 	want := "Program error: app: flag declared more than once: --foo\n"
-	if got := procErr; got != want {
-		t.Errorf("os.Stderr = %q, want %q", got, want)
+	if got := stderr; got != want {
+		t.Errorf("stderr = %q, want %q", got, want)
 	}
 }

@@ -81,19 +81,19 @@ func Example() {
 	ctx := context.Background()
 
 	fmt.Println("+ helloworld --help")
-	RunWithArgs(ctx, App, "--help")
+	Run(ctx, App, WithArgs("--help"))
 
 	// Most programs will call the following from main:
 	//
 	//     func main() {
 	//         ctx, stop := xflags.NotifyContext(context.Background())
 	//         defer stop()
-	//         os.Exit(RunWithArgs(ctx, xflags, App...))
+	//         os.Exit(Run(ctx, xflags, WithArgs(App...)))
 	//     }
 	//
 	fmt.Println()
 	fmt.Println("+ helloworld --language=es")
-	RunWithArgs(ctx, App, "--language=es")
+	Run(ctx, App, WithArgs("--language=es"))
 	// Output:
 	// + helloworld --help
 	// Usage: helloworld [OPTIONS] [MESSAGE...]
