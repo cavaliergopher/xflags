@@ -216,35 +216,28 @@ func report(cmd *ir.Command, err error, stderr io.Writer) int {
 		errTypeName := "Error"
 
 		var argErr *ir.ArgumentError
-		var cfgErr *ir.ConfigError
 		switch {
 		case errors.As(e, &argErr):
 			errTypeName = "Argument error"
 
-		case errors.As(e, &cfgErr):
+		case errors.As(e, new(*ir.ConfigError)):
 			// Both exit 2, so the prefix is all that says whether the
 			// fault was the user's or the program's.
 			errTypeName = "Program error"
 		}
 
-		// A config error is already on os.Stderr, which is where the
-		// fallback would write, so a failure there has nowhere left to go
-		// and must not cost the exit code that says the program is
-		// malformed.
-		_, werr := fmt.Fprintf(stderr, "%s: %s\n", errTypeName, humanMessage(e))
-		if werr != nil && cfgErr == nil {
-			return fallbackToStderr(werr)
-		}
+		// A failure to write is ignored, as the flag package ignores it:
+		// there is nowhere left to report that reporting failed, and the
+		// exit code already says what happened.
+		fmt.Fprintf(stderr, "%s: %s\n", errTypeName, humanMessage(e))
 		if argErr != nil {
 			usageCmd := argErr.Cmd
 			if usageCmd == nil {
-				// The error names no command, so the command RunWithArgs was
-				// given describes itself instead.
+				// The error names no command, so the command Run was given
+				// describes itself instead.
 				usageCmd = cmd
 			}
-			if werr := usageCmd.Usage(stderr); werr != nil {
-				return fallbackToStderr(werr)
-			}
+			usageCmd.Usage(stderr)
 		}
 	}
 	return ExitCode(err)
@@ -268,18 +261,6 @@ func reportConfigError(err error, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Program error: %s\n", humanMessage(e))
 	}
 	return ExitCode(err)
-}
-
-// fallbackToStderr reports a failure to write to a command's own output, which
-// is the one failure that output cannot report itself, on os.Stderr and returns
-// the exit code to terminate with.
-//
-// It names xflags, unlike the messages Run prints on the command's own
-// stderr, because a plain write failure says nothing about which program
-// produced it. See docs/adr/human-readable-errors.md.
-func fallbackToStderr(err error) int {
-	fmt.Fprintf(os.Stderr, "xflags: %s\n", err)
-	return ExitCodeFailure
 }
 
 // NotifyContext returns a copy of parent that is canceled when the program

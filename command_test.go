@@ -1576,13 +1576,12 @@ func TestDispatchReturnsRawError(t *testing.T) {
 	})
 }
 
-// TestRunReportsOutputFailure asserts that a command whose own output cannot
-// be written to reports the failure on os.Stderr and exits non-zero, rather
-// than panicking. Both streams a report can go to are covered: a help
-// message that cannot reach stdout, and an error line that cannot reach
-// stderr.
-func TestRunReportsOutputFailure(t *testing.T) {
-	tests := []struct {
+// TestRunIgnoresWriteFailures asserts that a stream which cannot be
+// written to costs the exit code and nothing else: there is nowhere left
+// to report that reporting failed, so nothing is reported, as the flag
+// package also does.
+func TestRunIgnoresWriteFailures(t *testing.T) {
+	for _, tt := range []struct {
 		name string
 		cmd  *Command
 		args []string
@@ -1600,39 +1599,24 @@ func TestRunReportsOutputFailure(t *testing.T) {
 			name: "NoHandler",
 			cmd:  NewCommand("test", ""),
 		},
-	}
-	for _, tt := range tests {
+		{
+			name: "UsageAfterAnError",
+			cmd:  NewCommand("test", ""),
+		},
+	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var code int
-			stderr := captureStderr(t, func() {
+			procErr := captureStderr(t, func() {
 				code = Run(context.Background(), tt.cmd, WithArgs(tt.args...),
 					WithStdout(errWriter{}), WithStderr(errWriter{}))
 			})
 			if code == 0 {
 				t.Errorf("exit code = 0, want non-zero")
 			}
-			if want := "xflags: write failed\n"; stderr != want {
-				t.Errorf("os.Stderr = %q, want %q", stderr, want)
+			if procErr != "" {
+				t.Errorf("os.Stderr = %q, want nothing", procErr)
 			}
 		})
-	}
-}
-
-// TestRunReportsUsageWriteFailure asserts that the usage message following
-// an argument error has the same fallback as the error line: a stderr that
-// goes away between the two is still reported on os.Stderr.
-func TestRunReportsUsageWriteFailure(t *testing.T) {
-	cmd := NewCommand("test", "")
-	var code int
-	stderr := captureStderr(t, func() {
-		code = Run(context.Background(), cmd,
-			WithArgs(), WithStderr(&failAfterWriter{n: 1}))
-	})
-	if code == 0 {
-		t.Errorf("exit code = 0, want non-zero")
-	}
-	if want := "xflags: write failed\n"; stderr != want {
-		t.Errorf("os.Stderr = %q, want %q", stderr, want)
 	}
 }
 
