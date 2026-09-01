@@ -20,6 +20,7 @@ func fullyPopulatedDocument() *Document {
 			Description: "Add a new remote repository.",
 			Hidden:      true,
 			ForwardArgs: true,
+			Forwarded:   &Forwarded{ValueName: "CMD", Usage: "Command to run"},
 			FlagGroups: []*FlagGroup{
 				{
 					Name:  "options",
@@ -92,6 +93,9 @@ var wireKeyPaths = []string{
 	"command.flagGroups.name",
 	"command.flagGroups.title",
 	"command.forwardArgs",
+	"command.forwarded",
+	"command.forwarded.usage",
+	"command.forwarded.valueName",
 	"command.fullName",
 	"command.hidden",
 	"command.name",

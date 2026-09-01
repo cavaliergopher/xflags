@@ -19,6 +19,7 @@ func Command() *xflags.Command {
 	return xflags.NewCommand("exec", "Run a one-off command inside a service's container").
 		Middleware(middleware.Audit).
 		ForwardArgs().
+		Forwarded("cmd", "Command to run inside the container, after --").
 		Flags(
 			xflags.String(&service, "service", "", "Service whose container to exec into").
 				Aliases("s").

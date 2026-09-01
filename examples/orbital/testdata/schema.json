@@ -443,6 +443,10 @@
         "fullName": "orbital exec",
         "summary": "Run a one-off command inside a service's container",
         "forwardArgs": true,
+        "forwarded": {
+          "valueName": "CMD",
+          "usage": "Command to run inside the container, after --"
+        },
         "flagGroups": [
           {
             "name": "options",

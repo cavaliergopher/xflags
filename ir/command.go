@@ -103,6 +103,15 @@ type Command struct {
 	// down while lowering.
 	FullName string
 
+	// ForwardedValueName and ForwardedUsage name and explain the
+	// arguments the command forwards to its handler unparsed -- what
+	// follows an interrupt command's name, or a ForwardArgs command's
+	// "--" terminator. Both arrive already written for a reader, and
+	// both are empty when the program named nothing; a command may
+	// forward without naming what it forwards.
+	ForwardedValueName string
+	ForwardedUsage     string
+
 	FlagGroups  []*FlagGroup
 	Subcommands []*Command
 
@@ -195,6 +204,12 @@ func (c *Command) Describe() *desc.Command {
 		Description: c.Description,
 		Hidden:      c.Hidden,
 		ForwardArgs: c.ForwardArgs,
+	}
+	if c.ForwardedValueName != "" {
+		cmd.Forwarded = &desc.Forwarded{
+			ValueName: c.ForwardedValueName,
+			Usage:     c.ForwardedUsage,
+		}
 	}
 	for _, group := range c.FlagGroups {
 		cmd.FlagGroups = append(cmd.FlagGroups, group.Describe())

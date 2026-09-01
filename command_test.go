@@ -2426,3 +2426,53 @@ func TestInterruptCommandRunsBare(t *testing.T) {
 		t.Error("middleware wrapped the interrupt")
 	}
 }
+
+// TestForwardedNamingRules asserts the two configuration errors around
+// naming forwarded arguments: only a command that forwards may name
+// them, and an explanation needs a name to be shown by.
+func TestForwardedNamingRules(t *testing.T) {
+	noop := func(ctx context.Context, inv *Invocation) error { return nil }
+	assertParseError(t, NewCommand("test", "").Forwarded("cmd", "what to run"),
+		"only a command that forwards arguments may name them")
+	assertParseError(t, NewCommand("test", "").ForwardArgs().Forwarded("", "orphan explanation"),
+		"forwarded arguments need a value name to be shown by")
+
+	for _, ok := range []*Command{
+		NewCommand("test", "").ForwardArgs().Forwarded("cmd", "what to run"),
+		NewCommand("test", "").Subcommands(
+			InterruptCommand("about", "", noop).Forwarded("topic", "what to explain")),
+	} {
+		if _, err := ok.Compile(); err != nil {
+			t.Errorf("Compile: unexpected error: %v", err)
+		}
+	}
+}
+
+// TestDescribeForwarded asserts a named forwarding lands in the document
+// with the value name written for a reader, and an unnamed one is absent
+// rather than empty.
+func TestDescribeForwarded(t *testing.T) {
+	root := NewCommand("test", "").ForwardArgs().Forwarded("cmd", "what to run")
+	node, err := root.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fwd := node.Describe().Forwarded
+	if fwd == nil {
+		t.Fatal("Forwarded = nil, want the named forwarding")
+	}
+	if got, want := fwd.ValueName, "CMD"; got != want {
+		t.Errorf("ValueName = %q, want %q", got, want)
+	}
+	if got, want := fwd.Usage, "what to run"; got != want {
+		t.Errorf("Usage = %q, want %q", got, want)
+	}
+
+	bare, err := NewCommand("test", "").ForwardArgs().Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fwd := bare.Describe().Forwarded; fwd != nil {
+		t.Errorf("Forwarded = %+v, want nil", fwd)
+	}
+}

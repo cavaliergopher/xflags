@@ -70,6 +70,11 @@ type Command struct {
 	// VersionCommand.
 	interrupt bool
 
+	// forwardedValueName and forwardedUsage name and explain the
+	// arguments the command forwards unparsed; see Command.Forwarded.
+	forwardedValueName string
+	forwardedUsage     string
+
 	flagGroups  []*FlagGroup
 	groupSets   []*GroupSet
 	subcommands []*Command
@@ -288,18 +293,20 @@ func (c *Command) lower(parent *ir.Command, inherited Middleware, nodeMap map[*C
 		fullName = parent.FullName + " " + c.name
 	}
 	node := &ir.Command{
-		Name:        c.name,
-		Summary:     c.summary,
-		Description: c.description,
-		Hidden:      c.hidden,
-		ForwardArgs: c.forwardArgs,
-		Interrupt:   c.interrupt,
-		FullName:    fullName,
-		Handler:     c.handlerFunc,
-		UsageFunc:   c.usageFunc,
-		Stdin:       c.stdin,
-		Stdout:      c.stdout,
-		Stderr:      c.stderr,
+		Name:               c.name,
+		Summary:            c.summary,
+		Description:        c.description,
+		Hidden:             c.hidden,
+		ForwardArgs:        c.forwardArgs,
+		Interrupt:          c.interrupt,
+		ForwardedValueName: argv.ForwardedValueNameFor(c.forwardedValueName),
+		ForwardedUsage:     c.forwardedUsage,
+		FullName:           fullName,
+		Handler:            c.handlerFunc,
+		UsageFunc:          c.usageFunc,
+		Stdin:              c.stdin,
+		Stdout:             c.stdout,
+		Stderr:             c.stderr,
 	}
 	node.Root = node
 	node.Ancestry = []*ir.Command{node}
@@ -620,6 +627,24 @@ func (c *Command) EnableCompletion() *Command {
 // a subprocess. Without it, "--" has no special meaning.
 func (c *Command) ForwardArgs() *Command {
 	c.forwardArgs = true
+	return c
+}
+
+// Forwarded names the arguments the command forwards to its handler
+// unparsed, for help and for the machine-readable description: what an
+// interrupt command takes after its name, or what a command that set
+// ForwardArgs takes after the "--" terminator.
+//
+//	InterruptCommand("schema", summary, fn).
+//	    Forwarded("command", "Command to describe")
+//
+// valueName is shown where the forwarded arguments are, the way a
+// positional argument's name is shown, and usage explains them beneath
+// the usage line. Naming forwarded arguments on a command that forwards
+// nothing is a configuration error.
+func (c *Command) Forwarded(valueName, usage string) *Command {
+	c.forwardedValueName = valueName
+	c.forwardedUsage = usage
 	return c
 }
 

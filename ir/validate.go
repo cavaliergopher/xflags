@@ -50,6 +50,19 @@ func validateSelf(c *Command) error {
 		}
 	}
 
+	// Naming forwarded arguments promises the reader something follows
+	// unparsed, which only an interrupt or a ForwardArgs command holds
+	// up; and the name is how they are shown, so an explanation without
+	// one has nowhere to hang.
+	if c.ForwardedValueName != "" && !c.Interrupt && !c.ForwardArgs {
+		errs = append(errs, newConfigErrorf(nil, c, nil,
+			"only a command that forwards arguments may name them"))
+	}
+	if c.ForwardedUsage != "" && c.ForwardedValueName == "" {
+		errs = append(errs, newConfigErrorf(nil, c, nil,
+			"forwarded arguments need a value name to be shown by"))
+	}
+
 	hasUnboundedPositional := false
 	// A positional argument is shown by its value name alone, so two of
 	// them sharing one is the collision that matters: "missing required
