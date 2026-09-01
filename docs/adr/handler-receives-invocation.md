@@ -91,7 +91,10 @@ so a program that pointed a command at a buffer captured the
 what a CLI emits. There was no stdin in the API at all. `Invocation`
 therefore carries `Stdin`, `Stdout` and `Stderr`, resolved from the invoked
 command and its ancestors, and `Output` gives way to `Command.Stdin`,
-`Command.Stdout` and `Command.Stderr`, one setter per stream.
+`Command.Stdout` and `Command.Stderr`, one setter per stream. The setters
+were later removed and the streams moved onto `Run`; what survives here
+is that the invocation is where a handler finds them. See
+docs/adr/streams-are-run-environment.md.
 
 This follows from the decision above rather than qualifying it. The premise
 was that a command is mounted by someone other than its author; where its
@@ -115,15 +118,7 @@ Consequences, beyond those above:
   errors on stderr. Taking both writers at once meant inheriting them as a
   set: `Output(&buf, nil)` resolved a nil stderr and panicked on the first
   error message, and saying "leave this one alone" required passing a nil.
-- One word now follows each stream from `Command.Stdout` through the field
-  and its resolver to `Invocation.Stdout`. That is worth more than matching
+- One word now follows each stream from the option that supplies it to
+  `Invocation.Stdout`. That is worth more than matching
   `flag.FlagSet.SetOutput`, which has a single output stream and so never
   had to name a second one.
-- `Compile` resolves `Stdin`, `Stdout` and `Stderr` while lowering the
-  tree, falling back to `os.Stdin`, `os.Stdout` and `os.Stderr` for
-  whichever the command and its ancestors left unset. `Parse` compiles a
-  fresh tree on every call, so the streams it hands the invocation are
-  still the process streams as they stood when `Parse` was called; only a
-  caller that holds a compiled tree across a later reassignment of
-  `os.Stdout` would see the difference, since that tree keeps the stream
-  it compiled with.
