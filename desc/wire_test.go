@@ -161,7 +161,8 @@ func walkKeyPaths(prefix string, v any, paths map[string]bool) {
 //
 // A path that appeared is ADDED. That is legal within schemaVersion 1 --
 // update wireKeyPaths, and docs/desc.schema.json if the new field
-// belongs in it, in the same change.
+// belongs in it, in the same change. A changed schema has to be
+// republished as well; CONTRIBUTING.md says how.
 func TestWireKeyPaths(t *testing.T) {
 	got := flattenKeyPaths(t, fullyPopulatedDocument())
 	want := wireKeyPaths
@@ -199,7 +200,7 @@ func TestWireKeyPaths(t *testing.T) {
 		}
 	}
 	if len(added) > 0 {
-		msg.WriteString("ADDED (additive, legal within schemaVersion 1 -- update wireKeyPaths and docs/desc.schema.json in this change):\n")
+		msg.WriteString("ADDED (additive, legal within schemaVersion 1 -- update wireKeyPaths and docs/desc.schema.json in this change, then republish; see CONTRIBUTING.md):\n")
 		for _, p := range added {
 			msg.WriteString("  + " + p + "\n")
 		}
