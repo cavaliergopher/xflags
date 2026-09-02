@@ -536,9 +536,6 @@ func TestCanonicalNameCoalesces(t *testing.T) {
 	if got, want := strings.Join(df.NamedOptions, ","), ",-v"; got != want {
 		t.Errorf("NamedOptions = %q, want %q", got, want)
 	}
-	if got, want := flg.String(), "-v"; got != want {
-		t.Errorf("String() = %q, want %q", got, want)
-	}
 }
 
 // TestAliasIsMatchedButNotPrinted asserts the bargain the third slot

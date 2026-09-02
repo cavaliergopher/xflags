@@ -295,13 +295,6 @@ func printVersion(version string) HandlerFunc {
 	}
 }
 
-// String returns how the flag is shown to a reader, which is what it
-// compiles to: see (*ir.Flag).String.
-func (c *Flag) String() string {
-	var errs []error // discarded: Compile is what reports them
-	return c.lower(&errs).String()
-}
-
 // ShowDefault specifies that the default value of this flag should be shown
 // in the help message.
 func (c *Flag) ShowDefault() *Flag {
