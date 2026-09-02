@@ -6,7 +6,7 @@
 # A command line multiplexer for Go
 
 [![Go Reference](https://pkg.go.dev/badge/go.hotsrc.dev/climux.svg)](https://pkg.go.dev/go.hotsrc.dev/climux)
-[![CI](https://github.com/cavaliergopher/xflags/actions/workflows/ci.yml/badge.svg)](https://github.com/cavaliergopher/xflags/actions/workflows/ci.yml)
+[![CI](https://github.com/cavaliergopher/climux/actions/workflows/ci.yml/badge.svg)](https://github.com/cavaliergopher/climux/actions/workflows/ci.yml)
 
 Many commands in, one dispatched out. Package climux implements command line
 flag parsing and is a compatible alternative to Go's flag package, with the
