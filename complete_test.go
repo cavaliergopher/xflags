@@ -173,8 +173,8 @@ func TestCompleteEmptyArgs(t *testing.T) {
 
 // TestCompleteFuncSeesEarlierFlag asserts that a positional's CompleteFunc
 // is given an Invocation on which a flag named earlier on the line
-// already holds its value -- the git checkout <ref> case wip/lexer.md
-// builds the callback signature around.
+// already holds its value -- the git checkout <ref> case the callback
+// signature is built around.
 func TestCompleteFuncSeesEarlierFlag(t *testing.T) {
 	var region string
 	var gotInv *Invocation

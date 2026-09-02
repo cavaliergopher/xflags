@@ -434,7 +434,7 @@ func TestTerminatorSelectsSubcommand(t *testing.T) {
 // no longer depends on position, so "app --bogus --help" prints help
 // instead of reporting --bogus. Before the lexer split this reported the
 // unrecognized option, since parsing stopped at the first error and never
-// reached --help; see wip/lexer.md and wip/batch-2026-08-27.md.
+// reached --help.
 func TestHelpWinsOverAnEarlierArgumentError(t *testing.T) {
 	cmd := NewCommand("test", "").
 		Flags(String(new(string), "name", "", "")).
@@ -450,10 +450,10 @@ func TestHelpWinsOverAnEarlierArgumentError(t *testing.T) {
 
 // TestPositionalIsNotAnOption asserts that a positional flag's name no
 // longer enters the option table: "--src=x" for a flag declared
-// Positional() is an unrecognized option rather than a way to set it. This
-// closes item 33 in wip/TODO.md, found while implementing an earlier
-// branch and fixed as a consequence of the lexer split, which never adds a
-// positional's name to the table it matches options against.
+// Positional() is an unrecognized option rather than a way to set it.
+// Found while implementing an earlier branch and fixed as a consequence of
+// the lexer split, which never adds a positional's name to the table it
+// matches options against.
 func TestPositionalIsNotAnOption(t *testing.T) {
 	var src string
 	cmd := NewCommand("test", "").Flags(
@@ -606,8 +606,7 @@ func TestNegatedBool(t *testing.T) {
 		{args: []string{"--no-name=x"}, err: true},
 
 		// The last spelling wins, the same as any repeated flag, though
-		// the count check rejects both being given at once today; see
-		// wip/TODO.md item 47.
+		// the count check rejects both being given at once today.
 		{args: []string{"--verbose", "--no-verbose"}, err: true},
 	} {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {

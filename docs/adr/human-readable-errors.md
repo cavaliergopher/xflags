@@ -86,11 +86,11 @@ carrying `Cmd`, `Flag`, `Arg`, `Message` and the wrapped error as data, not
 prose. Exit codes are unchanged; only the message format on the same
 stream changes. `Cmd` and `Flag` detail should project through the
 existing `ir.Command`/`ir.Flag` types `Compile()` already produces,
-rather than a second schema for describing a command or flag. Left open,
-tracked as `wip/TODO.md` item 28: the flag's exact name and scope — which
-overlaps item 18's still-undecided `--climux-describe`-style flag and is
-worth designing once, not twice — and whether the JSON goes to stdout or
-stderr.
+rather than a second schema for describing a command or flag. Left open:
+the flag's exact name and scope — which overlaps the still-undecided
+`--climux-describe`-style flag for emitting the description document, and
+is worth designing once, not twice — and whether the JSON goes to stdout
+or stderr.
 
 The prefix follows the error's type, not who constructed it. An earlier
 pass qualified this — `Argument error:` only when the `*ArgumentError`
@@ -111,8 +111,8 @@ One decision carried over from the first pass at this ADR, unchanged:
 
 `ConfigError.ExitCode()` is `ExitCodeUsage` (2), matching
 `docs/adr/exit-code-contract.md` — "code 2 covers everything decided
-before the handler runs" — and restoring what `wip/TODO.md` records as a
-previous, deliberate choice that a refactor had quietly reverted to 1.
+before the handler runs" — and restoring a previous, deliberate choice
+that a refactor had quietly reverted to 1.
 
 ## Consequences
 
@@ -125,8 +125,7 @@ previous, deliberate choice that a refactor had quietly reverted to 1.
   it directly now can, via `Error()`, without reaching into `errors.As`.
 - An agent or script that only sees a CLI's stdout/stderr, rather than
   calling into the library, still has nothing structured to read. The
-  direction is decided — a flag, JSON, built on `desc` — but not built;
-  `wip/TODO.md` item 28 tracks what's left open.
+  direction is decided — a flag, JSON, built on `desc` — but not built.
 - Three prefixes now map onto three causes, so the wording of a message is
   no longer the only thing telling a misconfigured program apart from a
   mistyped command line. Exit codes cannot: both are 2.

@@ -112,8 +112,8 @@ The details that follow from that, each of which had an alternative:
   wrappers are applied once per `Compile`, and a run compiles more than
   once — `Dispatch`, then `handleErr` on the error path. A wrapper that
   registered a metric before returning would do so repeatedly. This is a
-  documented contract rather than a guard, and item 44's compile-once
-  `Run` shrinks the exposure.
+  documented contract rather than a guard, and a compile-once `Run`
+  shrinks the exposure.
 - Additive. No existing program changes, and `orbital` converted to it by
   deleting a `Chain` helper and moving three registrations onto the
   commands themselves.

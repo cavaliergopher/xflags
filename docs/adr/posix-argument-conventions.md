@@ -256,7 +256,7 @@ Two arguments decide it, and neither is ergonomics.
 The first is structural. An opt-in needs a field on the compiled flag —
 `ir.Flag.Negatable` — named for a feature only some dialects have, carrying
 one dialect's opinion about what `--no-` means, on the model every dialect
-shares. That is the leak `wip/lexer.md` rejected a `NegatedForm` field for,
+shares. That is the leak a `NegatedForm` field was rejected for,
 and it drags two validation rules in behind it: *negation declared under a
 dialect that lacks it*, and *negation declared on a non-boolean*, both of
 which exist only to police a field that should not be there. Generating

@@ -88,9 +88,9 @@ type lexResult struct {
 }
 
 // lex resolves argv against root -- the command Parse was called on -- into
-// a flat instruction list. It is the schema-aware pass wip/lexer.md calls
-// for: -abc cannot be tokenized without knowing whether -a takes a value,
-// so lex reads root's flags and subcommands to decide.
+// a flat instruction list. It is the schema-aware pass: -abc cannot be
+// tokenized without knowing whether -a takes a value, so lex reads root's
+// flags and subcommands to decide.
 //
 // lex must never call Set: a completion engine evaluates a command line
 // that may be broken or only half typed, and must be able to do so without

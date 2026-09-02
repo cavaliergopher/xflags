@@ -46,8 +46,8 @@ completes one reads `ir.Flag.ClaimedOptions`, which is a superset once
 the dialect generates a spelling the program never declared, and which
 maps each spelling back to the declaration it came from so that what a
 generated one *means* can stay inside the dialect. So a second dialect
-replaces the speller and the matcher and nothing else. The
-design for that seam is in `wip/lexer.md`; none of it is built.
+replaces the speller and the matcher and nothing else. None of that seam
+is built.
 
 The separation is structural rather than conventional. `internal/argv`
 holds spelling, matching and everything that reads a command line;

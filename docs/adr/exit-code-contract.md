@@ -18,7 +18,7 @@ and the library promised nothing. The execution model changed handlers to
 return an `error`, which moved the mapping from failure to exit code inside
 the library and forced the question. That history isn't a constraint here:
 adoption of v0 is effectively zero, the API is pre-v1, and it is free to
-break until v1.0.0 ships (`wip/TODO.md` item 17).
+break until v1.0.0 ships.
 
 Prior art is settled enough to follow rather than invent. The standard
 library's `flag` package exits with 2 when it cannot parse a command line,
