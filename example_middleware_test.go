@@ -51,21 +51,26 @@ func Example_middleware() {
 	// Both wrappers are declared once, on the root. Every handler in the
 	// tree runs inside them, in the order given here, and neither
 	// subcommand below knows they exist.
-	app := NewCommand("fleet", "Operate the fleet").
-		Middleware(requireActor, timing).
-		Flags(String(&auditFlags.actor, "actor", "", "Who is running this")).
-		Subcommands(
-			NewCommand("restart", "Restart a service").
-				HandleFunc(func(ctx context.Context, inv *Invocation) error {
-					fmt.Fprintln(inv.Stdout, "restarted")
-					return nil
-				}),
-			NewCommand("status", "Report what is running").
-				HandleFunc(func(ctx context.Context, inv *Invocation) error {
-					fmt.Fprintln(inv.Stdout, "all green")
-					return nil
-				}),
-		)
+	//
+	// The tree is built per run because one command line is all a tree
+	// reads: this example shows three, where a program shows one.
+	newApp := func() *Command {
+		return NewCommand("fleet", "Operate the fleet").
+			Middleware(requireActor, timing).
+			Flags(String(&auditFlags.actor, "actor", "", "Who is running this")).
+			Subcommands(
+				NewCommand("restart", "Restart a service").
+					HandleFunc(func(ctx context.Context, inv *Invocation) error {
+						fmt.Fprintln(inv.Stdout, "restarted")
+						return nil
+					}),
+				NewCommand("status", "Report what is running").
+					HandleFunc(func(ctx context.Context, inv *Invocation) error {
+						fmt.Fprintln(inv.Stdout, "all green")
+						return nil
+					}),
+			)
+	}
 
 	// Both wrappers report on stderr, as does Run when one of them
 	// refuses, so the example points that stream at stdout to show
@@ -73,17 +78,17 @@ func Example_middleware() {
 	toStdout := WithStderr(os.Stdout)
 
 	fmt.Println("+ fleet --actor=alice restart")
-	Run(ctx, app, WithArgs("--actor=alice", "restart"), toStdout)
+	Run(ctx, newApp(), WithArgs("--actor=alice", "restart"), toStdout)
 
 	fmt.Println()
 	fmt.Println("+ fleet --actor=alice status")
-	Run(ctx, app, WithArgs("--actor=alice", "status"), toStdout)
+	Run(ctx, newApp(), WithArgs("--actor=alice", "status"), toStdout)
 
 	// The wrapper refuses before the handler runs, so nothing is
 	// restarted and the exit code is the one it named.
 	fmt.Println()
 	fmt.Println("+ fleet restart")
-	fmt.Printf("exit code %d\n", Run(ctx, app, WithArgs("restart"), toStdout))
+	fmt.Printf("exit code %d\n", Run(ctx, newApp(), WithArgs("restart"), toStdout))
 
 	// Output:
 	// + fleet --actor=alice restart

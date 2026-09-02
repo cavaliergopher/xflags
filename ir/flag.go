@@ -116,12 +116,6 @@ type Flag struct {
 	// positional argument, reports true.
 	TakesValue bool
 
-	// HasDefault records that Default was captured from a live Value, so
-	// it may be re-applied to restore it. See Resetter for the
-	// alternative a Value offers when Set cannot restore its default by
-	// re-applying it.
-	HasDefault bool
-
 	// Value is the flag's bound value: Set writes to it once for each
 	// argument the flag is given on the command line, after ValidateFunc,
 	// if any, approves the argument.

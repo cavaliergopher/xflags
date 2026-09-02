@@ -20,9 +20,6 @@ import (
 // may need to see them, so it must run in a throwaway process built for
 // completion and never beside a program's live state.
 func Complete(cmd *ir.Command, args []string, word string) ([]string, ir.CompDirective) {
-	if err := applyDefaults(cmd.Root); err != nil {
-		return nil, ir.CompNoFileComp
-	}
 	res := lex(cmd, args)
 
 	var forwarded []string

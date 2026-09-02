@@ -10,10 +10,11 @@ import (
 // of each argument in each flag's target. The rules for each flag are
 // checked and any errors are returned.
 //
-// Parse resets every flag reachable from cmd's tree to its default before
-// reading any arguments, so parsing the same tree twice yields the same
-// result. It does not validate the tree: a tree produced by
-// (*climux.Command).Compile is already validated.
+// Parse reads one command line against cmd. Calling it again with the
+// same tree is not supported: a flag keeps whatever the previous call
+// gave it, and a value that accumulates keeps accumulating. It does not
+// validate the tree: a tree produced by (*climux.Command).Compile is
+// already validated.
 //
 // The returned Invocation names cmd, or one of its subcommands if the
 // arguments specified one.
@@ -22,43 +23,7 @@ import (
 // parsing stops there and the returned Invocation names it. That is not
 // an error: it is for the caller to run what the interrupt asks for.
 func Parse(cmd *ir.Command, args []string) (*ir.Invocation, error) {
-	if err := applyDefaults(cmd.Root); err != nil {
-		return nil, err
-	}
 	return apply(cmd, lex(cmd, args))
-}
-
-// applyDefaults restores every flag reachable from c, and from every
-// descendant of c, to its default value. Parse calls it on the root, so a
-// parse governs the whole tree however deep it was called. Parse calls
-// this before lexing, which is what keeps repeat parses idempotent:
-// Compile lowers a tree fresh on every call but never mutates it, so
-// restoring defaults is the only step that does, and it runs anew each
-// time Parse does.
-//
-// Values are set directly, bypassing Flag.Set, so a ValidateFunc never
-// runs against a default.
-func applyDefaults(c *ir.Command) error {
-	for _, group := range c.FlagGroups {
-		for _, f := range group.Flags {
-			if r, ok := f.Value.(ir.Resetter); ok {
-				r.Reset()
-				continue
-			}
-			if !f.HasDefault {
-				continue
-			}
-			if err := f.Value.Set(f.Default); err != nil {
-				return ir.NewConfigErrorf(err, nil, f, "cannot restore default value: %v", err)
-			}
-		}
-	}
-	for _, sub := range c.Subcommands {
-		if err := applyDefaults(sub); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // apply walks res's instructions in order against the commands and flags

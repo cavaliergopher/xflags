@@ -42,11 +42,6 @@ type Flag struct {
 	// leaves the command line conventions to name it. See Flag.ValueName.
 	valueName string
 
-	// hasDefault records that a typed constructor captured defValue from a
-	// live Value, so Parse may re-apply it. It stays false for Var and for
-	// flags imported from a flag.FlagSet, whose defValue is display-only.
-	hasDefault bool
-
 	showDefault  bool
 	positional   bool
 	minCount     int
@@ -107,7 +102,6 @@ func BitField(p *uint64, mask uint64, name string, value bool, usage string) *Fl
 	v := newBitFieldValue(value, p, mask)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
-	c.hasDefault = true
 	c.kind = ir.KindBool
 	return c
 }
@@ -119,7 +113,6 @@ func Bool(p *bool, name string, value bool, usage string) *Flag {
 	v := newBoolValue(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
-	c.hasDefault = true
 	c.kind = ir.KindBool
 	return c
 }
@@ -132,7 +125,6 @@ func Duration(p *time.Duration, name string, value time.Duration, usage string) 
 	v := newDurationValue(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
-	c.hasDefault = true
 	c.kind = ir.KindDuration
 	return c
 }
@@ -144,7 +136,6 @@ func Float64(p *float64, name string, value float64, usage string) *Flag {
 	v := newFloat64Value(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
-	c.hasDefault = true
 	c.kind = ir.KindFloat
 	return c
 }
@@ -168,7 +159,6 @@ func Int(p *int, name string, value int, usage string) *Flag {
 	v := newIntValue(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
-	c.hasDefault = true
 	c.kind = ir.KindInt
 	return c
 }
@@ -180,7 +170,6 @@ func Int64(p *int64, name string, value int64, usage string) *Flag {
 	v := newInt64Value(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
-	c.hasDefault = true
 	c.kind = ir.KindInt
 	return c
 }
@@ -192,7 +181,6 @@ func String(p *string, name, value, usage string) *Flag {
 	v := newStringValue(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
-	c.hasDefault = true
 	c.kind = ir.KindString
 	return c
 }
@@ -204,7 +192,6 @@ func Strings(p *[]string, name string, value []string, usage string) *Flag {
 	v := newStringSliceValue(value, p)
 	c := Var(v, name, usage).NArgs(0, 0)
 	c.defValue = stringifyDefault(v)
-	c.hasDefault = true
 	c.kind = ir.KindString
 	return c
 }
@@ -216,7 +203,6 @@ func Uint(p *uint, name string, value uint, usage string) *Flag {
 	v := newUintValue(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
-	c.hasDefault = true
 	c.kind = ir.KindUint
 	return c
 }
@@ -228,7 +214,6 @@ func Uint64(p *uint64, name string, value uint64, usage string) *Flag {
 	v := newUint64Value(value, p)
 	c := Var(v, name, usage)
 	c.defValue = stringifyDefault(v)
-	c.hasDefault = true
 	c.kind = ir.KindUint
 	return c
 }
@@ -477,7 +462,6 @@ func (c *Flag) lower(errs *[]error) *ir.Flag {
 		EnvVar:         c.envVar,
 		Choices:        slices.Clone(c.choices),
 		TakesValue:     takesValue,
-		HasDefault:     c.hasDefault,
 		Value:          c.value,
 		ValidateFunc:   c.validateFunc,
 		CompleteFunc:   c.completeFunc,

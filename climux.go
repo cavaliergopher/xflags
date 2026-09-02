@@ -134,8 +134,8 @@ func Dispatch(ctx context.Context, cmd *Command, opts ...RunOption) error {
 // handler runs.
 //
 // Reach for it in a test, or in a program that wants the parsed result
-// without dispatching. Every flag is reset to its default first, so
-// parsing the same tree twice gives the same result.
+// without dispatching. Parse reads one command line against cmd; calling
+// it again with the same tree is not supported.
 //
 // If an interrupt such as --help was given, the returned Invocation names
 // it and nothing after it was checked.

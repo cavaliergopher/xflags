@@ -1229,7 +1229,8 @@ func TestInvocationPath(t *testing.T) {
 }
 
 // TestParseIsNotWrittenBack asserts that a parse leaves nothing behind on
-// the command tree, so parsing twice yields two independent results.
+// the command tree. Parsing one tree twice is what exposes a write-back,
+// so this does deliberately what a program must not.
 func TestParseIsNotWrittenBack(t *testing.T) {
 	cmd := NewCommand("test", "").ForwardArgs()
 	first, err := Parse(cmd, "--", "one")
@@ -1242,57 +1243,6 @@ func TestParseIsNotWrittenBack(t *testing.T) {
 	}
 	assertStrings(t, []string{"one"}, first.Forwarded)
 	assertStrings(t, []string{"two"}, second.Forwarded)
-}
-
-// TestParseRestoresDefaults asserts that a second Parse of the same tree
-// starts from the declared defaults rather than inheriting the first
-// parse's values -- trees get parsed twice mostly in tests.
-func TestParseRestoresDefaults(t *testing.T) {
-	var name string
-	var items []string
-	var word uint64
-	cmd := NewCommand("test", "").Flags(
-		String(&name, "name", "default", ""),
-		Strings(&items, "item", []string{"a"}, ""),
-		BitField(&word, 0x1, "one", false, ""),
-		BitField(&word, 0x2, "two", true, ""),
-	)
-	args := []string{"--name=x", "--item=p", "--item=q", "--one"}
-	for i := 0; i < 2; i++ {
-		if _, err := Parse(cmd, args...); err != nil {
-			t.Fatal(err)
-		}
-		assertString(t, "x", name)
-		assertStrings(t, []string{"p", "q"}, items)
-		assertUint64(t, 0x3, word)
-	}
-	// A parse of nothing restores every default outright.
-	if _, err := Parse(cmd); err != nil {
-		t.Fatal(err)
-	}
-	assertString(t, "default", name)
-	assertStrings(t, []string{"a"}, items)
-	assertUint64(t, 0x2, word)
-}
-
-// TestParseResetsEnvironmentValue asserts that a flag filled from its
-// environment variable on one parse returns to its default on a later
-// parse run without the variable set.
-func TestParseResetsEnvironmentValue(t *testing.T) {
-	var name string
-	cmd := NewCommand("test", "").Flags(
-		String(&name, "name", "default", "").Env("XFLAGS_TEST_NAME"),
-	)
-	t.Setenv("XFLAGS_TEST_NAME", "from-env")
-	if _, err := Parse(cmd); err != nil {
-		t.Fatal(err)
-	}
-	assertString(t, "from-env", name)
-	os.Unsetenv("XFLAGS_TEST_NAME") // t.Setenv restores it after the test
-	if _, err := Parse(cmd); err != nil {
-		t.Fatal(err)
-	}
-	assertString(t, "default", name)
 }
 
 // TestRunExitCodes asserts the contract Run documents: 0 for success or
@@ -1861,28 +1811,6 @@ func TestUsageFuncIsInherited(t *testing.T) {
 	if got, want := stdout.String(), "custom help for root child\n"; got != want {
 		t.Errorf("stdout = %q, want %q", got, want)
 	}
-}
-
-// TestParseFromSubcommandResetsTheTree asserts that Parse resets every
-// flag in the tree it is called on, not merely the subtree below the
-// command it was called on: a value an earlier parse left on an ancestor
-// would otherwise survive into the next one.
-func TestParseFromSubcommandResetsTheTree(t *testing.T) {
-	var level string
-	sub := NewCommand("sub", "")
-	root := NewCommand("app", "").
-		Flags(String(&level, "level", "info", "")).
-		Subcommands(sub)
-
-	if _, err := Parse(root, "--level=debug", "sub"); err != nil {
-		t.Fatal(err)
-	}
-	assertString(t, "debug", level)
-
-	if _, err := Parse(sub); err != nil {
-		t.Fatal(err)
-	}
-	assertString(t, "info", level)
 }
 
 func ExampleInvocation() {

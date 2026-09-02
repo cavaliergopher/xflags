@@ -475,8 +475,8 @@ func TestPositionalIsNotAnOption(t *testing.T) {
 // FuzzParse asserts the parser's contract over arbitrary command lines:
 // Parse never panics, and it returns an Invocation or an error, never
 // both and never neither. The tree is rebuilt inside the fuzz body
-// because repeat parses of one tree are not idempotent, and no flag
-// reads the environment, so iterations cannot bleed into each other.
+// because a tree reads one command line, and no flag reads the
+// environment, so iterations cannot bleed into each other.
 func FuzzParse(f *testing.F) {
 	for _, seed := range [][3]string{
 		{"--name=x", "sub", "left.txt"},    // attached long value

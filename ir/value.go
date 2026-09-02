@@ -63,20 +63,6 @@ type KindValue interface {
 	Kind() Kind
 }
 
-// Resetter is an optional interface for a Value whose Set method cannot
-// restore its default: one that accumulates each value it is given, or one
-// that shares state with other values. Parse restores every flag to its
-// default before reading any arguments, so that parsing the same tree
-// twice yields the same values; a value implementing Resetter is restored
-// by Reset, and any other by re-applying the default its flag's
-// constructor captured.
-//
-// The flag package has no counterpart, having no notion of parsing a set
-// of flags more than once.
-type Resetter interface {
-	Reset()
-}
-
 // ValidateFunc is a function that validates an argument before it is
 // parsed. arg is the option-argument or operand about to be handed to
 // Value.Set.
