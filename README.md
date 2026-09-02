@@ -192,3 +192,8 @@ output use internally.
 
 See [the docs](https://pkg.go.dev/go.hotsrc.dev/climux) for
 comprehensive examples.
+
+## License
+
+climux is licensed under the [Apache License, Version 2.0](LICENSE)
+(`SPDX-License-Identifier: Apache-2.0`).
