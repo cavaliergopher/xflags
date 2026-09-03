@@ -63,12 +63,12 @@ output formatted differently has `UsageFunc`.
 Exit codes and prefixes are untouched. The three-code contract in
 `docs/adr/exit-code-contract.md` and the `Argument error:` /
 `Program error:` / `Error:` prefixes in
-`docs/adr/human-readable-errors.md` stand as decided; this changes only
-what follows the error line.
+`docs/adr/human-readable-errors.md` stand as decided; only what follows
+the error line is settled here.
 
 ## Consequences
 
-- Every bad command line now shows usage, so misuse costs more output.
+- Every bad command line shows usage, so misuse costs more output.
   A program that wants the terse behavior back reports errors itself:
   `Dispatch` returns the raw error and prints nothing.
 - The error line stays the first line on stderr, which is what scripts
@@ -76,9 +76,8 @@ what follows the error line.
 - A long usage message can scroll the error line away on a terminal.
   Printing usage first would keep the diagnostic nearest the prompt, but
   reads backwards and contradicts the prior art; rejected.
-- The no-handler report is two lines where it was one. Anything scraping
-  that output now sees `Argument error: missing subcommand` before the
-  usage message.
+- The no-handler report is two lines: anything scraping that output sees
+  `Argument error: missing subcommand` before the usage message.
 - The shape of the report is wording, not API, with the same caveat
   `docs/adr/human-readable-errors.md` attaches to the prefixes: a caller
   must branch on `errors.As` and the exit code, never on stderr's

@@ -1,12 +1,7 @@
 # The dialect is the POSIX syntax guidelines plus GNU long options
 
-Status: accepted, 2026-08-23. Amended 2026-08-26, three times: twice over
-how an attached value is read, see *Attached values follow Go, not getopt*;
-and once over guideline 10, where `--` now ends option processing by
-default rather than a command that did not opt in rejecting it, and the
-opt-in is `ForwardArgs`, which hands the arguments to
-`Invocation.Forwarded`. Implemented apart from the three gaps named in the
-consequences.
+Status: accepted, 2026-08-23. Implemented apart from the three gaps named
+in the consequences.
 
 ## Context
 
@@ -56,16 +51,17 @@ POSIX terms when it means the standard's concept:
 **Guideline 3 — one alphanumeric character per short name.** A name of one
 character is spelled with a single dash, and validation confines it to the
 portable character set: `[A-Za-z0-9]`.
-The check counted bytes and admitted punctuation until 6195ed8, so `-é` was
-rejected for the wrong reason and `-!` was accepted for none. Guideline 5
-now leans on the rule rather than merely agreeing with it: `=` is read as a
-delimiter after a boolean precisely because it can never be a name. The
+Counting bytes instead, and admitting punctuation, rejects `-é` for the
+wrong reason and accepts `-!` for none. Guideline 5 leans on the rule
+rather than merely agreeing with it: `=` is read as a delimiter after a
+boolean precisely because it can never be a name. The
 reserved `-W` is not adopted; it is a vendor escape hatch in
 a standard that has vendors, and this package has authors.
 
 **Guideline 4 — options are introduced by a delimiter.** `-` for short
-names, and `--` for long ones as GNU has it. A single dash never introduces
-a long name, which is the whole of the earlier ADR.
+names, and `--` for long ones as GNU has it. A single dash never
+introduces a long name, which is the whole of
+docs/adr/posix-gnu-argv-dialect.md.
 
 **Guideline 5 — grouping.** `-abc` is `-a -b -c`. Consumption continues
 while each short name is a flag that takes no value; the first that takes
@@ -124,7 +120,9 @@ an error about ordering that no amount of permutation fixes. See
 own reading, as the default: every argument after `--` is an operand
 however many dashes it starts with, so a command can be given an operand
 named `-rf`. This is the escape hatch guideline 14 depends on for a
-detached value, the attached form being the other.
+detached value, the attached form being the other. A command that instead
+wants what follows handed on unparsed opts in with `ForwardArgs`, and
+reads it from `Invocation.Forwarded`.
 
 A command that sets `ForwardArgs` takes the second reading instead, and
 everything after `--` reaches the handler as `Invocation.Forwarded` rather
@@ -256,9 +254,10 @@ Two arguments decide it, and neither is ergonomics.
 The first is structural. An opt-in needs a field on the compiled flag —
 `ir.Flag.Negatable` — named for a feature only some dialects have, carrying
 one dialect's opinion about what `--no-` means, on the model every dialect
-shares. That is the leak a `NegatedForm` field was rejected for,
-and it drags two validation rules in behind it: *negation declared under a
-dialect that lacks it*, and *negation declared on a non-boolean*, both of
+shares — a spelling leaking into the type that is supposed to be
+spelling-agnostic. It drags two validation rules in behind it: *negation
+declared under a dialect that lacks it*, and *negation declared on a
+non-boolean*, both of
 which exist only to police a field that should not be there. Generating
 instead deletes all of it. `TakesValue == false` already says "boolean",
 and the dialect decides a boolean is spelled `--no-name`; nothing is

@@ -1,8 +1,6 @@
 # Run reports outcomes as exit codes 0, 1 and 2
 
 Status: accepted, 2026-08-23.
-Amended 2026-08-26: the constant for code 2 is `ExitCodeUsage`. It was
-`ExitCodeBadArgument`, which named only one of the three cases below.
 
 ## Context
 

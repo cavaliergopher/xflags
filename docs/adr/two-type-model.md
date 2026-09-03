@@ -8,34 +8,33 @@ Every concept in this package needs two shapes. A command as the program
 author declares it is a builder: chained setters, defaults filled in,
 half-built while the tree is assembled. A command as the parser sees it is
 resolved: ancestry known, mounted flag groups flattened in, every name
-settled. Serving both from one type is what the abandoned
-`deprecated-pod-data-model` attempt tried and could not do.
+settled. One type cannot be both -- the setters that make a builder usable
+are the surface a parser must not reach, and a field that may or may not
+have been resolved yet has no single correct reading.
 
-The first answer to this was the `desc` package: a projection of the
-configuration tree that dropped all behavior -- no `Value`, no handler, no
-writers -- on the reasoning that an artifact is either inert and portable
-or live and local, and that machine-readable output (see
-docs/adr/machine-readable-schema.md) needs the inert one. That conclusion
-held; the route taken to it here did not.
+The tempting economy is to make the second shape the inert one the package
+already needs for machine-readable output (see
+docs/adr/machine-readable-schema.md), on the reasoning that an artifact is
+either inert and portable or live and local. The reasoning about artifacts
+holds; using that artifact as a parsing stage does not.
 
-Splitting parsing into a lexing pass and an applier tested that reasoning
-and it failed. Because `desc` carried no `Value`, the lexer could not
-resolve an argument to anything the applier could act on, so the split
-grew a private parallel tree -- `boundFlag`, `boundCommand`, `bind()` --
-pairing each description with the source it was projected from. Roughly
-eighty lines and a second tree walk, spent entirely on keeping one field
-off a struct.
+Parsing splits into a lexing pass and an applier, and the lexer has to
+resolve an argument to something the applier can act on. A projection that
+drops all behavior -- no `Value`, no handler, no writers -- gives the lexer
+nothing to resolve to, so the split grows a private parallel tree,
+pairing each description with the source it was projected from, to put
+back exactly what the projection took away. Roughly eighty lines and a
+second tree walk, spent entirely on keeping one field off a struct.
 
-What failed there was `desc` as a *stage*, not as a type. A description
-the lexer had to read could not carry the value the applier needed, and
-nothing about field visibility fixes that. Keeping behavior out of the
-output is the easy half either way: Go does not marshal an unexported
-field, and a tag excludes an exported one.
+What fails is a description as a *stage*, not as a type, and nothing about
+field visibility changes it. Keeping behavior out of the output is the
+easy half either way: Go does not marshal an unexported field, and a tag
+excludes an exported one.
 
-The description came back later, for requirements marshaling alone does
-not raise -- keys that survive a Go field being renamed, a version, and
-the ability to be read back -- and it came back as a conversion at the
-boundary that nothing internal reads, rather than as a stage. See
+A description still earns its place, for requirements marshaling alone
+does not raise -- keys that survive a Go field being renamed, a version,
+and the ability to be read back -- but it belongs at the boundary, as a
+conversion nothing internal reads. See
 docs/adr/machine-readable-schema.md.
 
 Keeping the behavior fields unexported, though, still meant no one outside
@@ -112,23 +111,23 @@ That is the compiler order -- lower, then check -- and it is what lets a
 "errors carry descriptions rather than sources" change arriving as a
 consequence rather than as work.
 
-The lexer loses a guarantee. It could not previously call `Set`, because
-the type it read had no value to set; now it can, and must not. A
-structural property becomes a documented one, which is a real if small
-loss: completion evaluates a broken command line and must apply nothing.
+The lexer can call `Set`, and must not. The compiled flag it reads carries
+the value, so the rule is documented rather than made impossible by the
+type -- a real if small loss, since completion evaluates a broken command
+line and must apply nothing.
 
-Help rendering moves into `ir`. The earlier reasoning that kept it in the
-root package -- that `desc` earns its place by being data only, so
-admitting one consumer invites all of them -- lapses with the premise it
-rested on. Rendering reads the spellings `argv` put on the compiled flag;
-it does not construct them.
+Help rendering belongs in `ir`. The argument for keeping a renderer out --
+that a type earning its place by being data only invites every consumer
+once it admits one -- does not reach `ir`, which is not data only.
+Rendering reads the spellings `argv` put on the compiled flag; it does not
+construct them.
 
-Every `ir` field being public is what later made `internal/argv`
-possible: a sibling package lexes and applies over the compiled tree with
-no accessors added for it. The unexported design would have blocked that
-outright.
+Every `ir` field being public is what makes `internal/argv` possible: a
+sibling package lexes and applies over the compiled tree with no accessors
+added for it. Unexported fields would block that outright.
 
-Two imports appear where one was enough, for the advanced consumer only.
+Two imports appear where one would otherwise do, for the advanced consumer
+only.
 That is the cost deliberately accepted for keeping the root package's
 documentation legible.
 

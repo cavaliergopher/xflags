@@ -50,7 +50,7 @@ mounted.
 
 ## Consequences
 
-- The debugging trap goes away: within any one invocation, a name means one
+- There is no debugging trap: within any one invocation, a name means one
   flag bound to one variable.
 - Validation becomes ancestry-aware rather than per command, so it costs a
   walk down each path rather than a pass over each command.

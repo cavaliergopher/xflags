@@ -54,10 +54,6 @@ configuration only and keep everything they have.
 
 ## Consequences
 
-- Breaking, but narrowly. Every program in the documentation already ended
-  with `climux.Run(ctx, App)`, and the only non-test caller of any moved
-  method was `RunWithArgs` itself. It breaks a program that reached for the
-  methods rather than the functions, which the docs never taught.
 - `command.go` is now legibly the configuration type: a struct, a
   constructor, `Compile`, `lower`, and setters. The entry points and the
   error reporting live together in `climux.go`, which is what a reader

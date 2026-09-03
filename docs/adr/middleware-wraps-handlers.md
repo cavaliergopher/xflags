@@ -23,19 +23,21 @@ reasons that compound:
   discovered when someone deprecates a command on data that never covered
   it.
 
-Until now the only answer was the `Wrap` idiom shown in
+Without a mechanism for it, the only answer is the `Wrap` idiom shown in
 `example_di_test.go` — a closure returning a `HandlerFunc`, which climux
-does not provide so much as permit — registered by each command at the
-point it declares its handler. That leaves the decision with the wrong
-party. climux exists so that many teams can compose one binary, and the
-team that decides a subtree must be measured, or audited, is the one
-assembling it.
+does not provide so much as permit — applied by each command where it
+declares its handler. That leaves the decision with the wrong party.
+climux exists so that many teams can compose one binary, and the team
+deciding that a subtree must be measured, or audited, is the one
+assembling it rather than each team that wrote a handler.
 
-`orbital` had already shown the cost before this change: three unrelated
-packages each imported a `middleware` package and threaded the audit
-identity through their own `HandleFunc` calls, and `--trace` advertised
-"a timing trace for every command" while tracing only the three that
-happened to opt in.
+The cost arrives as soon as a binary is large enough to want the
+mechanism. A concern applied handler by handler makes every package
+carrying it import the package defining it and thread the same state
+through its own `HandleFunc` calls, and a flag such as `--trace`, which
+advertises "a timing trace for every command", traces only the commands
+that remembered to opt in — with nothing in the flag's own description to
+tell a reader which those are.
 
 ## Decision
 

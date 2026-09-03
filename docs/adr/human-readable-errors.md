@@ -29,11 +29,12 @@ mistyped a flag, and a library announcing its own name inside a host
 program's stderr is a leak of an implementation detail nobody asked to
 see, in the one case — the human's — where nobody benefits from it.
 
-Separately, `docs/adr/exit-code-contract.md` already named a related loose
-end in its Consequences: a parse error prints `Argument error:` and a
-handler-raised usage error prints `Error:`, "because only the parser
-produces an `ArgumentError`" — true at the time, but no longer the whole
-story once a handler has a real reason to construct one itself.
+Separately, `docs/adr/exit-code-contract.md` names a related loose end in
+its Consequences: a parse error prints `Argument error:` while a
+handler-raised usage error prints `Error:`. That split holds only while
+the parser is the sole producer of an `ArgumentError`, and a handler has
+real reason to construct one itself — two mutually exclusive flags is a
+misuse only the handler can detect.
 
 ## Decision
 
@@ -92,12 +93,12 @@ the flag's exact name and scope — which overlaps the still-undecided
 is worth designing once, not twice — and whether the JSON goes to stdout
 or stderr.
 
-The prefix follows the error's type, not who constructed it. An earlier
-pass qualified this — `Argument error:` only when the `*ArgumentError`
-carried a `Cmd`, so that a handler raising one still printed `Error:` —
-which the code never implemented and which this amendment drops. A bad
-argument is a bad argument whoever noticed it, and the reader the prefix
-serves is the person who typed it, who does not care which layer caught
+The prefix follows the error's type, not who constructed it. Qualifying it
+by provenance — `Argument error:` only when the `*ArgumentError` carries a
+`Cmd`, so that a handler raising one prints `Error:` — serves nobody. A
+bad argument is a bad argument whoever noticed it, and the reader the
+prefix serves is the person who typed it, who does not care which layer
+caught
 them out.
 
 There is still no `UsageErrorf`. A handler that discovers a usage problem
@@ -126,9 +127,9 @@ that a refactor had quietly reverted to 1.
 - An agent or script that only sees a CLI's stdout/stderr, rather than
   calling into the library, still has nothing structured to read. The
   direction is decided — a flag, JSON, built on `desc` — but not built.
-- Three prefixes now map onto three causes, so the wording of a message is
-  no longer the only thing telling a misconfigured program apart from a
-  mistyped command line. Exit codes cannot: both are 2.
+- Three prefixes map onto three causes, so the wording of a message is not
+  the only thing telling a misconfigured program apart from a mistyped
+  command line. Exit codes cannot: both are 2.
 - The prefixes are wording, not API, and the same caveat as `String()`
   applies — a program must not branch on them. A caller needing to tell
   the cases apart uses `errors.As`, and an agent reading only stderr still
@@ -141,9 +142,9 @@ that a refactor had quietly reverted to 1.
   because a successful `Compile` is what makes a program well-formed and
   the stream overrides are part of what failed it — `getStderr` resolves
   by walking the very parent links `Compile` checks. Honoring them would
-  mean reading configuration the library has just declared invalid, and it
-  used to address the report to the offending command's stream, chosen by
-  that command's author rather than by the composer the message is for.
+  mean reading configuration the library has just declared invalid, and
+  addressing the report to the offending command's stream — chosen by that
+  command's author rather than by the composer the message is for.
   Nothing is lost by writing early: `Compile` runs before argv is lexed,
   so no handler has run and the process exits 2 immediately. A program
   that wants these faults as values, which is the better place to catch

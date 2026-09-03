@@ -69,29 +69,27 @@ points at the leaf deliberately. A consumer that only reads documents —
 a tool diffing two of them, with no command tree anywhere in it — gets
 the plain data and none of the implementation.
 
-The name is the one the retired package had, because the role it names is
-the one that survived. What is different is that `desc` is no longer a
-*stage*: it failed as one because the lexer read a projection carrying no
-`Value`, so resolving an argument to something the applier could act on
-grew a private parallel tree and a `bind()` pass, eighty lines spent
-keeping one field off a struct. Nothing internal reads a description. The
-parser still runs on `ir`, and the conversion happens once, at the
-boundary, on the way out. Calling the package `schema` was considered and
-dropped: the format is published as a JSON Schema document, and one word
-should not name both the Go types and the thing that validates them.
+`desc` is a boundary, not a *stage*. Nothing internal reads a description:
+the parser runs on `ir`, and the conversion happens once, on the way out.
+A description used as a stage does not work, because a lexer reading a
+projection that carries no `Value` cannot resolve an argument to anything
+the applier can act on, and putting that back costs a private parallel
+tree and a `bind()` pass — eighty lines spent keeping one field off a
+struct. The package is not called `schema`, because the format is
+published as a JSON Schema document and one word should not name both the
+Go types and the thing that validates them.
 
-Embedding the description into the implementation type was the other
-candidate and does not work, for a reason independent of that history:
-`encoding/json` flattens an anonymous embedded struct, so
-`ir.Command{desc.Command; Handler ...}` marshals to exactly the keys it
-marshals to today. It would buy a type and not a format.
+Embedding the description into the implementation type is the other
+candidate and does not work either: `encoding/json` flattens an anonymous
+embedded struct, so
+`ir.Command{desc.Command; Handler ...}` marshals to exactly the keys
+`ir.Command` marshals on its own. It buys a type and not a format.
 
-### `ir` no longer marshals
+### `ir` does not marshal
 
-Nothing in `ir` is encoded or decoded, and its `json:"-"` tags come off
-with the field comments that explain them. The guarantee that behavior
-never leaks into a document stops being a tag discipline pinned by
-`TestMarshalOmitsBehavior`, which retires, and becomes structural:
+Nothing in `ir` is encoded or decoded, and it carries no `json:"-"` tags.
+The guarantee that behavior never leaks into a document is not a tag
+discipline pinned by a test but a structural property:
 `Describe` copies named fields, so a behavior field added to `ir` later is
 absent from the output because nothing wrote it there, not because a tag
 excluded it.
@@ -327,17 +325,13 @@ operands is an ordinary configuration error naming the author's own
 mistake. That question can stay open on its own merits rather than
 blocking this.
 
-The two-type-model ADR states a rule this changes, and should be edited to
-say three when this is accepted rather than before.
-
 `ir` gains two fields, neither of them behavior. A golden document for
 `examples/orbital` is what will make an unintended wire change visible,
 alongside the help goldens already there.
 
 Machine-readable error output should project through the `desc` types
-rather than defining a second vocabulary for a command and a flag. That
-was already the intent recorded for it, against the `desc` that no longer
-existed when it was written.
+rather than defining a second vocabulary for a command and a flag, which
+is what docs/adr/human-readable-errors.md leaves open for it.
 
 Recording an option's effect is a change to `ir`, and the only one here
 that is not additive. `ir.Flag`'s comment says today that what a
@@ -351,13 +345,13 @@ generated from and the effect of naming it, and `internal/argv` fills in
 the second where it already fills in the first.
 
 `ir` still knows no dialect by this, and the distinction has to be exact,
-because a narrower version of the same field was rejected twice: first as
-a negated form on the compiled flag, then as a `Negated` boolean on a
-claim, both as a dialect feature leaking into the type every dialect
-shares. The test that sank them was whether a dialect lacking the feature
-would leave the field meaningless, and a boolean fails it. A dialect
-without negation reports false everywhere, and one whose modifier is a
-repeat or a reset needs a second field while the first sits dead.
+because the narrower versions of the same field do not survive it. A
+negated form on the compiled flag, or a `Negated` boolean on a claim, is a
+dialect feature leaking into the type every dialect shares. The test is
+whether a dialect lacking the feature leaves the field meaningless, and a
+boolean fails it: a dialect without negation reports false everywhere, and
+one whose modifier is a repeat or a reset needs a second field while the
+first sits dead.
 
 An effect names no feature. It is a term the dialect writes and a
 consumer reads, over a vocabulary that is open, so a dialect with no
@@ -374,10 +368,10 @@ the shared type changing. Two rules keep it there:
   rather than by reading the effect. The modifier still lives entirely
   inside the dialect, and the effect exists for the document alone.
 
-Under those, this supersedes the earlier rejections rather than
-contradicting them. What the type records is not that this dialect
-negates, but that the dialect had something to say about an option, in a
-word it and the reader share.
+Under those two rules an effect is not the field those narrower versions
+would have been. What the type records is not that this dialect negates,
+but that the dialect had something to say about an option, in a word it
+and the reader share.
 
 A flattened per-command projection is anticipated and deliberately not
 built. Something calling one command wants that command's calling

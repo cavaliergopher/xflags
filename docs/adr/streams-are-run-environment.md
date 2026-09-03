@@ -9,20 +9,21 @@ replies. Where that output goes must be injectable -- a test wants to read
 it, an embedding program wants to place it -- which is the need
 `flag.FlagSet.SetOutput` answers in the stdlib.
 
-The previous design went further: `Command.Stdin`, `Command.Stdout` and
-`Command.Stderr` setters on every command, inherited down the tree and
-resolved by `Compile`. Three problems emerged:
+Going further than that means per-command setters: `Command.Stdin`,
+`Command.Stdout` and `Command.Stderr` on every node, inherited down the
+tree and resolved by `Compile`. It is the obvious next step and it does
+not work, for three reasons:
 
 - Per-command configuration answers no question. Every print the library
   makes belongs to one dialog per process, between the program and the
   operator; no command ever needs a different answer than the root, so the
   per-node setters, their inheritance walk, and the sharp edge of a setter
-  that is only meaningful at the root all paid for nothing.
-- A tree's streams could not be trusted while the tree itself failed to
-  compile, so config errors needed a separate untrusted-stream fallback
-  path in reporting.
-- The setters invited a promise the tree cannot keep. `Command.Stdout`
-  read as "whatever this command writes", but a handler reaching for
+  that is only meaningful at the root all pay for nothing.
+- A tree's streams cannot be trusted while the tree itself fails to
+  compile, so config errors would need a separate untrusted-stream
+  fallback path in reporting.
+- The setters invite a promise the tree cannot keep. `Command.Stdout`
+  reads as "whatever this command writes", but a handler reaching for
   `os.Stdout` escapes any redirection, and nothing detects it.
 
 The stdlib also sets a precedent on write failures: `flag` discards the

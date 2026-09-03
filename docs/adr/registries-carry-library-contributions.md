@@ -93,6 +93,17 @@ A library ships a flag and the wrapper honoring it as one registration, so
 the two cannot be mounted apart, and a shared subcommand needs no wiring
 in the programs carrying it.
 
+What a registry cannot do is make a library register the pair in the first
+place. Nothing stops a package registering a flag and no wrapper, and
+nothing stops one registering into a registry belonging to someone else.
+Both are conventions the package documents and neither is enforced: a
+registry is a plain value, so any package holding a reference may add to
+it, and a type that demanded both halves at once — an interface supplying
+a flag group and a wrapper together — would only move the question to
+what a library chooses to implement. The guarantee on offer is narrower
+and worth stating plainly: what one registry holds is mounted together or
+not at all.
+
 `Registry` and `Command` share three method names. That is deliberate: the
 same name means the same thing, and the one difference — that a registry
 claims no parent — is the place the two must not be confused.
