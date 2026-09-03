@@ -1,22 +1,26 @@
-# Two types per concept, and the ir package
+# Three types per concept, and the ir package
 
 Status: accepted, 2026-08-28.
 
 ## Context
 
-Every concept in this package needs two shapes. A command as the program
+Every concept in this package needs three shapes. A command as the program
 author declares it is a builder: chained setters, defaults filled in,
 half-built while the tree is assembled. A command as the parser sees it is
 resolved: ancestry known, mounted flag groups flattened in, every name
-settled. One type cannot be both -- the setters that make a builder usable
-are the surface a parser must not reach, and a field that may or may not
-have been resolved yet has no single correct reading.
+settled. A command as a document is inert: plain data with explicit names,
+carrying nothing a reader outside the process could not use.
 
-The tempting economy is to make the second shape the inert one the package
-already needs for machine-readable output (see
-docs/adr/machine-readable-schema.md), on the reasoning that an artifact is
-either inert and portable or live and local. The reasoning about artifacts
-holds; using that artifact as a parsing stage does not.
+The first two cannot be one type. The setters that make a builder usable
+are the surface a parser must not reach, and a field that may or may not
+have been resolved yet has no single correct reading. Why the third is a
+type of its own rather than a stage in the middle takes more saying.
+
+The tempting economy is to collapse the second into the third and parse
+against the inert one, on the reasoning that an artifact is either inert
+and portable or live and local and the package needs the portable one
+anyway (see docs/adr/machine-readable-schema.md). The reasoning about
+artifacts holds; using that artifact as a parsing stage does not.
 
 Parsing splits into a lexing pass and an applier, and the lexer has to
 resolve an argument to something the applier can act on. A projection that
@@ -37,10 +41,11 @@ and the ability to be read back -- but it belongs at the boundary, as a
 conversion nothing internal reads. See
 docs/adr/machine-readable-schema.md.
 
-Keeping the behavior fields unexported, though, still meant no one outside
-the package could set them, which cost a `FlagConfig`/`NewFlag` and a
-`CommandConfig`/`NewCommand` to build a node, plus accessor methods --
-`Path`, `Stdin`, `Stdout`, `Stderr` -- to read back what visibility hid.
+Keeping the behavior fields unexported carries its own price: no one
+outside the package can set them, which costs a `FlagConfig`/`NewFlag` and
+a `CommandConfig`/`NewCommand` to build a node, plus accessor methods --
+`Path`, `Stdin`, `Stdout`, `Stderr` -- to read back what visibility
+hides.
 For a package with no users yet and no stability promise, that is a
 permanent API surface bought for a marginal guarantee, and the guarantee
 is free where it is actually wanted: nothing encodes an `ir` type, so

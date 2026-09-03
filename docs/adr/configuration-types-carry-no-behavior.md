@@ -4,8 +4,8 @@ Status: accepted, 2026-08-29; implemented 2026-08-31.
 
 ## Context
 
-`climux.Command` and `climux.Flag` are the builder half of the two-type
-model (see `two-type-model.md`): what a program declares, with chained
+`climux.Command` and `climux.Flag` are the builder tier of the three-type
+model (see `three-type-model.md`): what a program declares, with chained
 setters, before anything is resolved. They had also accumulated the verbs
 that act on a declared tree — `Parse`, `Run`, `Dispatch`, `Complete`, and
 the unexported error reporting behind `Run`.

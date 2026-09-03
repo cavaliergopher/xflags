@@ -1,6 +1,6 @@
 // Package ir is the compiled form of an climux command tree.
 //
-// climux splits every concept into two types. The configuration type --
+// climux splits every concept into three types. The configuration type --
 // climux.Command, climux.Flag, climux.FlagGroup -- is what a program builds
 // with chained setters: ergonomic to write, but opaque, since everything
 // it holds -- a bound Value, a handler, a stream -- lives in unexported
@@ -11,6 +11,12 @@
 // while lowering, a flag's default rendered as a string -- with every
 // field public, which is what lets a formatter, a marshaler and the
 // machine that reads a command line all walk one tree.
+//
+// Describing a compiled tree with (*Command).Describe lowers it once
+// more, to the description type in the desc package: plain data with
+// explicit JSON names and no behavior at all, which is what a document
+// carries and what a reader outside the process gets. Nothing here reads
+// one back; the conversion runs at the boundary, on the way out.
 //
 // This package is what a program means, not what its command line says.
 // Reading a command line against a compiled tree -- lexing, applying and

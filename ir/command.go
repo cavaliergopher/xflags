@@ -81,7 +81,7 @@ type HandlerFunc func(ctx context.Context, inv *Invocation) error
 // an encoded tree self-referential, and Handler, UsageFunc and the three
 // streams, which carry behavior: ir is never encoded, so nothing has to
 // be hidden from an encoder to keep any of it out of a document. See the
-// package doc for the two-type model this is one half of.
+// package doc for the three-type model this is the middle of.
 type Command struct {
 	Name        string
 	Summary     string

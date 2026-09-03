@@ -33,7 +33,7 @@ type Claim struct {
 // Every field is exported, including Value, ValidateFunc, CompleteFunc
 // and Handler, which carry behavior: ir is never encoded, so nothing has
 // to be hidden from an encoder to keep it out of a document. See the
-// package doc for the two-type model this is one half of.
+// package doc for the three-type model this is the middle of.
 type Flag struct {
 	// NamedOptions is the option each name the program declared is shown
 	// as: "--verbose" and "-v" rather than "verbose" and "v". It runs

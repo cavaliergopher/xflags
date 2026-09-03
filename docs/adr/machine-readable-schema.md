@@ -26,12 +26,12 @@ in process and hides every one of these problems.
 
 ### Every concept has a third type
 
-The two-type model gains a tier. A concept has a **configuration** type,
-which an author builds with chained setters; an **implementation** type in
-`ir`, which is parsed against and dispatched; and a **description** type,
-which is the wire format. `desc` holds `Document`, `Command`, `FlagGroup`
-and `Flag`: plain data, no behavior, every field carrying an explicit
-`json` name, and every one of them round-trippable.
+A concept has three types: a **configuration** type, which an author
+builds with chained setters; an **implementation** type in `ir`, which is
+parsed against and dispatched; and a **description** type, which is the
+wire format. See `three-type-model.md`. `desc` holds `Document`,
+`Command`, `FlagGroup` and `Flag`: plain data, no behavior, every field
+carrying an explicit `json` name, and every one of them round-trippable.
 
 Each implementation type lowers itself, as the configuration types
 already do: `Command.Compile` produces the `ir` tree, and
