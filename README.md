@@ -96,6 +96,37 @@ func Authorize(next climux.HandlerFunc) climux.HandlerFunc {
 }
 ```
 
+A `Registry` is what a library contributes to a program that mounts it: flag
+groups, middleware, and subcommands. A platform team registers a flag together
+with the wrapper that honors it, so no binary can pick up one without the
+other, and the program names none of it.
+
+```go
+package timeouts
+
+func init() {
+	climux.DefaultRegistry.
+		FlagGroups(settings.FlagGroup()). // --timeout
+		Middleware(settings.Wrap)         // honors it
+}
+```
+
+```go
+var App = climux.NewCommand("fleet", "Operate the fleet").
+	Mount(climux.DefaultRegistry).
+	Subcommands(RestartCommand, StatusCommand)
+```
+
+`DefaultRegistry` is the well-known one, for the packages making up a single
+program; nothing limits a program to it, and an organization keeping a registry
+per platform team mounts on each command the ones that command should carry. A
+library published for programs it does not own should export a registry instead
+of registering into `DefaultRegistry`, so linking a package in is not by itself
+a decision about a program's command line. A registry is read when a command
+that mounts it runs, so registration order never matters, and it is not a node
+in the tree — mounting one writes nothing back, so two programs may mount the
+same registry.
+
 `Command.HelpFlag` adds the flag that prints a command's help message,
 answering to `--help` and `-h`. A program that reports a version adds one or
 both spellings of it, from the one string a build stamps into a constant:

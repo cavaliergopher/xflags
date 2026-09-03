@@ -22,7 +22,8 @@ set `ORBITAL_ACTOR`. `--help` does not.
 | Feature | Where |
 | --- | --- |
 | Nested subcommands 3+ deep | `orbital deploy status`, `orbital config get\|set` |
-| Shared flag group via `Register`/`GroupSets` | `internal/telemetry` (`--log-level`, `--trace`), mounted in `main.go` |
+| Registry: shared flags and the middleware honoring them | `internal/telemetry` (`--log-level`, `--trace`, timing trace), mounted in `main.go` |
+| Registry: a subcommand a library contributes | `internal/debug`, blank-imported by `main.go` |
 | `FromFlagSet` importing a legacy `flag.FlagSet` | `internal/legacy` |
 | Positional arguments | `internal/config` (`KEY`, `VALUE`), `internal/deploy` (`SERVICE`) |
 | Unbounded positional argument | `internal/logscmd` (`orbital logs SERVICE...`) |

@@ -75,7 +75,7 @@ type Command struct {
 	forwardedUsage     string
 
 	flagGroups  []*FlagGroup
-	groupSets   []*GroupSet
+	registries  []*Registry
 	subcommands []*Command
 	usageFunc   ir.UsageFunc
 	handlerFunc HandlerFunc
@@ -183,22 +183,47 @@ func (c *Command) validate() error {
 }
 
 // effectiveGroups returns the flag groups the command presents: its own,
-// followed by every group of every mounted GroupSet, in registration
+// followed by every group of every mounted Registry, in registration
 // order. Validation, parsing and Compile all read flags through this
 // helper, so a mounted flag behaves exactly like a declared one. The
 // result is assembled afresh on each call, never written back into
 // flagGroups: that is what keeps Compile pure and a repeated Parse from
-// mounting the same groups twice.
+// mounting the same groups twice. Everything else a registry carries is
+// assembled the same way, in lower.
 func (c *Command) effectiveGroups() []*FlagGroup {
-	if len(c.groupSets) == 0 {
+	if len(c.registries) == 0 {
 		return c.flagGroups
 	}
-	groups := make([]*FlagGroup, len(c.flagGroups), len(c.flagGroups)+len(c.groupSets))
+	groups := make([]*FlagGroup, len(c.flagGroups), len(c.flagGroups)+len(c.registries))
 	copy(groups, c.flagGroups)
-	for _, set := range c.groupSets {
-		groups = append(groups, set.groups...)
+	for _, registry := range c.registries {
+		groups = append(groups, registry.groups...)
 	}
 	return groups
+}
+
+// effectiveMiddleware returns the wrappers the command applies to its own
+// handler and to every handler beneath it, outermost first: those of every
+// mounted Registry, in registration order, followed by the command's own.
+//
+// A registered wrapper is outside a declared one because a wrapper
+// registered beside the flag it reads has to bound the handlers the
+// mounting program wrote, or a program declares its way out of the wrapper
+// while keeping the flag. Ordering within the result is all that says so:
+// chainMiddleware applies a list outermost-first, so the layering needs no
+// second pass.
+//
+// The result is assembled afresh on each call and never written back, for
+// the reason effectiveGroups is.
+func (c *Command) effectiveMiddleware() []Middleware {
+	if len(c.registries) == 0 {
+		return c.middleware
+	}
+	wrappers := make([]Middleware, 0, len(c.middleware)+len(c.registries))
+	for _, registry := range c.registries {
+		wrappers = append(wrappers, registry.middleware...)
+	}
+	return append(wrappers, c.middleware...)
 }
 
 // Compile validates the whole command tree c belongs to and returns c in
@@ -263,16 +288,16 @@ func (c *Command) Compile() (*ir.Command, error) {
 // move onto the compiled tree, because they depend on the source tree's
 // own bookkeeping rather than on anything a lowered node carries:
 //
-// Whether any middleware c declared is nil, which cannot be applied to a
+// Whether any middleware c applies is nil, which cannot be applied to a
 // handler and which chainMiddleware therefore skips. Composing leaves
 // nothing on the node to check afterwards, so it is checked here, where
-// it is still a list of what one command declared.
+// it is still a list of what one command contributes.
 //
-// Whether a subcommand's parent actually names the command about to
-// claim it as a child. See Subcommands for why -- a shared command such
-// as climux.CommandLine may be mounted under more than one parent, and
-// only the source *Command remembers which one Subcommands actually
-// accepted.
+// Whether a subcommand's parent is the one lowering expects: the command
+// about to claim it as a child, or no parent at all for a command a
+// mounted registry contributed. See Subcommands for why -- a command a
+// library exports may be handed to more than one parent, and only the
+// source *Command remembers which one Subcommands actually accepted.
 //
 // Whether a subcommand has already been lowered, which means the
 // subcommand links lead back into the tree above. nodeMap is the record
@@ -317,17 +342,17 @@ func (c *Command) lower(parent *ir.Command, inherited Middleware, nodeMap map[*C
 			node.UsageFunc = parent.UsageFunc
 		}
 	}
-	// Middleware composes where the fields above fall back: a command's
-	// own wrappers run inside every one its ancestors declared, so what
-	// this command adds is wrapped by what it inherited rather than
-	// replacing it.
-	for _, mw := range c.middleware {
+	// Middleware composes where the fields above fall back: what this
+	// command applies runs inside every wrapper its ancestors applied,
+	// rather than replacing them.
+	wrappers := c.effectiveMiddleware()
+	for _, mw := range wrappers {
 		if mw == nil {
 			*errs = append(*errs, ir.NewConfigErrorf(nil, node, nil,
 				"middleware must not be nil"))
 		}
 	}
-	middleware := chainMiddleware(inherited, c.middleware)
+	middleware := chainMiddleware(inherited, wrappers)
 
 	// The handler is assembled here rather than at dispatch, so the
 	// compiled command carries the whole of what it does and nothing
@@ -353,47 +378,64 @@ func (c *Command) lower(parent *ir.Command, inherited Middleware, nodeMap map[*C
 	// means the help renderer chooses one when it prints.
 	nodeMap[c] = node
 
-	// Own groups first, then every mounted set, matching the order
+	// Own groups first, then every mounted registry's, matching the order
 	// effectiveGroups reports and marking which is which -- validation
 	// needs to tell a declared flag from a mounted one.
 	for _, group := range c.flagGroups {
 		node.FlagGroups = append(node.FlagGroups, group.lower(false, errs))
 	}
-	for _, set := range c.groupSets {
-		for _, group := range set.groups {
+	for _, registry := range c.registries {
+		for _, group := range registry.groups {
 			node.FlagGroups = append(node.FlagGroups, group.lower(true, errs))
 		}
 	}
-	for _, sub := range c.subcommands {
+	// Own subcommands first, then every mounted registry's, ordered as
+	// the flag groups above are. The two differ only in what the child
+	// is expected to name as its parent: Subcommands parents a command
+	// it accepts, while a registry is not a node and parents nothing, so
+	// a registered command has to arrive unparented -- one already
+	// mounted in a tree of its own would be lowered under two parents.
+	lowerSub := func(sub *Command, wantParent *Command) {
 		if prev, ok := nodeMap[sub]; ok {
 			*errs = append(*errs, ir.NewConfigErrorf(nil, node, nil,
 				"%q is already mounted at %q", sub.name, prev.FullName))
-			continue
+			return
 		}
 		// Subcommands leaves an already-parented command's parent alone
 		// rather than stealing it, so the mismatch is still visible here
-		// to report.
-		if sub.parent != c {
+		// to report. Either way the parent that is not wanted is the one
+		// worth naming, and it is never nil: a declared subcommand was
+		// given c by Subcommands, and a registered one is only wrong
+		// here for having a parent at all.
+		if sub.parent != wantParent {
 			*errs = append(*errs, ir.NewConfigErrorf(nil, node, nil,
 				"%q is already a subcommand of %q", sub.name, sub.parent.name))
 		}
 		node.Subcommands = append(node.Subcommands, sub.lower(node, middleware, nodeMap, errs))
 	}
+	for _, sub := range c.subcommands {
+		lowerSub(sub, c)
+	}
+	for _, registry := range c.registries {
+		for _, sub := range registry.subcommands {
+			lowerSub(sub, nil)
+		}
+	}
 	return node
 }
 
 // chainMiddleware composes outer, the middleware a command inherits from
-// its parent, with own, the middleware that command declared, into the
-// single Middleware the compiled command carries.
+// its parent, with own, the middleware that command applies -- see
+// Command.effectiveMiddleware -- into the single Middleware the compiled
+// command carries.
 //
 // Applying the result wraps a handler so that outer runs first, then
-// own's entries in the order they were declared, then the handler itself,
-// each resuming in reverse as the call returns. The outermost wrapper is
-// therefore the one declared highest in the tree, and earliest in its
-// command's Middleware call.
+// own's entries in the order given, then the handler itself, each
+// resuming in reverse as the call returns. The outermost wrapper is
+// therefore the one applied highest in the tree, and earliest in own.
 //
-// A command that adds nothing inherits outer unchanged, so a path that
-// declared no middleware at all composes to nil and costs no call.
+// A command that applies nothing inherits outer unchanged, so a path with
+// no middleware at all composes to nil and costs no call.
 //
 // A nil entry in own is skipped rather than applied. Lowering reports one
 // as a configuration error and then has to finish, so that the rest of
@@ -541,25 +583,36 @@ func (c *Command) FlagGroups(groups ...*FlagGroup) *Command {
 	return c
 }
 
-// GroupSets mounts every flag group registered in each of the given sets on
-// this command, after the command's own groups. Mount CommandLine to pick
-// up everything the program's libraries registered:
+// Mount adds everything registered in each of the given registries to this
+// command: their flag groups after the command's own, their subcommands
+// after the ones it declared, and their middleware around both. Mount
+// DefaultRegistry to pick up everything the program's libraries
+// registered:
 //
-//	var App = climux.NewCommand("myapp", "").GroupSets(climux.CommandLine)
+//	var App = climux.NewCommand("myapp", "").Mount(climux.DefaultRegistry)
 //
-// A group registered after this call is still picked up. Mounted flags
-// behave exactly like the command's own, each group under its own heading
-// in help messages.
-func (c *Command) GroupSets(sets ...*GroupSet) *Command {
-	c.groupSets = append(c.groupSets, sets...)
+// Nothing limits a program to one registry. An organization keeping
+// several -- one per platform team, say -- mounts on each command the
+// ones that command should carry, and a registry mounted on a subcommand
+// reaches that subtree alone.
+//
+// A contribution registered after this call is still picked up. Mounted
+// flags behave exactly like the command's own, each group under its own
+// heading in help messages, and mounted subcommands like the command's
+// own children.
+func (c *Command) Mount(registries ...*Registry) *Command {
+	c.registries = append(c.registries, registries...)
 	return c
 }
 
 // Subcommands adds subcommands to this command and sets their parent to
-// this command, unless a command given here already has one -- typically a
-// command already mounted elsewhere, such as climux.CommandLine -- in
+// this command, unless a command given here already has one -- typically
+// a command a library exports that another tree has already mounted -- in
 // which case its existing parent is left alone and validation reports the
 // mismatch; see lower.
+//
+// For a subcommand a library contributes to whichever programs mount it,
+// rather than one this command names, see Registry.Subcommands.
 func (c *Command) Subcommands(cmds ...*Command) *Command {
 	c.subcommands = append(c.subcommands, cmds...)
 	for _, cmd := range cmds {

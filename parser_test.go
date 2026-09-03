@@ -545,17 +545,17 @@ func TestTerminator(t *testing.T) {
 }
 
 // TestUnrecognizedOptionNamesMountedFlags asserts that the hint reaches a
-// flag a subcommand takes from a mounted GroupSet, not just one it
+// flag a subcommand takes from a mounted Registry, not just one it
 // declares itself. Compiling flattens a command's own groups and its
 // mounted ones into one list, so where the flag came from stops mattering
 // to the search -- and the hint is right either way, since a mounted flag
 // is just as unusable until its own command is named.
 func TestUnrecognizedOptionNamesMountedFlags(t *testing.T) {
-	set := new(GroupSet)
-	set.FlagGroup(NewFlagGroup("shared", "Shared options",
+	set := new(Registry)
+	set.FlagGroups(NewFlagGroup("shared", "Shared options",
 		Bool(new(bool), "force", false, ""),
 	))
-	sub := NewCommand("delete", "").GroupSets(set)
+	sub := NewCommand("delete", "").Mount(set)
 	app := NewCommand("app", "").Subcommands(sub)
 
 	_, err := Parse(app, "--force")

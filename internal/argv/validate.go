@@ -61,8 +61,9 @@ func validateTree(c *ir.Command, claimed map[string]claimant) error {
 			// A mounted group's flags are the registering library's, not
 			// this command's, and a command is often mounted somewhere its
 			// author did not choose. Claiming them would make a subcommand
-			// that mounts the same set as an ancestor -- the ordinary way
-			// two teams both reach CommandLine -- a configuration error.
+			// that mounts the same registry as an ancestor -- the ordinary
+			// way two teams both reach DefaultRegistry -- a configuration
+			// error.
 			continue
 		}
 		for _, flag := range group.Flags {

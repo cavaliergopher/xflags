@@ -508,7 +508,7 @@ type FlagGroup struct {
 //
 // A group built standalone is how a library contributes flags bound to
 // variables it owns: mount it on a command with Command.FlagGroups, or
-// register it with Register so every command that mounts CommandLine
+// register it with Register so every command that mounts DefaultRegistry
 // picks it up.
 func NewFlagGroup(name, title string, flags ...*Flag) *FlagGroup {
 	return &FlagGroup{
@@ -528,7 +528,7 @@ func (c *FlagGroup) Flags(flags ...*Flag) *FlagGroup {
 // set from Go's flag package, so a program can carry flags from
 // stdlib-flavored libraries. Pass flag.CommandLine for the flags declared
 // on the flag package itself. Mount the group with Command.FlagGroups, or
-// register it with Register.
+// register it with Registry.FlagGroups.
 //
 // The flag set is read once, here: a flag declared on fs afterwards is not
 // seen. Parsing and error handling are this package's from then on.

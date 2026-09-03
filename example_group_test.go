@@ -1,7 +1,7 @@
 // This example demonstrates the packaging convention for a library that
 // contributes command line flags to whichever program imports it: a
 // settings struct whose FlagGroup method binds flags to the receiver, and
-// one package-level instance registered with Register.
+// one package-level instance registered into climux.DefaultRegistry.
 package climux
 
 import (
@@ -28,23 +28,23 @@ func (s *logSettings) FlagGroup() *FlagGroup {
 	)
 }
 
-// logFlags is the instance the program mounts, registered in the var
-// declaration that builds it -- Register returns its argument, so no init
-// function is needed. A library wanting no handle registers into the blank
-// identifier: var _ = Register(...). Either way, a blank import of the
-// library is enough to register its flags.
+// logFlags is the instance the program mounts. Its group is registered in
+// a var declaration of its own, so the library needs no init function; the
+// registry is what the call returns and nothing here wants it, so it goes
+// to the blank identifier. A blank import of the library is enough to
+// contribute the flags, since nothing the program writes names them.
 var logFlags = &logSettings{}
 
-var _ = Register(logFlags.FlagGroup())
+var _ = DefaultRegistry.FlagGroups(logFlags.FlagGroup())
 
 func Example_sharedFlagGroups() {
 	ctx := context.Background()
 
 	// The program mounts every registered group with one line. From
-	// outside this package that line reads GroupSets(climux.CommandLine).
+	// outside this package that line reads Mount(climux.DefaultRegistry).
 	app := NewCommand("myapp", "Do things, with logging").
 		HelpFlag().
-		GroupSets(CommandLine).
+		Mount(DefaultRegistry).
 		HandleFunc(func(ctx context.Context, inv *Invocation) error {
 			fmt.Fprintf(inv.Stdout, "level: %s\n", logFlags.Level)
 			return nil

@@ -34,8 +34,8 @@ the command:
         []string, ir.CompDirective)
 
 `*Command` keeps its chainable setters, `NewCommand`, `String`, and
-`Compile`. `*Flag` keeps its setters. `FlagGroup` and `GroupSet` were
-already configuration only.
+`Compile`. `*Flag` keeps its setters. `FlagGroup` and `Registry` are
+configuration only and keep everything they have.
 
 - **The args parameter is variadic** wherever a call takes only a command
   line, matching `RunWithArgs`, which had the shape first. `Complete` takes
@@ -67,7 +67,9 @@ already configuration only.
 - Where a new operation goes has a rule rather than a precedent: if it
   builds or validates configuration it is a method, and if it acts on a
   declared tree it is a function.
-- `Flag.String()` is the one thing left that this item names and does not
-  fix. It lowers a throwaway `ir.Flag` to spell itself, which is both
+- Spelling a flag is not a configuration type's to do. `ir.Flag.String`
+  renders the options the dialect wrote, which is what every error and
+  help message wants; a `String` on the configuration `*Flag` would have
+  to lower a throwaway `ir.Flag` to read one field back, making it both
   behavior on a configuration type and a dialect leak, since spelling
   belongs to `internal/argv`.

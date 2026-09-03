@@ -244,9 +244,9 @@ func TestCommandLineage(t *testing.T) {
 }
 
 // TestSubcommandAlreadyParented asserts that Subcommands does not steal an
-// already-parented command -- such as a shared registry like
-// climux.CommandLine -- and that the mismatch is reported as a
-// ConfigError rather than silently corrupting the original relationship.
+// already-parented command -- such as one a library exports and two trees
+// both mount -- and that the mismatch is reported as a ConfigError rather
+// than silently corrupting the original relationship.
 func TestSubcommandAlreadyParented(t *testing.T) {
 	a, b, shared := NewCommand("a", ""), NewCommand("b", ""), NewCommand("shared", "")
 	a.Subcommands(shared)
@@ -257,6 +257,18 @@ func TestSubcommandAlreadyParented(t *testing.T) {
 		t.Errorf("a.Parse: expected nil error, got: %v", err)
 	}
 	assertConfigError(t, b, "a subcommand already parented elsewhere")
+}
+
+// TestSubcommandDuplicateName asserts that two children answering to one
+// word are a configuration error. Dispatch resolves a name to a single
+// command, so without the check the second is unreachable and nothing
+// says which was meant.
+func TestSubcommandDuplicateName(t *testing.T) {
+	handle := func(ctx context.Context, inv *Invocation) error { return nil }
+	assertConfigError(t, NewCommand("app", "").Subcommands(
+		NewCommand("x", "first").HandleFunc(handle),
+		NewCommand("x", "second").HandleFunc(handle),
+	), "two subcommands sharing a name")
 }
 
 // TestSubcommandCycle asserts that a command tree that leads back into

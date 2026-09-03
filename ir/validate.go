@@ -26,8 +26,9 @@ func validateTree(c *Command) error {
 	return JoinErrors(errs)
 }
 
-// validateSelf checks c's own flags for configuration errors: flag syntax
-// and positional/subcommand conflicts. It does not descend into
+// validateSelf checks c for the configuration errors it can answer on its
+// own terms: flag syntax, positional and subcommand conflicts, and two of
+// its children answering to one name. It does not descend into
 // subcommands.
 func validateSelf(c *Command) error {
 	var errs []error
@@ -61,6 +62,21 @@ func validateSelf(c *Command) error {
 	if c.ForwardedUsage != "" && c.ForwardedValueName == "" {
 		errs = append(errs, newConfigErrorf(nil, c, nil,
 			"forwarded arguments need a value name to be shown by"))
+	}
+
+	// Dispatch resolves a name to one command, so two subcommands
+	// answering to the same word leave the second unreachable and the
+	// tree saying nothing about which was meant. The pairing that makes
+	// this worth catching is a command's own children against those a
+	// mounted Registry contributed: without the check, a name a program
+	// declared can be taken over by a package it merely links in.
+	named := make(map[string]bool, len(c.Subcommands))
+	for _, sub := range c.Subcommands {
+		if named[sub.Name] {
+			errs = append(errs, newConfigErrorf(nil, c, nil,
+				"more than one subcommand named %q", sub.Name))
+		}
+		named[sub.Name] = true
 	}
 
 	hasUnboundedPositional := false

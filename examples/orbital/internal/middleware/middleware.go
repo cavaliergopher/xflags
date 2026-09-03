@@ -1,26 +1,27 @@
-// Package middleware holds the wrappers orbital puts around its handlers:
-// a timing trace and an --out redirection that every command in the
-// binary runs inside, and an audit check that only the commands changing
-// fleet state do.
+// Package middleware holds the wrappers orbital itself puts around its
+// handlers: an --out redirection that every command in the binary runs
+// inside, and an audit check that only the commands changing fleet state
+// do.
 //
-// All three are climux.Middleware, so none is registered by the handler
-// it wraps. main.go declares Timing and Output on the root, which inherit
-// down the whole tree, and each mutating command declares Audit on
-// itself; a
+// Both are climux.Middleware, so neither is registered by the handler it
+// wraps. main.go declares Output on the root, which inherits down the
+// whole tree, and each mutating command declares Audit on itself; a
 // read-only command such as "deploy status" declares nothing and so is
 // not audited. That is the point of the mechanism here: the platform team
 // owns what wraps a handler without touching the team that wrote it.
+//
+// A wrapper belonging to a shared library goes in that library instead,
+// registered beside the flags it reads -- see internal/telemetry, whose
+// Timing wrapper arrives with --trace rather than being declared here.
 package middleware
 
 import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"go.hotsrc.dev/climux"
 	"go.hotsrc.dev/climux/examples/orbital/internal/identity"
-	"go.hotsrc.dev/climux/examples/orbital/internal/telemetry"
 )
 
 // Audit refuses to run as the placeholder "anonymous" identity, in place
@@ -40,21 +41,6 @@ func Audit(next climux.HandlerFunc) climux.HandlerFunc {
 			)
 		}
 		return next(ctx, inv)
-	}
-}
-
-// Timing reports how long the handler took, but only when --trace asked
-// for it -- another package's settings, read by value at call time rather
-// than copied in at declaration.
-func Timing(next climux.HandlerFunc) climux.HandlerFunc {
-	return func(ctx context.Context, inv *climux.Invocation) error {
-		start := time.Now()
-		err := next(ctx, inv)
-		if telemetry.Flags.Trace {
-			fmt.Fprintf(inv.Stderr, "trace: %s took %s\n",
-				inv.Cmd.FullName, time.Since(start))
-		}
-		return err
 	}
 }
 

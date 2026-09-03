@@ -1,11 +1,20 @@
 // Package telemetry stands in for a platform library that every team's
-// binary links in for logging and tracing. It contributes its flags the
-// way a shared library should: a settings struct with a FlagGroup method,
-// registered once into climux.CommandLine so any command that mounts the
-// set with GroupSets(climux.CommandLine) picks it up automatically.
+// binary links in for logging and tracing. It contributes the way a
+// shared library should: a settings struct with a FlagGroup method, and
+// the middleware that honors those flags, registered together into
+// climux.DefaultRegistry so that any command mounting that registry picks
+// up both. Registering them as one unit is the point -- --trace cannot be
+// mounted into a binary that forgot to wrap its handlers, so the flag
+// means the same thing everywhere.
 package telemetry
 
-import "go.hotsrc.dev/climux"
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"go.hotsrc.dev/climux"
+)
 
 // Settings holds telemetry configuration. A package that wants an
 // isolated instance -- a test, say -- constructs its own Settings and
@@ -28,10 +37,31 @@ func (s *Settings) FlagGroup() *climux.FlagGroup {
 	)
 }
 
-// Flags is the instance orbital mounts. Register appends its group to
-// climux.CommandLine in this var declaration, so any command that mounts
-// the set -- see main.go's GroupSets(climux.CommandLine) -- picks it up
-// with no further wiring.
+// Timing reports how long the handler took, but only when --trace asked
+// for it. It reads s at call time rather than closing over a copy of the
+// setting, because the flag is not applied until the command line parses,
+// which is after every command in the tree was built.
+func (s *Settings) Timing(next climux.HandlerFunc) climux.HandlerFunc {
+	return func(ctx context.Context, inv *climux.Invocation) error {
+		start := time.Now()
+		err := next(ctx, inv)
+		if s.Trace {
+			fmt.Fprintf(inv.Stderr, "trace: %s took %s\n",
+				inv.Cmd.FullName, time.Since(start))
+		}
+		return err
+	}
+}
+
+// Flags is the instance orbital mounts. The init below registers its
+// group and its middleware into climux.DefaultRegistry together, so any
+// command that mounts that registry -- see main.go's
+// Mount(climux.DefaultRegistry) -- picks up both with no further wiring,
+// and a blank import of this package is all a program needs.
 var Flags = &Settings{}
 
-var _ = climux.Register(Flags.FlagGroup())
+func init() {
+	climux.DefaultRegistry.
+		FlagGroups(Flags.FlagGroup()).
+		Middleware(Flags.Timing)
+}

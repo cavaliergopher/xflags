@@ -474,18 +474,6 @@
         ]
       },
       {
-        "name": "debug",
-        "fullName": "orbital debug",
-        "summary": "Internal diagnostics, not for regular use",
-        "hidden": true,
-        "flagGroups": [
-          {
-            "name": "options",
-            "title": "Options"
-          }
-        ]
-      },
-      {
         "name": "version",
         "fullName": "orbital version",
         "summary": "Show the version",
@@ -500,6 +488,18 @@
         "name": "schema",
         "fullName": "orbital schema",
         "summary": "Describe this program as JSON",
+        "flagGroups": [
+          {
+            "name": "options",
+            "title": "Options"
+          }
+        ]
+      },
+      {
+        "name": "debug",
+        "fullName": "orbital debug",
+        "summary": "Internal diagnostics, not for regular use",
+        "hidden": true,
         "flagGroups": [
           {
             "name": "options",

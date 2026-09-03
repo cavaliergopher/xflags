@@ -287,7 +287,7 @@ type FlagGroup struct {
 	Title string
 
 	// Mounted reports that the command took this group from a shared
-	// GroupSet rather than declaring it. The flags belong to the library
+	// Registry rather than declaring it. The flags belong to the library
 	// that registered them, so the same group may appear on more than one
 	// command in a tree without those commands conflicting.
 	Mounted bool

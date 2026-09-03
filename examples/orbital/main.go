@@ -11,7 +11,6 @@ import (
 
 	"go.hotsrc.dev/climux"
 	"go.hotsrc.dev/climux/examples/orbital/internal/config"
-	"go.hotsrc.dev/climux/examples/orbital/internal/debug"
 	"go.hotsrc.dev/climux/examples/orbital/internal/deploy"
 	"go.hotsrc.dev/climux/examples/orbital/internal/execcmd"
 	"go.hotsrc.dev/climux/examples/orbital/internal/fleet"
@@ -19,6 +18,13 @@ import (
 	"go.hotsrc.dev/climux/examples/orbital/internal/legacy"
 	"go.hotsrc.dev/climux/examples/orbital/internal/logscmd"
 	"go.hotsrc.dev/climux/examples/orbital/internal/middleware"
+
+	// Linked in for what they register into climux.DefaultRegistry, which
+	// Mount below picks up: telemetry's --log-level and --trace flags with
+	// the wrapper that honors them, and the hidden "debug" command. Adding
+	// a library to the binary is the whole of adding its command line.
+	_ "go.hotsrc.dev/climux/examples/orbital/internal/debug"
+	_ "go.hotsrc.dev/climux/examples/orbital/internal/telemetry"
 )
 
 // version is what a build stamps into the binary. Both --version and the
@@ -36,10 +42,11 @@ func main() {
 		VersionFlag(version).
 		EnableCompletion().
 		// Declared once here and inherited by every command in the tree,
-		// so --trace times whichever one runs and --out redirects it. The
-		// audit check is not: only the commands that change fleet state
-		// declare it.
-		Middleware(middleware.Timing, middleware.Output).
+		// so --out redirects whichever one runs. The audit check is not:
+		// only the commands that change fleet state declare it. The
+		// timing trace is neither, arriving instead with the telemetry
+		// flags it reads; see the mount below.
+		Middleware(middleware.Output).
 		Description(
 			"orbital is the platform team's command line front end to the\n"+
 				"fleet API. Each subcommand below is owned and versioned by the\n"+
@@ -47,7 +54,7 @@ func main() {
 				"them into one binary.",
 		).
 		FlagGroups(legacy.FlagGroup()).
-		GroupSets(climux.CommandLine).
+		Mount(climux.DefaultRegistry).
 		Flags(
 			climux.String(&identity.Actor, "actor", "", "Identity performing this action, recorded for the audit trail").
 				Required().
@@ -59,7 +66,6 @@ func main() {
 			deploy.Command(client),
 			logscmd.Command(client),
 			execcmd.Command(),
-			debug.Command(),
 			// An interrupt too, like the flag above: "orbital version"
 			// answers without --actor the same way "orbital --version"
 			// does.

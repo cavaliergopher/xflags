@@ -168,6 +168,54 @@ wrapping happens when the command tree is compiled, which happens more
 than once in a run, so a wrapper that registers a metric or opens a
 connection before returning does so more often than its author expects.
 
+# Registries
+
+A Registry is what a library contributes to a command tree, and what a
+program mounts in one line. It carries flag groups, middleware and
+subcommands, so a team ships a flag together with the wrapper that
+honors it and neither can be mounted without the other:
+
+	package timeouts
+
+	var settings = &Settings{}
+
+	func init() {
+		climux.DefaultRegistry.
+			FlagGroups(settings.FlagGroup()). // --timeout
+			Middleware(settings.Wrap)         // honors it
+	}
+
+The program links the package in and mounts what it registered, naming
+none of it:
+
+	var App = climux.NewCommand(os.Args[0], "My application").
+		Mount(climux.DefaultRegistry).
+		Subcommands(GetCommand, DeleteCommand)
+
+DefaultRegistry is the well-known one, for the packages that make up a
+single program. Nothing limits a program to it: an organization that
+keeps a registry per platform team mounts on each command the ones that
+command should carry, and a registry mounted on a subcommand reaches that
+subtree alone. A library published for programs it does not own should
+export a registry rather than register into DefaultRegistry, so that
+linking a package in is not by itself a decision about a program's
+command line.
+
+A registry is read when a command that mounts it runs, not when a
+contribution is registered, so registration order never matters and
+anything registered during package initialization is always seen. What
+it contributes takes its place after what the mounting command declared
+-- flag groups after its own, subcommands after its own children --
+except middleware, which wraps outside what that command declared, since
+a wrapper registered beside the flag it reads has to bound the handlers
+the mounting program wrote.
+
+A registry is not a node in the command tree. It holds contributions and
+claims nothing, so a command registered as a subcommand must not already
+be mounted in a tree of its own, and the command that mounts the registry
+is its parent in the compiled tree alone. That is what lets two programs,
+or two tests, mount the same registry without either writing to it.
+
 # Exit codes
 
 Run returns the exit code the program should terminate with:
